@@ -57,7 +57,7 @@ public static class WhatsAppEndpoints
 
         agent.MapPost("/link", async (AgentLinkRequest req, AppDbContext db, LinkAttemptLimiter limiter) =>
         {
-            if (limiter.IsBlocked(req.Phone))
+            if (await limiter.IsBlockedAsync(req.Phone))
                 return Results.Json(new { error = "Muitas tentativas erradas. Aguarde 30 minutos e gere um novo código no app." },
                     statusCode: StatusCodes.Status429TooManyRequests);
 
@@ -66,10 +66,10 @@ public static class WhatsAppEndpoints
                 x.WhatsAppLinkCode == code && x.WhatsAppLinkCodeExpiresAt > DateTime.UtcNow);
             if (u is null)
             {
-                limiter.RegisterFailure(req.Phone);
+                await limiter.RegisterFailureAsync(req.Phone);
                 return Results.BadRequest(new { error = "Código inválido ou expirado. Gere um novo código no app e tente de novo." });
             }
-            limiter.Reset(req.Phone);
+            await limiter.ResetAsync(req.Phone);
 
             // Um número só pode estar ligado a uma conta.
             await db.Users.Where(x => x.WhatsAppPhone == req.Phone && x.Id != u.Id)

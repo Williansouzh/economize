@@ -24,7 +24,7 @@ flowchart LR
   WA["WhatsApp<br/>celular do usuário"]
   META["Meta Cloud API<br/>(externo)"]
   API["API .NET 10<br/>Minimal APIs · EF Core · JWT<br/>regras de negócio e cálculos"]
-  DB[("SQLite<br/>financas.db")]
+  DB[("PostgreSQL<br/>banco financas")]
   DS["DeepSeek<br/>deepseek-chat<br/>(externo)"]
   subgraph AGENTE["Agente WhatsApp · Python · FastAPI · LangGraph"]
     direction LR
@@ -32,7 +32,7 @@ flowchart LR
     AG <--> T[tools]
   end
   MED["Whisper + Tesseract<br/>(processo local)"]
-  PG[("PostgreSQL do agente<br/>histórico · dedupe · fila")]
+  PG[("PostgreSQL<br/>banco agente<br/>histórico · dedupe · fila")]
 
   APP == "HTTPS + JWT do usuário" ==> API
   API == "único que grava" ==> DB
@@ -47,8 +47,9 @@ flowchart LR
   AGENTE -- "checkpointer<br/>advisory lock" --> PG
 ```
 
-As setas grossas formam o caminho até o banco: os dois canais chegam à API, e só a API grava no SQLite.
-O PostgreSQL do agente guarda só o estado das conversas (nunca dados financeiros) e é opcional em desenvolvimento.
+As setas grossas formam o caminho até o banco: os dois canais chegam à API, e só a API grava no banco `financas`.
+O banco `agente` guarda só o estado das conversas (nunca dados financeiros) e é opcional em desenvolvimento.
+Os dois bancos podem ficar no mesmo servidor PostgreSQL, como no `docker-compose.yml`.
 Whisper e Tesseract rodam no próprio servidor do agente e não custam nada por uso.
 
 ## Componentes
@@ -56,7 +57,8 @@ Whisper e Tesseract rodam no próprio servidor do agente e não custam nada por 
 | Componente | Responsabilidade | Tecnologia | Código |
 |---|---|---|---|
 | App mobile | Telas de visão geral, lançamentos, orçamentos, IA e vinculação do WhatsApp. Guarda o token no armazenamento seguro do aparelho. Não calcula nada de negócio: só exibe o que a API devolve. | Flutter, Provider, fl_chart, http, flutter_secure_storage | `mobile/lib` |
-| API | Autenticação, CRUD, validações, saldos, totais por categoria, orçamentos, insights com DeepSeek, vinculação do WhatsApp. | .NET 10 Minimal APIs, EF Core, SQLite, JWT, BCrypt | `backend/Financas.Api` |
+| API | Autenticação, CRUD, validações, saldos, totais por categoria, orçamentos, insights com DeepSeek, vinculação do WhatsApp. Sem estado em memória que importe: pode ter várias réplicas. | .NET 10 Minimal APIs, EF Core + Npgsql, JWT, BCrypt | `backend/Financas.Api` |
+| Banco da API | Usuários, contas, categorias, lançamentos, orçamentos e tentativas de vinculação. Esquema versionado por migrations, aplicadas na subida. | PostgreSQL 16 | `backend/Financas.Api/Data/Migrations` |
 | Testes da API | Testes de integração com a API em memória e banco temporário. | xUnit, WebApplicationFactory | `backend/Financas.Api.Tests` |
 | Agente WhatsApp | Recebe o webhook, converte mídia em texto, deixa o DeepSeek decidir e chama a API pelas ferramentas. | Python 3.12, FastAPI, LangGraph, langchain-deepseek | `agent/app` |
 | Banco do agente | Histórico das conversas (checkpointer do LangGraph), ids de mensagens já processadas e fila por telefone. Opcional: sem ele, tudo fica em memória e só pode haver uma instância. | PostgreSQL 16, langgraph-checkpoint-postgres | `agent/app/coordination.py` |
@@ -120,8 +122,15 @@ erDiagram
     string Month "AAAA-MM"
     decimal Limit
   }
+  LINK_ATTEMPT {
+    string Phone PK
+    int Failures
+    timestamptz WindowStartsAt
+  }
 ```
 
+`LINK_ATTEMPT` não se liga a nenhum usuário: conta as tentativas erradas de vinculação por número de telefone (RN-24).
+Tipos no PostgreSQL: ids `uuid`, dinheiro `numeric(14,2)`, datas de lançamento `date`, instantes `timestamptz`.
 Índices únicos: e-mail do usuário, número do WhatsApp e a combinação usuário + categoria + mês do orçamento.
 Há também um índice em usuário + data dos lançamentos, a consulta mais frequente.
 
@@ -189,7 +198,7 @@ isso está indicado.
 | RN-21 | Mensagens de números não vinculados não passam pela IA: o remetente só recebe as instruções de vinculação. |
 | RN-22 | O agente entende texto, áudio, imagem e documento (PDF ou imagem). Outros tipos recebem uma resposta explicando o que é aceito. |
 | RN-23 | Mensagens do mesmo número são processadas uma de cada vez, na ordem de chegada, mesmo com várias instâncias do agente. Reenvios do mesmo webhook pela Meta são processados uma única vez, em qualquer instância. |
-| RN-24 | **Depois de 5 códigos errados, o número fica bloqueado para vinculação por 30 minutos** (resposta 429), mesmo que o próximo código esteja certo. A janela conta a partir da primeira falha. Um acerto zera o contador. Outros números não são afetados. |
+| RN-24 | **Depois de 5 códigos errados, o número fica bloqueado para vinculação por 30 minutos** (resposta 429), mesmo que o próximo código esteja certo. A janela conta a partir da primeira falha. Um acerto zera o contador. Outros números não são afetados. O contador fica no banco e vale para todas as réplicas da API. |
 
 ### Comportamento do agente
 
@@ -210,8 +219,10 @@ As do prompt dependem do modelo obedecer; as das ferramentas são garantidas pel
 
 ## Cálculos
 
-Todos ficam em `FinanceService`, na API. As somas são feitas em memória, depois da consulta,
-porque o SQLite não soma `decimal` no banco.
+Todos ficam em `FinanceService`, na API. Os saldos das contas são somados pelo PostgreSQL
+(uma linha por conta, com `SUM(CASE ...)`), sem trazer os lançamentos para a memória.
+Os totais do mês são somados sobre os lançamentos do mês, que a API já carrega para a tela.
+Valores em dinheiro são `numeric(14,2)`.
 
 | Valor | Fórmula | Observação |
 |---|---|---|
@@ -344,11 +355,12 @@ flowchart LR
 | O agente usa a API, não o banco | As regras ficam num lugar só, e um bug no agente não corrompe os dados. | Uma ida extra pela rede a cada ferramenta. | Não rever. |
 | Agente em Python, separado | LangGraph, Whisper e Tesseract são do ecossistema Python. Dá para escalar ou desligar o agente sem mexer na API. | Dois serviços para publicar e monitorar. | Se surgir um equivalente maduro em .NET. |
 | Whisper e Tesseract locais | O DeepSeek não aceita áudio nem imagem. Rodar local custa zero por uso e não manda mídia para mais um terceiro. | CPU e ~500 MB de RAM no agente; OCR erra em prints ruins. | Se a qualidade do OCR incomodar: modelo com visão. |
-| SQLite + `EnsureCreated` | Zero configuração para uso pessoal. | Sem migrations: campo novo exige apagar o banco. | Antes de ter dados reais: PostgreSQL + migrations. |
-| Somas em memória | O SQLite não agrega `decimal`. | Carrega todos os lançamentos pagos para calcular saldos. | Com milhares de lançamentos por usuário. |
+| PostgreSQL + migrations do EF Core | Aceita réplicas da API, esquema versionado, somas de `numeric` no banco. Um só servidor atende API e agente. | Desenvolvimento precisa de um Postgres (um `docker run`). | Não rever. |
+| Migrations aplicadas na subida da API | Deploy em um passo. O EF Core trava o histórico de migrations, então réplicas subindo juntas não aplicam a mesma migration duas vezes. | A API precisa de permissão para alterar o esquema. | Se o banco de produção exigir usuário só de leitura e escrita: `Database:MigrateOnStartup=false` e `dotnet ef database update` no pipeline. |
 | Estado do agente no PostgreSQL | Um só serviço resolve as três necessidades: histórico (checkpointer oficial do LangGraph), dedupe (chave única) e fila por telefone (`pg_advisory_lock`, liberado automaticamente se a instância cair). | Mais um serviço para operar. Cada telefone em processamento segura uma conexão do pool de locks. | Se o volume crescer muito: Redis para dedupe e fila. |
 | Modo memória no agente quando `DATABASE_URL` está vazio | Desenvolvimento e CLI sem dependências. | Uma instância só; reiniciar apaga conversas. O agente avisa no log. | Não rever. |
-| Limites da API em memória (`IMemoryCache` e rate limiter do ASP.NET Core) | Sem infraestrutura extra. | Zeram se a API reiniciar e não são compartilhados entre instâncias. | Junto com a migração para PostgreSQL, se a API passar a ter réplicas. |
+| Limite de vinculação no banco (tabela `LinkAttempts`) | É uma regra de segurança: precisa valer em todas as réplicas e sobreviver a reinícios. O incremento é atômico (`INSERT ... ON CONFLICT DO UPDATE`). | Uma escrita no banco a cada código errado. | Não rever. |
+| Rate limit (RN-26) em memória, por réplica | É uma proteção contra abuso, não uma regra de negócio. Sem infraestrutura extra. | Com N réplicas, o limite efetivo é N vezes maior; zera ao reiniciar. | Se houver muitas réplicas: limitar no proxy reverso ou guardar contadores em Redis. |
 | WhatsApp Cloud API oficial | Sem risco de banimento; conversas iniciadas pelo usuário são gratuitas na janela de 24h. | Exige app na Meta e HTTPS público. | Não rever. |
 | Saldo calculado, não gravado | Nunca fica dessincronizado de edições e exclusões. | Recalcula a cada leitura. | Só se virar gargalo. |
 
@@ -358,12 +370,12 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 
 | Prioridade | Ponto | Correção sugerida |
 |---|---|---|
-| Média | **A API ainda é de uma instância só.** SQLite com `EnsureCreated` não aceita réplicas nem migrations, e os limites (RN-24, RN-26) ficam na memória do processo. | PostgreSQL + migrations do EF Core; limites em Redis se houver réplicas. |
 | Baixa | Orçamentos não se repetem de um mês para o outro. | Opção "repetir todo mês". |
 | Baixa | Não há transferência entre contas. | Tipo de lançamento "transferência" com conta de origem e destino. |
 | Baixa | Descrições de lançamentos vão para o DeepSeek nos insights. | Avisar o usuário na tela de IA. |
 | Baixa | O Whisper `small` erra em áudios com muito ruído. | `WHISPER_MODEL=medium`, mais lento. |
 | Baixa | Se uma instância do agente cair no meio do processamento, aquela mensagem não é reprocessada (o id já foi marcado como visto). | Marcar como concluída só no fim e reprocessar as pendentes antigas. |
+| Baixa | O rate limit da API (RN-26) é contado por réplica: com 3 réplicas, um IP consegue até 30 logins por minuto. | Limitar no proxy reverso ou usar Redis. |
 
 ### Corrigido
 
@@ -374,7 +386,8 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | API não conferia o tipo da categoria | Validação na criação e edição de lançamentos e nos orçamentos (RN-09, RN-14). | `Despesa_com_categoria_de_receita_e_recusada`, `Receita_com_categoria_de_despesa_e_recusada_tambem_na_edicao`, `Orcamento_so_aceita_categoria_de_despesa` |
 | Pendentes e datas futuras confundiam o saldo | Saldo atual × saldo previsto, pendentes do mês no card, e "hoje" no fuso de São Paulo (RN-05, RN-11, RN-25). | `Saldo_atual_ignora_pendentes_e_datas_futuras_e_o_previsto_inclui_ate_o_fim_do_mes`, `Hoje_segue_o_fuso_de_Sao_Paulo_e_nao_o_do_servidor` |
 | Agente só funcionava em uma instância | Histórico, dedupe e fila por telefone no PostgreSQL quando `DATABASE_URL` está definido (RN-23). | `test_postgres_duas_instancias_descartam_a_mesma_mensagem`, `test_postgres_fila_por_telefone_vale_entre_instancias`, `test_postgres_historico_continua_em_outra_instancia` |
+| API presa a uma instância (SQLite, `EnsureCreated`, limite de vinculação em memória) | PostgreSQL com migrations do EF Core aplicadas na subida; limite de vinculação numa tabela com incremento atômico; saldos somados no banco. | `Duas_replicas_sobem_juntas_e_compartilham_dados_e_limite_de_vinculacao`, `Falhas_simultaneas_nao_se_perdem`, `Health_responde_com_o_banco_no_ar` |
 | Sem rate limit e CORS aberto | Rate limit por IP no login/cadastro e por usuário nas demais rotas; CORS só para origens configuradas (RN-26). | `Login_e_limitado_a_10_tentativas_por_minuto`, `Rotas_comuns_sao_limitadas_por_usuario`, `Cors_em_producao_so_libera_origens_configuradas`, `Cors_em_desenvolvimento_libera_localhost` |
 
-Testes da API: `backend/Financas.Api.Tests` (`cd backend && dotnet test`).
+Testes da API: `backend/Financas.Api.Tests` (`cd backend && dotnet test`, com um PostgreSQL em `TEST_DATABASE_URL`).
 Testes do agente: `agent/tests` (`cd agent && pytest`; os de PostgreSQL rodam com `TEST_DATABASE_URL` definido).

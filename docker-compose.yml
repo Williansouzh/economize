@@ -1,11 +1,25 @@
-# Sobe API + agente do WhatsApp + PostgreSQL do agente:
+# Sobe API + agente do WhatsApp + PostgreSQL (bancos "financas" e "agente"):
 #   cp .env.example .env   (preencha)
 #   docker compose up --build
 services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: financas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d financas"]
+      interval: 5s
+      retries: 10
+
   api:
     build: ./backend
     ports: ["5000:5000"]
     environment:
+      ConnectionStrings__Default: Host=db;Database=financas;Username=postgres;Password=${POSTGRES_PASSWORD}
       DeepSeek__ApiKey: ${DEEPSEEK_API_KEY}
       Agent__ApiKey: ${AGENT_API_KEY}
       Jwt__Key: ${JWT_KEY}
@@ -13,18 +27,8 @@ services:
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-}
       # Ligue só se a API estiver atrás de um proxy reverso (nginx, Caddy, Cloudflare)
       ReverseProxy__TrustForwardedHeaders: ${TRUST_PROXY:-false}
-    volumes: [api-data:/data]
-
-  db:
-    image: postgres:16
-    environment:
-      POSTGRES_DB: agente
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes: [agent-db:/var/lib/postgresql/data]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d agente"]
-      interval: 5s
-      retries: 10
+    depends_on:
+      db: { condition: service_healthy }
 
   agent:
     build: ./agent
@@ -41,6 +45,5 @@ services:
       db: { condition: service_healthy }
 
 volumes:
-  api-data:
-  agent-db:
+  pg-data:
   whisper-models:

@@ -35,24 +35,27 @@ public class FinanceService(AppDbContext db, AppClock clock)
     {
         var today = clock.Today;
         var until = forecastUntil ?? ParseMonth(null).End;
-        var lastDate = today > until ? today : until;
         var accounts = await db.Accounts.AsNoTracking().Where(a => a.UserId == userId).ToListAsync();
-        // Agregação em memória: o provider SQLite não soma decimal no banco.
-        var txs = await db.Transactions.AsNoTracking()
-            .Where(t => t.UserId == userId && t.Date <= lastDate)
-            .Select(t => new { t.AccountId, t.Amount, t.Type, t.IsPaid, t.Date })
-            .ToListAsync();
 
-        static decimal Signed(TransactionType type, decimal amount) =>
-            type == TransactionType.Income ? amount : -amount;
+        // Somas feitas pelo PostgreSQL: uma linha por conta, sem trazer os lançamentos para a memória.
+        var sums = await db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && (t.Date <= today || t.Date <= until))
+            .GroupBy(t => t.AccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                Current = g.Sum(t => t.IsPaid && t.Date <= today
+                    ? (t.Type == TransactionType.Income ? t.Amount : -t.Amount) : 0m),
+                Forecast = g.Sum(t => t.Date <= until
+                    ? (t.Type == TransactionType.Income ? t.Amount : -t.Amount) : 0m),
+            })
+            .ToDictionaryAsync(x => x.AccountId);
 
         return accounts.Select(a =>
         {
-            var mine = txs.Where(t => t.AccountId == a.Id).ToList();
-            var current = mine.Where(t => t.IsPaid && t.Date <= today).Sum(t => Signed(t.Type, t.Amount));
-            var forecast = mine.Where(t => t.Date <= until).Sum(t => Signed(t.Type, t.Amount));
+            var s = sums.GetValueOrDefault(a.Id);
             return new AccountDto(a.Id, a.Name, a.InitialBalance,
-                a.InitialBalance + current, a.InitialBalance + forecast, a.Color);
+                a.InitialBalance + (s?.Current ?? 0), a.InitialBalance + (s?.Forecast ?? 0), a.Color);
         }).OrderBy(a => a.Name).ToList();
     }
 

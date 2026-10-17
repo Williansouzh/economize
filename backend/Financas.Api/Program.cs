@@ -13,8 +13,12 @@ builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services.AddDbContext<AppDbContext>(o =>
-    o.UseSqlite(builder.Configuration.GetConnectionString("Default")));
+var connectionString = builder.Configuration.GetConnectionString("Default");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException(
+        "ConnectionStrings:Default ausente. Ex.: Host=localhost;Database=financas;Username=postgres;Password=... " +
+        "(variável de ambiente ConnectionStrings__Default).");
+builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
 
 var jwt = builder.Configuration.GetSection("Jwt");
 JwtKeyGuard.Validate(jwt["Key"], builder.Environment);
@@ -35,7 +39,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<AppClock>();
 
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<LinkAttemptLimiter>();
+builder.Services.AddScoped<LinkAttemptLimiter>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
@@ -47,9 +51,14 @@ builder.Services.AddHttpClient<DeepSeekClient>(c =>
 
 var app = builder.Build();
 
-// Para produção, troque por migrations (dotnet ef migrations add Initial).
-using (var scope = app.Services.CreateScope())
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+// Aplica as migrations pendentes na subida. O EF Core trava a tabela de histórico durante a
+// aplicação, então várias réplicas subindo juntas não aplicam a mesma migration duas vezes.
+// Para aplicar fora da API (pipeline de deploy), use Database:MigrateOnStartup=false e "dotnet ef database update".
+if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
@@ -61,6 +70,9 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapGet("/", () => "Finanças API rodando 🚀");
+app.MapGet("/health", async (AppDbContext db) => await db.Database.CanConnectAsync()
+    ? Results.Ok(new { status = "ok" })
+    : Results.Json(new { status = "sem banco" }, statusCode: StatusCodes.Status503ServiceUnavailable));
 app.MapAuthEndpoints();
 app.MapFinanceEndpoints();
 app.MapInsightsEndpoints();

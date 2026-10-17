@@ -5,14 +5,28 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using Npgsql;
 
 namespace Financas.Api.Tests;
 
-/// <summary>Sobe a API em memória com um banco SQLite temporário por instância.</summary>
+/// <summary>
+/// Sobe a API em memória com um banco PostgreSQL temporário por instância (criado pelas migrations).
+/// Servidor: variável TEST_DATABASE_URL, ou Host=localhost;Port=5432;Username=postgres;Password=postgres.
+/// </summary>
 public class ApiFactory : WebApplicationFactory<Program>
 {
     public const string AgentKey = "chave-do-agente-para-testes";
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"financas-test-{Guid.NewGuid():N}.db");
+
+    public static readonly string Server = System.Environment.GetEnvironmentVariable("TEST_DATABASE_URL")
+        ?? "Host=localhost;Port=5432;Username=postgres;Password=postgres";
+
+    /// <summary>Nome do banco. Duas factories com o mesmo nome simulam duas réplicas da API.</summary>
+    public string DatabaseName { get; init; } = $"financas_test_{Guid.NewGuid():N}";
+
+    /// <summary>Só quem cria o banco o apaga (réplicas compartilham).</summary>
+    public bool OwnsDatabase { get; init; } = true;
+
+    private string ConnectionString => new NpgsqlConnectionStringBuilder(Server) { Database = DatabaseName }.ToString();
 
     public string Environment { get; init; } = "Development";
     public string? JwtKey { get; init; }
@@ -24,7 +38,7 @@ public class ApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment(Environment);
-        builder.UseSetting("ConnectionStrings:Default", $"Data Source={_dbPath}");
+        builder.UseSetting("ConnectionStrings:Default", ConnectionString);
         builder.UseSetting("Agent:ApiKey", AgentKey);
         if (JwtKey is not null) builder.UseSetting("Jwt:Key", JwtKey);
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
@@ -51,8 +65,12 @@ public class ApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        foreach (var f in new[] { _dbPath, _dbPath + "-shm", _dbPath + "-wal" })
-            try { File.Delete(f); } catch (IOException) { }
+        if (!OwnsDatabase) return;
+        NpgsqlConnection.ClearAllPools();
+        using var conn = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(Server) { Database = "postgres" }.ToString());
+        conn.Open();
+        using var cmd = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{DatabaseName}\" WITH (FORCE)", conn);
+        cmd.ExecuteNonQuery();
     }
 
     public record AuthBody(string Token, string Name, string Email);

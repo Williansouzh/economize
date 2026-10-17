@@ -132,6 +132,9 @@ public static class FinanceEndpoints
     private static async Task<IResult?> Validate(TransactionRequest req, Guid uid, AppDbContext db)
     {
         if (req.Amount <= 0) return Results.BadRequest(new { error = "Valor deve ser maior que zero." });
+        if (req.Amount >= 1_000_000_000_000m) return Results.BadRequest(new { error = "Valor muito alto." });
+        if ((req.Description?.Trim().Length ?? 0) > 200)
+            return Results.BadRequest(new { error = "Descrição pode ter no máximo 200 caracteres." });
         if (!await db.Accounts.AnyAsync(a => a.Id == req.AccountId && a.UserId == uid))
             return Results.BadRequest(new { error = "Conta inválida." });
         var category = await db.Categories.AsNoTracking()
@@ -146,7 +149,7 @@ public static class FinanceEndpoints
 
     private static void Apply(Transaction t, TransactionRequest req)
     {
-        t.AccountId = req.AccountId; t.CategoryId = req.CategoryId; t.Description = req.Description.Trim();
+        t.AccountId = req.AccountId; t.CategoryId = req.CategoryId; t.Description = (req.Description ?? "").Trim();
         t.Amount = req.Amount; t.Type = req.Type; t.Date = req.Date; t.IsPaid = req.IsPaid;
     }
 

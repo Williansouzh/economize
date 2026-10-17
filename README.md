@@ -4,7 +4,7 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 
 | Camada  | Tecnologia |
 |---------|------------|
-| Backend | .NET 10 (ASP.NET Core Minimal APIs) + EF Core + SQLite + JWT |
+| Backend | .NET 10 (ASP.NET Core Minimal APIs) + EF Core + PostgreSQL + JWT |
 | Mobile  | Flutter (Provider, fl_chart, http, flutter_secure_storage) |
 | IA      | DeepSeek API (`deepseek-chat`), chamada **somente pelo backend** |
 | Agente WhatsApp | Python + LangGraph + DeepSeek + Whisper (áudio) + Tesseract (prints) |
@@ -50,7 +50,16 @@ mobile/lib/
 
 ### 1. Backend
 
-Pré-requisito: [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Pré-requisitos: [.NET 10 SDK](https://dotnet.microsoft.com/download) e um PostgreSQL 16.
+O jeito mais rápido de ter o banco em desenvolvimento:
+
+```bash
+docker run -d --name financas-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=financas -p 5432:5432 postgres:16
+```
+
+Esse é o banco que `appsettings.Development.json` já espera
+(`Host=localhost;Port=5432;Database=financas;Username=postgres;Password=postgres`).
+Para usar outro, defina `ConnectionStrings__Default`.
 
 ```bash
 cd backend/Financas.Api
@@ -65,9 +74,15 @@ Em desenvolvimento a API usa uma chave JWT própria de `appsettings.Development.
 **Fora de Development ela não sobe** sem uma chave sua de pelo menos 32 caracteres
 (`Jwt__Key` como variável de ambiente, ou `dotnet user-secrets set "Jwt:Key" "..."`).
 
-Testes de integração da API: `cd backend && dotnet test`.
+A API sobe em `http://0.0.0.0:5000` e aplica as migrations do EF Core na subida (cria as tabelas num banco vazio).
+Health check: `http://localhost:5000/health`.
 
-A API sobe em `http://0.0.0.0:5000` e cria o banco `financas.db` automaticamente.
+**Migrations:** depois de mudar o modelo, gere uma nova com
+`dotnet ef migrations add NomeDaMudanca -o Data/Migrations` (instale a ferramenta com `dotnet tool install -g dotnet-ef`).
+Para aplicar pelo pipeline de deploy em vez de na subida, use `Database__MigrateOnStartup=false` e `dotnet ef database update`.
+
+**Testes de integração da API:** `cd backend && dotnet test`. Cada teste cria e apaga um banco temporário;
+o servidor vem de `TEST_DATABASE_URL` (padrão: `Host=localhost;Port=5432;Username=postgres;Password=postgres`).
 Documentação OpenAPI: `http://localhost:5000/openapi/v1.json`.
 
 > Em produção use variáveis de ambiente: `DeepSeek__ApiKey`, `Jwt__Key`, `ConnectionStrings__Default`.

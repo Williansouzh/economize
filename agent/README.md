@@ -49,7 +49,7 @@ Assim só o dono do número consegue vinculá-lo. O agente se autentica no backe
 ## Rodando localmente
 
 ```bash
-# 1) Backend (em outro terminal)
+# 1) Backend (em outro terminal; precisa de um PostgreSQL, veja o README principal)
 cd backend/Financas.Api
 dotnet user-secrets set "Agent:ApiKey" "minha-chave-do-agente"
 dotnet run

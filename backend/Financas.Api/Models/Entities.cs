@@ -53,6 +53,15 @@ public class Transaction
     public bool IsPaid { get; set; } = true;
 }
 
+/// <summary>Tentativas erradas de código de vinculação por número (RN-24). Fica no banco
+/// para valer em todas as instâncias da API e sobreviver a reinícios.</summary>
+public class LinkAttempt
+{
+    public string Phone { get; set; } = "";
+    public int Failures { get; set; }
+    public DateTime WindowStartsAt { get; set; }
+}
+
 /// <summary>Limite de gasto mensal por categoria.</summary>
 public class Budget
 {

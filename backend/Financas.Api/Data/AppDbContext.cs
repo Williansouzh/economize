@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -20,6 +21,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<Transaction>().HasOne(t => t.Account).WithMany().OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transaction>().HasOne(t => t.Category).WithMany().OnDelete(DeleteBehavior.Restrict);
+
+        // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.
+        b.Entity<Transaction>().Property(t => t.Amount).HasPrecision(14, 2);
+        b.Entity<Account>().Property(a => a.InitialBalance).HasPrecision(14, 2);
+        b.Entity<Budget>().Property(x => x.Limit).HasPrecision(14, 2);
+
+        b.Entity<User>().Property(u => u.Email).HasMaxLength(254);
+        b.Entity<User>().Property(u => u.WhatsAppPhone).HasMaxLength(20);
+        b.Entity<User>().Property(u => u.WhatsAppLinkCode).HasMaxLength(6);
+        b.Entity<Budget>().Property(x => x.Month).HasMaxLength(7);
+        b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
+
+        b.Entity<LinkAttempt>().HasKey(x => x.Phone);
+        b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);
     }
 
     /// <summary>Categorias padrão criadas no cadastro do usuário (estilo Organizze).</summary>
