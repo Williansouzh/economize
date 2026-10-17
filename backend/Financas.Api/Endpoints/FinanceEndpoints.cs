@@ -113,8 +113,9 @@ public static class FinanceEndpoints
         {
             var uid = user.UserId();
             var (_, _, key) = FinanceService.ParseMonth(req.Month);
-            if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
-                return Results.BadRequest(new { error = "Categoria inválida." });
+            // Orçamento é limite de gasto: só faz sentido para categorias de despesa.
+            if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid && c.Type == TransactionType.Expense))
+                return Results.BadRequest(new { error = "Escolha uma categoria de despesa." });
 
             var b = await db.Budgets.FirstOrDefaultAsync(x => x.UserId == uid && x.CategoryId == req.CategoryId && x.Month == key);
             if (b is null) db.Budgets.Add(b = new Budget { UserId = uid, CategoryId = req.CategoryId, Month = key });
@@ -133,8 +134,13 @@ public static class FinanceEndpoints
         if (req.Amount <= 0) return Results.BadRequest(new { error = "Valor deve ser maior que zero." });
         if (!await db.Accounts.AnyAsync(a => a.Id == req.AccountId && a.UserId == uid))
             return Results.BadRequest(new { error = "Conta inválida." });
-        if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid))
+        var category = await db.Categories.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == req.CategoryId && c.UserId == uid);
+        if (category is null)
             return Results.BadRequest(new { error = "Categoria inválida." });
+        if (category.Type != req.Type)
+            return Results.BadRequest(new { error = req.Type == TransactionType.Expense
+                ? "Escolha uma categoria de despesa." : "Escolha uma categoria de receita." });
         return null;
     }
 

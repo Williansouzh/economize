@@ -43,7 +43,7 @@ class MessageHandler:
             try:
                 name = await self._finance.link(msg.phone, m.group(1))
             except FinanceApiError as e:
-                return f"❌ {e} Gere um novo código no app e tente de novo."
+                return f"❌ {e}"
             return f"✅ Tudo certo, {name.split()[0]}! Seu WhatsApp está conectado.\n\n{HELP}"
 
         if await self._finance.login(msg.phone) is None:

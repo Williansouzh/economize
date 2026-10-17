@@ -9,6 +9,8 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 | IA      | DeepSeek API (`deepseek-chat`), chamada **somente pelo backend** |
 | Agente WhatsApp | Python + LangGraph + DeepSeek + Whisper (áudio) + Tesseract (prints) |
 
+📐 Arquitetura, fluxos e regras de negócio: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+
 ## Funcionalidades
 
 - Cadastro/login (JWT; token guardado no armazenamento seguro do aparelho)
@@ -56,11 +58,14 @@ cd backend/Financas.Api
 # Chave do DeepSeek (crie em https://platform.deepseek.com/api_keys)
 dotnet user-secrets set "DeepSeek:ApiKey" "sk-..."
 
-# Troque também a chave JWT por uma sua (mín. 32 caracteres)
-dotnet user-secrets set "Jwt:Key" "uma-chave-bem-grande-e-aleatoria-com-mais-de-32-chars"
-
 dotnet run
 ```
+
+Em desenvolvimento a API usa uma chave JWT própria de `appsettings.Development.json`.
+**Fora de Development ela não sobe** sem uma chave sua de pelo menos 32 caracteres
+(`Jwt__Key` como variável de ambiente, ou `dotnet user-secrets set "Jwt:Key" "..."`).
+
+Testes de integração da API: `cd backend && dotnet test`.
 
 A API sobe em `http://0.0.0.0:5000` e cria o banco `financas.db` automaticamente.
 Documentação OpenAPI: `http://localhost:5000/openapi/v1.json`.

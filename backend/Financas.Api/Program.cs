@@ -17,6 +17,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("Default")));
 
 var jwt = builder.Configuration.GetSection("Jwt");
+JwtKeyGuard.Validate(jwt["Key"], builder.Environment);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o => o.TokenValidationParameters = new TokenValidationParameters
     {
@@ -31,6 +32,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<LinkAttemptLimiter>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
@@ -60,3 +63,6 @@ app.MapInsightsEndpoints();
 app.MapWhatsAppEndpoints();
 
 app.Run();
+
+// Permite que os testes de integração (WebApplicationFactory) enxerguem o Program.
+public partial class Program;

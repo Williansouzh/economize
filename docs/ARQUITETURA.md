@@ -1,0 +1,366 @@
+# Arquitetura e regras de negócio — Minhas Finanças
+
+Como o sistema é montado, por onde passam os dados e quais regras de negócio o código aplica:
+app Flutter, API .NET 10, insights com DeepSeek e o agente de WhatsApp em LangGraph.
+
+> Ao mudar uma regra no código, atualize o item **RN** ou **AG** correspondente neste documento.
+
+**Sumário:** [Visão geral](#visão-geral) · [Componentes](#componentes) · [Modelo de dados](#modelo-de-dados) ·
+[Regras de negócio](#regras-de-negócio) · [Cálculos](#cálculos) · [Fluxos](#fluxos) ·
+[Agente LangGraph](#agente-langgraph) · [Segurança](#segurança) · [Decisões](#decisões-de-arquitetura) ·
+[Pontos de atenção](#pontos-de-atenção)
+
+---
+
+## Visão geral
+
+São dois canais de entrada, o app e o WhatsApp, e uma única dona dos dados: a **API .NET**.
+O agente do WhatsApp não acessa o banco. Ele usa a mesma API REST que o app, então as regras de
+validação valem igualmente para os dois canais.
+
+```mermaid
+flowchart LR
+  APP["App Flutter<br/>Android / iOS"]
+  WA["WhatsApp<br/>celular do usuário"]
+  META["Meta Cloud API<br/>(externo)"]
+  API["API .NET 10<br/>Minimal APIs · EF Core · JWT<br/>regras de negócio e cálculos"]
+  DB[("SQLite<br/>financas.db")]
+  DS["DeepSeek<br/>deepseek-chat<br/>(externo)"]
+  subgraph AGENTE["Agente WhatsApp · Python · FastAPI · LangGraph"]
+    direction LR
+    I[ingest] --> AG[agent]
+    AG <--> T[tools]
+  end
+  MED["Whisper + Tesseract<br/>(processo local)"]
+
+  APP == "HTTPS + JWT do usuário" ==> API
+  API == "único que grava" ==> DB
+  AGENTE == "X-Agent-Key → JWT<br/>mesmas rotas REST" ==> API
+  API -- "insights" --> DS
+  AGENTE -- "tool calling" --> DS
+  WA -- "envia" --> META
+  META -- "webhook" --> AGENTE
+  AGENTE -- "resposta" --> META
+  META -- "recebe" --> WA
+  AGENTE -. "áudio/print → texto" .-> MED
+```
+
+As setas grossas formam o caminho até o banco: os dois canais chegam à API, e só a API grava no SQLite.
+Whisper e Tesseract rodam no próprio servidor do agente e não custam nada por uso.
+
+## Componentes
+
+| Componente | Responsabilidade | Tecnologia | Código |
+|---|---|---|---|
+| App mobile | Telas de visão geral, lançamentos, orçamentos, IA e vinculação do WhatsApp. Guarda o token no armazenamento seguro do aparelho. Não calcula nada de negócio: só exibe o que a API devolve. | Flutter, Provider, fl_chart, http, flutter_secure_storage | `mobile/lib` |
+| API | Autenticação, CRUD, validações, saldos, totais por categoria, orçamentos, insights com DeepSeek, vinculação do WhatsApp. | .NET 10 Minimal APIs, EF Core, SQLite, JWT, BCrypt | `backend/Financas.Api` |
+| Testes da API | Testes de integração com a API em memória e banco temporário. | xUnit, WebApplicationFactory | `backend/Financas.Api.Tests` |
+| Agente WhatsApp | Recebe o webhook, converte mídia em texto, deixa o DeepSeek decidir e chama a API pelas ferramentas. | Python 3.12, FastAPI, LangGraph, langchain-deepseek | `agent/app` |
+| Transcrição e OCR | Áudio → texto (Whisper), imagem → texto (Tesseract, português), PDF → texto (pypdf, até 5 páginas). | faster-whisper, pytesseract, pypdf | `agent/app/media.py` |
+| DeepSeek | Análise do mês (JSON estruturado), chat de perguntas e decisão do agente (function calling). | API compatível com OpenAI, `deepseek-chat` | externo |
+| Meta Cloud API | Entrega mensagens por webhook, hospeda as mídias e envia as respostas. | WhatsApp Business Platform (oficial) | externo |
+
+## Modelo de dados
+
+Toda entidade, exceto o usuário, carrega `UserId`, e toda consulta da API filtra por ele.
+Valores em dinheiro são `decimal` e sempre positivos: o sinal vem do campo `Type`.
+
+```mermaid
+erDiagram
+  USER ||--o{ ACCOUNT : possui
+  USER ||--o{ CATEGORY : possui
+  USER ||--o{ TRANSACTION : registra
+  USER ||--o{ BUDGET : define
+  ACCOUNT ||--o{ TRANSACTION : "movimenta (exclui em cascata)"
+  CATEGORY ||--o{ TRANSACTION : "classifica (bloqueia exclusão)"
+  CATEGORY ||--o{ BUDGET : limita
+  USER {
+    guid Id PK
+    string Name
+    string Email UK "minúsculo"
+    string PasswordHash "BCrypt"
+    string WhatsAppPhone UK "opcional"
+    string WhatsAppLinkCode "6 dígitos"
+    datetime WhatsAppLinkCodeExpiresAt
+  }
+  ACCOUNT {
+    guid Id PK
+    guid UserId FK
+    string Name
+    decimal InitialBalance
+    string Color
+  }
+  CATEGORY {
+    guid Id PK
+    guid UserId FK
+    string Name
+    enum Type "Income ou Expense"
+    string Icon
+    string Color
+  }
+  TRANSACTION {
+    guid Id PK
+    guid UserId FK
+    guid AccountId FK
+    guid CategoryId FK
+    string Description
+    decimal Amount "sempre maior que 0"
+    enum Type "Income ou Expense"
+    date Date "define o mês"
+    bool IsPaid "padrão true"
+  }
+  BUDGET {
+    guid Id PK
+    guid UserId FK
+    guid CategoryId FK
+    string Month "AAAA-MM"
+    decimal Limit
+  }
+```
+
+Índices únicos: e-mail do usuário, número do WhatsApp e a combinação usuário + categoria + mês do orçamento.
+Há também um índice em usuário + data dos lançamentos, a consulta mais frequente.
+
+## Regras de negócio
+
+Cada regra abaixo está implementada no código atual. Onde a regra existe só no app ou só no agente,
+isso está indicado.
+
+### Usuário e acesso
+
+| ID | Regra |
+|---|---|
+| RN-01 | O e-mail é único e é gravado sem espaços e em minúsculas. O cadastro exige nome, e-mail com "@" e senha de pelo menos 6 caracteres. A senha é guardada como hash BCrypt. |
+| RN-02 | Ao se cadastrar, o usuário ganha a conta "Carteira" com saldo inicial zero e 13 categorias padrão: 9 de despesa (Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Compras, Assinaturas, Outros) e 4 de receita (Salário, Freelance, Investimentos, Outras receitas). |
+| RN-03 | A sessão dura 30 dias (JWT). Qualquer resposta 401 desloga o app e volta para a tela de login. |
+| RN-04 | Um usuário só vê e altera os próprios dados. Ids de outro usuário se comportam como inexistentes (404) ou inválidos (400). |
+
+### Contas
+
+| ID | Regra |
+|---|---|
+| RN-05 | O saldo de uma conta não é gravado: é calculado na hora, a partir do saldo inicial e dos lançamentos **pagos** dessa conta, de qualquer data. |
+| RN-06 | Excluir uma conta exclui todos os lançamentos dela. |
+| RN-07 | As contas são listadas em ordem alfabética. A primeira é a "conta padrão" usada pelo formulário do app e pelo agente quando a conta não é informada. |
+
+### Lançamentos
+
+| ID | Regra |
+|---|---|
+| RN-08 | O valor tem que ser maior que zero. Despesa ou receita é definida pelo tipo, não pelo sinal. |
+| RN-09 | A conta e a categoria precisam existir, pertencer ao usuário, e **o tipo da categoria precisa ser igual ao tipo do lançamento**. Vale na criação e na edição. Resposta: 400 com "Escolha uma categoria de despesa/receita." |
+| RN-10 | O lançamento pertence ao mês da sua data (regime de competência). Pedidos sem mês ou com mês inválido usam o mês atual. |
+| RN-11 | Lançamentos nascem como pagos. Um lançamento pendente entra nos totais do mês e no gasto do orçamento, mas não no saldo das contas. |
+| RN-12 | No app, a lista do mês é agrupada por dia, do mais recente para o mais antigo. Excluir pede confirmação; editar reaproveita o mesmo formulário. O app aceita valores como "1.234,56" ou "1234.56". |
+
+### Categorias
+
+| ID | Regra |
+|---|---|
+| RN-13 | Uma categoria com lançamentos não pode ser excluída (409). O usuário precisa mover ou apagar os lançamentos antes. |
+
+### Orçamentos
+
+| ID | Regra |
+|---|---|
+| RN-14 | Existe no máximo um limite por categoria por mês; salvar de novo substitui o valor. **Só categorias de despesa aceitam orçamento.** Um orçamento não é copiado para o mês seguinte. |
+| RN-15 | O gasto do orçamento é a soma das despesas da categoria no mês, incluindo as pendentes. A barra fica laranja acima de 80% do limite e vermelha acima de 100%, com o texto "Estourou em R$ X". |
+
+### Insights com IA
+
+| ID | Regra |
+|---|---|
+| RN-16 | O DeepSeek recebe um resumo, nunca o banco: saldo total, receitas e despesas do mês e do mês anterior, despesas por categoria nos dois meses, orçamentos e as 10 maiores despesas (data, descrição, categoria, valor). Nome e e-mail não são enviados; as descrições dos lançamentos são. |
+| RN-17 | A análise volta como JSON com resumo, alertas, dicas, economia potencial por mês e nota de saúde de 0 a 100. A partir de 70 a nota aparece em verde, a partir de 40 em laranja, abaixo disso em vermelho. Se o JSON vier quebrado, o texto bruto vira o resumo. |
+| RN-18 | Sem chave configurada, a API responde 503 com a explicação. Se o DeepSeek falhar ou passar de 90 segundos, a resposta é 502. |
+
+### WhatsApp
+
+| ID | Regra |
+|---|---|
+| RN-19 | Para vincular, o app gera um código aleatório de 6 dígitos que vale 10 minutos e só pode ser usado uma vez. Gerar outro código invalida o anterior. |
+| RN-20 | Um número fica ligado a uma só conta. Vincular o mesmo número em outra conta desvincula o anterior. O usuário pode desconectar pelo app. |
+| RN-21 | Mensagens de números não vinculados não passam pela IA: o remetente só recebe as instruções de vinculação. |
+| RN-22 | O agente entende texto, áudio, imagem e documento (PDF ou imagem). Outros tipos recebem uma resposta explicando o que é aceito. |
+| RN-23 | Mensagens do mesmo número são processadas uma de cada vez, na ordem de chegada. Reenvios do mesmo webhook pela Meta são ignorados (últimos 5.000 ids). |
+| RN-24 | **Depois de 5 códigos errados, o número fica bloqueado para vinculação por 30 minutos** (resposta 429), mesmo que o próximo código esteja certo. A janela conta a partir da primeira falha. Um acerto zera o contador. Outros números não são afetados. |
+
+### Comportamento do agente
+
+Estas regras ficam no prompt de sistema (`agent/app/prompts.py`) e nas ferramentas (`agent/app/tools.py`).
+As do prompt dependem do modelo obedecer; as das ferramentas são garantidas pelo código.
+
+| ID | Regra | Onde |
+|---|---|---|
+| AG-01 | Cada despesa ou receita vira uma chamada de ferramenta. Um print de fatura com cinco compras gera cinco lançamentos. | Prompt |
+| AG-02 | A categoria é deduzida e nunca perguntada. Se faltar o valor, ou se o OCR deixar o valor ilegível, o agente pergunta em vez de chutar. | Prompt |
+| AG-03 | Datas relativas ("ontem", "sexta passada") viram datas reais. Sem data, vale hoje no fuso de São Paulo. Em comprovantes, vale a data do comprovante. | Prompt; fallback para hoje no código |
+| AG-04 | Comprovante de PIX ou transferência: se o usuário enviou, é despesa; se recebeu, é receita. A descrição leva o nome do favorecido ou do pagador. | Prompt |
+| AG-05 | O nome da categoria é procurado nesta ordem: igual sem acento e sem maiúsculas, depois contido no nome, depois parecido (similaridade ≥ 0,6). Sem correspondência, cai em "Outros" ou "Outras receitas". Só categorias do mesmo tipo do lançamento entram na busca. | Código |
+| AG-06 | A descrição é cortada em 120 caracteres, o valor é arredondado para 2 casas, uma data inválida vira hoje e um valor ≤ 0 é recusado. | Código |
+| AG-07 | "Desfazer" exclui o lançamento pelo id que aparece no histórico da conversa. Uma correção é feita como exclusão seguida de novo registro. | Prompt + `excluir_lancamento` |
+| AG-08 | Texto vindo de OCR ou de áudio é tratado como dado: instruções escritas dentro de um print não devem ser seguidas. As ferramentas só agem na conta do remetente. | Prompt + código |
+| AG-09 | Assuntos fora de finanças pessoais são recusados com educação. Respostas curtas, com a formatação do WhatsApp (`**negrito**` vira `*negrito*`). | Prompt + código |
+
+## Cálculos
+
+Todos ficam em `FinanceService`, na API. As somas são feitas em memória, depois da consulta,
+porque o SQLite não soma `decimal` no banco.
+
+| Valor | Fórmula | Observação |
+|---|---|---|
+| Saldo da conta | `saldo_inicial + Σ receitas pagas − Σ despesas pagas` | Considera todas as datas, inclusive as futuras. |
+| Saldo geral | `Σ saldo de cada conta` | Não depende do mês selecionado. |
+| Resultado do mês | `Σ receitas do mês − Σ despesas do mês` | Inclui os lançamentos pendentes do mês. |
+| % por categoria | `despesa da categoria ÷ despesas do mês × 100` | 1 casa decimal; o gráfico só rotula fatias de 8% ou mais. |
+
+## Fluxos
+
+### Vincular o WhatsApp
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant App as App Flutter
+  participant API as API .NET
+  participant AG as Agente
+  U->>App: menu ⋮ → Conectar WhatsApp
+  App->>API: POST /api/me/whatsapp-code (JWT)
+  API-->>App: código de 6 dígitos, válido 10 min
+  U->>AG: "VINCULAR 123456" pelo WhatsApp
+  AG->>API: POST /api/agent/link {phone, code} + X-Agent-Key
+  alt 5 falhas recentes deste número
+    API-->>AG: 429 Muitas tentativas
+  else código válido
+    API->>API: desvincula o número de outra conta, grava, zera falhas
+    API-->>AG: nome do usuário
+    AG-->>U: "✅ Tudo certo! Seu WhatsApp está conectado."
+  end
+```
+
+Mandar o código pelo próprio WhatsApp prova que quem vincula tem o celular nas mãos.
+O app nunca pede o número de telefone.
+
+### Áudio ou print vira lançamento
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant W as Meta
+  participant A as Agente (FastAPI)
+  participant G as Grafo LangGraph
+  participant M as Whisper / Tesseract
+  participant D as DeepSeek
+  participant API as API .NET
+  U->>W: áudio "gastei 52 no uber ontem"
+  W->>A: POST /webhook (assinatura HMAC)
+  A-->>W: 200 imediato
+  A->>API: POST /api/agent/token {phone}
+  API-->>A: JWT do usuário (cache de 10 min)
+  A->>G: ainvoke(media, thread_id = telefone)
+  G->>W: baixa a mídia pelo media_id
+  G->>M: transcreve ou faz OCR
+  M-->>G: texto
+  G->>API: GET categorias e contas
+  G->>D: prompt + histórico + ferramentas
+  D-->>G: chama registrar_lancamento(Uber, 52, despesa, Transporte, ontem)
+  G->>API: POST /api/transactions
+  API-->>G: id do lançamento
+  G->>D: resultado da ferramenta
+  D-->>G: "✅ Despesa de R$ 52,00 em Transporte"
+  A->>W: envia a resposta
+  W->>U: confirmação
+```
+
+O webhook responde 200 antes de processar. Se a resposta demorar, a Meta reenvia a mesma mensagem;
+por isso o agente ignora ids repetidos.
+
+### Insights do mês no app
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as Usuário
+  participant App as App Flutter
+  participant API as API .NET
+  participant D as DeepSeek
+  U->>App: aba IA → Gerar insights
+  App->>API: POST /api/insights {month}
+  API->>API: monta resumo do mês atual e do anterior
+  API->>D: chat/completions, response_format = json_object
+  D-->>API: {summary, alerts, tips, potentialSavings, healthScore}
+  API-->>App: InsightsDto
+  App-->>U: nota, resumo, alertas e dicas
+```
+
+## Agente LangGraph
+
+O estado é a lista de mensagens mais um campo `media`, preenchido só quando a mensagem atual tem anexo.
+O `thread_id` é o telefone, então cada usuário tem a própria conversa.
+
+```mermaid
+flowchart LR
+  S((START)) --> I[ingest]
+  I -->|"mídia vira texto"| AG["agent<br/>DeepSeek"]
+  AG -->|"pediu ferramenta"| T[tools]
+  T -->|"resultado"| AG
+  AG -->|"resposta final"| E((END))
+```
+
+| Nó | Entrada | O que faz | Saída |
+|---|---|---|---|
+| `ingest` | `media` (id, mime, legenda) | Baixa da Meta e converte: áudio pelo Whisper (pt), imagem pelo Tesseract (ampliada até 1500px de largura), PDF pelo pypdf. Sem mídia, não faz nada. | Mensagem do usuário marcada como "áudio transcrito" ou "texto extraído, pode conter erros", mais a legenda |
+| `agent` | Mensagens | Busca categorias e contas na API, monta o prompt com a data de hoje e envia as últimas 30 mensagens, sempre começando numa mensagem do usuário. | Resposta do DeepSeek, com ou sem chamadas de ferramenta |
+| `tools` | Chamadas de ferramenta | Executa `registrar_lancamento`, `listar_lancamentos`, `excluir_lancamento` e `resumo_do_mes` na API, com o JWT do dono do telefone. | Resultado de cada ferramenta (inclui o id criado) |
+
+## Segurança
+
+| Fronteira | Proteção |
+|---|---|
+| App → API | JWT assinado (HMAC-SHA256), validade de 30 dias, guardado no armazenamento seguro do aparelho. |
+| Chave JWT | Fora do ambiente Development, a API **não sobe** sem uma chave própria de pelo menos 32 caracteres, nem com a chave de desenvolvimento. A chave de dev fica só em `appsettings.Development.json`. |
+| Meta → Agente | Cabeçalho `X-Hub-Signature-256` conferido com o App Secret. Sem o segredo configurado, a checagem fica desligada (só para desenvolvimento). |
+| Agente → API | Chave `X-Agent-Key` comparada em tempo constante. Sem chave configurada, `/api/agent/*` responde 503. O agente troca o telefone por um JWT do dono e usa as rotas comuns. |
+| Vinculação | Limite de 5 códigos errados por número a cada 30 minutos (RN-24). |
+| Chaves do DeepSeek e da Meta | Só nos servidores (user-secrets ou variáveis de ambiente), nunca no app. |
+| Conteúdo de prints e áudios | Tratado como dado no prompt; as ferramentas só alcançam a conta do remetente. |
+
+## Decisões de arquitetura
+
+| Decisão | Por quê | Custo | Quando rever |
+|---|---|---|---|
+| O agente usa a API, não o banco | As regras ficam num lugar só, e um bug no agente não corrompe os dados. | Uma ida extra pela rede a cada ferramenta. | Não rever. |
+| Agente em Python, separado | LangGraph, Whisper e Tesseract são do ecossistema Python. Dá para escalar ou desligar o agente sem mexer na API. | Dois serviços para publicar e monitorar. | Se surgir um equivalente maduro em .NET. |
+| Whisper e Tesseract locais | O DeepSeek não aceita áudio nem imagem. Rodar local custa zero por uso e não manda mídia para mais um terceiro. | CPU e ~500 MB de RAM no agente; OCR erra em prints ruins. | Se a qualidade do OCR incomodar: modelo com visão. |
+| SQLite + `EnsureCreated` | Zero configuração para uso pessoal. | Sem migrations: campo novo exige apagar o banco. | Antes de ter dados reais: PostgreSQL + migrations. |
+| Somas em memória | O SQLite não agrega `decimal`. | Carrega todos os lançamentos pagos para calcular saldos. | Com milhares de lançamentos por usuário. |
+| Histórico em memória (`InMemorySaver`) | Simples e suficiente para começar. | Reiniciar o agente apaga as conversas. | Em produção: checkpointer SQLite ou Postgres. |
+| Limite de tentativas em memória (`IMemoryCache`) | Sem infraestrutura extra. | Zera se a API reiniciar e não é compartilhado entre instâncias. | Com mais de uma instância da API: Redis. |
+| WhatsApp Cloud API oficial | Sem risco de banimento; conversas iniciadas pelo usuário são gratuitas na janela de 24h. | Exige app na Meta e HTTPS público. | Não rever. |
+| Saldo calculado, não gravado | Nunca fica dessincronizado de edições e exclusões. | Recalcula a cada leitura. | Só se virar gargalo. |
+
+## Pontos de atenção
+
+Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso em produção.
+
+| Prioridade | Ponto | Correção sugerida |
+|---|---|---|
+| Média | **Pendentes contam de um jeito no mês e de outro no saldo.** Uma conta a pagar entra no resultado do mês e no orçamento, mas não no saldo. Lançamentos pagos com data futura entram no saldo de hoje. | Deixar claro na tela ("saldo atual" vs "previsto") ou ignorar datas futuras no saldo. |
+| Média | **Agente funciona em uma instância só.** Fila por telefone, ids já vistos e histórico ficam na memória do processo. | Redis para dedupe e fila; checkpointer em banco. |
+| Média | **Rate limit e CORS.** Login e cadastro não têm limite de tentativas, e o CORS aceita qualquer origem. | Rate limiting do ASP.NET Core e CORS restrito antes de expor a API. |
+| Baixa | Orçamentos não se repetem de um mês para o outro. | Opção "repetir todo mês". |
+| Baixa | Não há transferência entre contas. | Tipo de lançamento "transferência" com conta de origem e destino. |
+| Baixa | Descrições de lançamentos vão para o DeepSeek nos insights. | Avisar o usuário na tela de IA. |
+| Baixa | O Whisper `small` erra em áudios com muito ruído. | `WHISPER_MODEL=medium`, mais lento. |
+
+### Corrigido
+
+| Ponto | Como foi resolvido | Teste |
+|---|---|---|
+| Código de vinculação podia ser adivinhado | Limite de 5 falhas por número em 30 minutos (RN-24). | `Numero_e_bloqueado_apos_5_codigos_errados_mesmo_acertando_depois`, `Acerto_zera_o_contador_de_falhas` |
+| Chave JWT de exemplo no `appsettings.json` | Chave removida; a API recusa subir sem chave própria fora de Development. | `Producao_nao_sobe_com_chave_de_desenvolvimento`, `Producao_nao_sobe_sem_chave_ou_com_chave_curta`, `Producao_sobe_com_chave_propria` |
+| API não conferia o tipo da categoria | Validação na criação e edição de lançamentos e nos orçamentos (RN-09, RN-14). | `Despesa_com_categoria_de_receita_e_recusada`, `Receita_com_categoria_de_despesa_e_recusada_tambem_na_edicao`, `Orcamento_so_aceita_categoria_de_despesa` |
+
+Os testes ficam em `backend/Financas.Api.Tests/RegrasTests.cs` e rodam com `cd backend && dotnet test`.

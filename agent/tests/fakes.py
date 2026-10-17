@@ -50,7 +50,7 @@ class FakeFinance:
 
     async def link(self, phone, code):
         if code not in self.codes:
-            raise FinanceApiError("Código inválido ou expirado.")
+            raise FinanceApiError("Código inválido ou expirado. Gere um novo código no app e tente de novo.")
         self.linked[phone] = self.codes.pop(code)
         return self.linked[phone]
 
