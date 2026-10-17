@@ -97,7 +97,15 @@ pytest
 
 - **Whisper:** `WHISPER_MODEL=small` é um bom equilíbrio em CPU (~500 MB, alguns segundos por áudio).
   Use `base` em servidores fracos ou `medium` para mais precisão. O modelo é baixado no primeiro áudio.
-- **Histórico:** o `InMemorySaver` guarda as conversas na memória e as perde ao reiniciar.
-  Para persistir, troque por `langgraph-checkpoint-sqlite` ou `langgraph-checkpoint-postgres` em `app/main.py`.
+- **Histórico e várias instâncias:** sem `DATABASE_URL`, o histórico das conversas, os ids de mensagens
+  já vistas e a fila por telefone ficam na memória do processo. Isso serve para desenvolvimento, mas
+  reiniciar apaga as conversas e só pode existir **uma** instância.
+  Com `DATABASE_URL` apontando para um PostgreSQL:
+  - o histórico usa o checkpointer oficial do LangGraph (`langgraph-checkpoint-postgres`) e sobrevive a reinícios;
+  - cada id de mensagem da Meta é gravado numa tabela com chave única, então um reenvio é descartado mesmo que caia em outra instância;
+  - mensagens do mesmo telefone são processadas uma de cada vez com `pg_advisory_lock`, que o Postgres libera sozinho se a instância cair.
+
+  O `docker-compose.yml` já sobe o Postgres e configura isso. Para testar com Postgres:
+  `TEST_DATABASE_URL=postgresql://... pytest`.
 - **Segurança:** textos de OCR e áudio são tratados como dado, e o prompt manda ignorar instruções contidas neles.
   Além disso, as ferramentas só agem na conta do próprio remetente.

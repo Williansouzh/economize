@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -34,6 +35,9 @@ class DashboardScreen extends StatelessWidget {
                                 backgroundColor: hexColor(a.color),
                                 child: const Icon(Icons.account_balance, color: Colors.white)),
                             title: Text(a.name),
+                            subtitle: a.forecastBalance != a.balance
+                                ? Text('Previsto: ${money(a.forecastBalance)}')
+                                : null,
                             trailing: Text(money(a.balance),
                                 style: TextStyle(
                                     fontWeight: FontWeight.bold,
@@ -113,22 +117,40 @@ class _BalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final month = context.watch<AppState>().month;
+    final monthEnd = DateTime(month.year, month.month + 1, 0);
+    final onCard = TextStyle(color: cs.onPrimaryContainer);
+    final hasPending = d.pendingIncome > 0 || d.pendingExpenses > 0;
     return Card(
       color: cs.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Saldo geral', style: TextStyle(color: cs.onPrimaryContainer)),
+          Text('Saldo atual', style: onCard),
           Text(money(d.totalBalance),
               style: Theme.of(context)
                   .textTheme
                   .headlineMedium
                   ?.copyWith(fontWeight: FontWeight.bold, color: cs.onPrimaryContainer)),
+          Text('Só o que já foi pago ou recebido até hoje.',
+              style: onCard.copyWith(fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(
+            'Previsto em ${DateFormat("d 'de' MMMM", 'pt_BR').format(monthEnd)}: ${money(d.forecastBalance)}',
+            style: onCard.copyWith(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 16),
           Row(children: [
             Expanded(child: _Metric('Receitas', d.income, incomeColor, Icons.arrow_upward)),
             Expanded(child: _Metric('Despesas', d.expenses, expenseColor, Icons.arrow_downward)),
           ]),
+          if (hasPending) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Pendentes no mês: a receber ${money(d.pendingIncome)} · a pagar ${money(d.pendingExpenses)}',
+              style: onCard.copyWith(fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 8),
           Text('Resultado do mês: ${money(d.monthResult)}',
               style: TextStyle(

@@ -26,7 +26,7 @@ public static class FinanceEndpoints
             var a = new Account { UserId = user.UserId(), Name = req.Name, InitialBalance = req.InitialBalance, Color = req.Color ?? "#4CAF50" };
             db.Accounts.Add(a);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance, a.Color));
+            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance, a.InitialBalance, a.Color));
         });
 
         accounts.MapPut("/{id:guid}", async (Guid id, AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
@@ -69,7 +69,7 @@ public static class FinanceEndpoints
         var txs = api.MapGroup("/transactions").WithTags("Transações");
         txs.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
-            var (start, end, _) = FinanceService.ParseMonth(month);
+            var (start, end, _) = finance.ParseMonth(month);
             return (await finance.GetTransactionsAsync(user.UserId(), start, end)).Select(ToDto);
         });
 
@@ -103,16 +103,16 @@ public static class FinanceEndpoints
         var budgets = api.MapGroup("/budgets").WithTags("Orçamentos");
         budgets.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
-            var (start, end, key) = FinanceService.ParseMonth(month);
+            var (start, end, key) = finance.ParseMonth(month);
             var monthTxs = await finance.GetTransactionsAsync(user.UserId(), start, end);
             return await finance.GetBudgetsAsync(user.UserId(), key, monthTxs);
         });
 
         // Upsert: um limite por categoria/mês.
-        budgets.MapPost("/", async (BudgetRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        budgets.MapPost("/", async (BudgetRequest req, ClaimsPrincipal user, AppDbContext db, FinanceService finance) =>
         {
             var uid = user.UserId();
-            var (_, _, key) = FinanceService.ParseMonth(req.Month);
+            var (_, _, key) = finance.ParseMonth(req.Month);
             // Orçamento é limite de gasto: só faz sentido para categorias de despesa.
             if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid && c.Type == TransactionType.Expense))
                 return Results.BadRequest(new { error = "Escolha uma categoria de despesa." });

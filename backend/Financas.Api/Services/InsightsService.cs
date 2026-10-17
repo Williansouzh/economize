@@ -63,20 +63,25 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek)
     /// <summary>Resumo textual do mês atual + mês anterior para comparação. Não envia dados pessoais.</summary>
     private async Task<string> BuildContextAsync(Guid userId, string? month)
     {
-        var (start, end, key) = FinanceService.ParseMonth(month);
+        var (start, end, key) = finance.ParseMonth(month);
         var txs = await finance.GetTransactionsAsync(userId, start, end);
         var prevTxs = await finance.GetTransactionsAsync(userId, start.AddMonths(-1), start.AddDays(-1));
         var budgets = await finance.GetBudgetsAsync(userId, key, txs);
-        var accounts = await finance.GetAccountsAsync(userId);
+        var accounts = await finance.GetAccountsAsync(userId, end);
 
         string Money(decimal v) => v.ToString("C", PtBr);
         decimal Sum(IEnumerable<Transaction> t, TransactionType type) => t.Where(x => x.Type == type).Sum(x => x.Amount);
 
         var sb = new StringBuilder();
         sb.AppendLine($"Mês analisado: {key}");
-        sb.AppendLine($"Saldo total nas contas: {Money(accounts.Sum(a => a.Balance))}");
+        sb.AppendLine($"Hoje: {finance.Today:dd/MM/yyyy}");
+        sb.AppendLine($"Saldo atual nas contas (só lançamentos pagos até hoje): {Money(accounts.Sum(a => a.Balance))}");
+        sb.AppendLine($"Saldo previsto para o fim do mês (inclui pendentes e agendados): {Money(accounts.Sum(a => a.ForecastBalance))}");
         sb.AppendLine($"Receitas do mês: {Money(Sum(txs, TransactionType.Income))}");
         sb.AppendLine($"Despesas do mês: {Money(Sum(txs, TransactionType.Expense))}");
+        var pending = txs.Where(t => !t.IsPaid).ToList();
+        if (pending.Count > 0)
+            sb.AppendLine($"Pendentes no mês — a receber: {Money(Sum(pending, TransactionType.Income))}, a pagar: {Money(Sum(pending, TransactionType.Expense))}");
         sb.AppendLine($"Mês anterior — receitas: {Money(Sum(prevTxs, TransactionType.Income))}, despesas: {Money(Sum(prevTxs, TransactionType.Expense))}");
 
         var prevByCat = FinanceService.ExpensesByCategory(prevTxs).ToDictionary(c => c.CategoryId, c => c.Total);

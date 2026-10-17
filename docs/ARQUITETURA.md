@@ -32,6 +32,7 @@ flowchart LR
     AG <--> T[tools]
   end
   MED["Whisper + Tesseract<br/>(processo local)"]
+  PG[("PostgreSQL do agente<br/>histórico · dedupe · fila")]
 
   APP == "HTTPS + JWT do usuário" ==> API
   API == "único que grava" ==> DB
@@ -43,9 +44,11 @@ flowchart LR
   AGENTE -- "resposta" --> META
   META -- "recebe" --> WA
   AGENTE -. "áudio/print → texto" .-> MED
+  AGENTE -- "checkpointer<br/>advisory lock" --> PG
 ```
 
 As setas grossas formam o caminho até o banco: os dois canais chegam à API, e só a API grava no SQLite.
+O PostgreSQL do agente guarda só o estado das conversas (nunca dados financeiros) e é opcional em desenvolvimento.
 Whisper e Tesseract rodam no próprio servidor do agente e não custam nada por uso.
 
 ## Componentes
@@ -56,6 +59,7 @@ Whisper e Tesseract rodam no próprio servidor do agente e não custam nada por 
 | API | Autenticação, CRUD, validações, saldos, totais por categoria, orçamentos, insights com DeepSeek, vinculação do WhatsApp. | .NET 10 Minimal APIs, EF Core, SQLite, JWT, BCrypt | `backend/Financas.Api` |
 | Testes da API | Testes de integração com a API em memória e banco temporário. | xUnit, WebApplicationFactory | `backend/Financas.Api.Tests` |
 | Agente WhatsApp | Recebe o webhook, converte mídia em texto, deixa o DeepSeek decidir e chama a API pelas ferramentas. | Python 3.12, FastAPI, LangGraph, langchain-deepseek | `agent/app` |
+| Banco do agente | Histórico das conversas (checkpointer do LangGraph), ids de mensagens já processadas e fila por telefone. Opcional: sem ele, tudo fica em memória e só pode haver uma instância. | PostgreSQL 16, langgraph-checkpoint-postgres | `agent/app/coordination.py` |
 | Transcrição e OCR | Áudio → texto (Whisper), imagem → texto (Tesseract, português), PDF → texto (pypdf, até 5 páginas). | faster-whisper, pytesseract, pypdf | `agent/app/media.py` |
 | DeepSeek | Análise do mês (JSON estruturado), chat de perguntas e decisão do agente (function calling). | API compatível com OpenAI, `deepseek-chat` | externo |
 | Meta Cloud API | Entrega mensagens por webhook, hospeda as mídias e envia as respostas. | WhatsApp Business Platform (oficial) | externo |
@@ -134,12 +138,13 @@ isso está indicado.
 | RN-02 | Ao se cadastrar, o usuário ganha a conta "Carteira" com saldo inicial zero e 13 categorias padrão: 9 de despesa (Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Compras, Assinaturas, Outros) e 4 de receita (Salário, Freelance, Investimentos, Outras receitas). |
 | RN-03 | A sessão dura 30 dias (JWT). Qualquer resposta 401 desloga o app e volta para a tela de login. |
 | RN-04 | Um usuário só vê e altera os próprios dados. Ids de outro usuário se comportam como inexistentes (404) ou inválidos (400). |
+| RN-26 | **Limite de requisições.** Login e cadastro: 10 por minuto por IP. Demais rotas: 300 por minuto por usuário logado (ou por IP, sem login). Acima disso, a API responde 429 com o cabeçalho `Retry-After`. As rotas `/api/agent/*` ficam fora do limite global porque concentram o tráfego de todos os usuários do WhatsApp e já são protegidas pela chave do agente e pela RN-24. Os limites são configuráveis em `RateLimit`. |
 
 ### Contas
 
 | ID | Regra |
 |---|---|
-| RN-05 | O saldo de uma conta não é gravado: é calculado na hora, a partir do saldo inicial e dos lançamentos **pagos** dessa conta, de qualquer data. |
+| RN-05 | O saldo não é gravado: é calculado na hora. Cada conta tem dois saldos. **Saldo atual**: saldo inicial + lançamentos **pagos com data até hoje**. **Saldo previsto**: saldo inicial + **todos** os lançamentos (pagos, pendentes e agendados) até o fim do mês consultado. O app mostra o atual em destaque e o previsto logo abaixo. |
 | RN-06 | Excluir uma conta exclui todos os lançamentos dela. |
 | RN-07 | As contas são listadas em ordem alfabética. A primeira é a "conta padrão" usada pelo formulário do app e pelo agente quando a conta não é informada. |
 
@@ -150,7 +155,8 @@ isso está indicado.
 | RN-08 | O valor tem que ser maior que zero. Despesa ou receita é definida pelo tipo, não pelo sinal. |
 | RN-09 | A conta e a categoria precisam existir, pertencer ao usuário, e **o tipo da categoria precisa ser igual ao tipo do lançamento**. Vale na criação e na edição. Resposta: 400 com "Escolha uma categoria de despesa/receita." |
 | RN-10 | O lançamento pertence ao mês da sua data (regime de competência). Pedidos sem mês ou com mês inválido usam o mês atual. |
-| RN-11 | Lançamentos nascem como pagos. Um lançamento pendente entra nos totais do mês e no gasto do orçamento, mas não no saldo das contas. |
+| RN-25 | "Hoje" e "mês atual" seguem o fuso `America/Sao_Paulo` (configurável em `App:TimeZone`), não o relógio do servidor. Às 22h de 17/10 no Brasil, um servidor em UTC já está no dia 18, mas para a API ainda é dia 17. |
+| RN-11 | Lançamentos nascem como pagos. Um lançamento pendente entra nos totais do mês, no gasto do orçamento e no saldo previsto, mas não no saldo atual. Um lançamento pago com data futura também só entra no saldo atual quando a data chega. O app mostra os pendentes do mês ("a receber" e "a pagar") no card de saldo. |
 | RN-12 | No app, a lista do mês é agrupada por dia, do mais recente para o mais antigo. Excluir pede confirmação; editar reaproveita o mesmo formulário. O app aceita valores como "1.234,56" ou "1234.56". |
 
 ### Categorias
@@ -182,7 +188,7 @@ isso está indicado.
 | RN-20 | Um número fica ligado a uma só conta. Vincular o mesmo número em outra conta desvincula o anterior. O usuário pode desconectar pelo app. |
 | RN-21 | Mensagens de números não vinculados não passam pela IA: o remetente só recebe as instruções de vinculação. |
 | RN-22 | O agente entende texto, áudio, imagem e documento (PDF ou imagem). Outros tipos recebem uma resposta explicando o que é aceito. |
-| RN-23 | Mensagens do mesmo número são processadas uma de cada vez, na ordem de chegada. Reenvios do mesmo webhook pela Meta são ignorados (últimos 5.000 ids). |
+| RN-23 | Mensagens do mesmo número são processadas uma de cada vez, na ordem de chegada, mesmo com várias instâncias do agente. Reenvios do mesmo webhook pela Meta são processados uma única vez, em qualquer instância. |
 | RN-24 | **Depois de 5 códigos errados, o número fica bloqueado para vinculação por 30 minutos** (resposta 429), mesmo que o próximo código esteja certo. A janela conta a partir da primeira falha. Um acerto zera o contador. Outros números não são afetados. |
 
 ### Comportamento do agente
@@ -209,8 +215,10 @@ porque o SQLite não soma `decimal` no banco.
 
 | Valor | Fórmula | Observação |
 |---|---|---|
-| Saldo da conta | `saldo_inicial + Σ receitas pagas − Σ despesas pagas` | Considera todas as datas, inclusive as futuras. |
-| Saldo geral | `Σ saldo de cada conta` | Não depende do mês selecionado. |
+| Saldo atual da conta | `saldo_inicial + Σ (receitas − despesas) pagas com data ≤ hoje` | Não depende do mês selecionado. |
+| Saldo previsto da conta | `saldo_inicial + Σ (receitas − despesas) com data ≤ fim do mês consultado` | Inclui pendentes e agendados. |
+| Saldo atual / previsto geral | `Σ` dos saldos de cada conta | Os dois números do card principal. |
+| Pendentes do mês | `Σ receitas não pagas` e `Σ despesas não pagas` do mês | "A receber" e "a pagar" no card. |
 | Resultado do mês | `Σ receitas do mês − Σ despesas do mês` | Inclui os lançamentos pendentes do mês. |
 | % por categoria | `despesa da categoria ÷ despesas do mês × 100` | 1 casa decimal; o gráfico só rotula fatias de 8% ou mais. |
 
@@ -324,6 +332,8 @@ flowchart LR
 | Meta → Agente | Cabeçalho `X-Hub-Signature-256` conferido com o App Secret. Sem o segredo configurado, a checagem fica desligada (só para desenvolvimento). |
 | Agente → API | Chave `X-Agent-Key` comparada em tempo constante. Sem chave configurada, `/api/agent/*` responde 503. O agente troca o telefone por um JWT do dono e usa as rotas comuns. |
 | Vinculação | Limite de 5 códigos errados por número a cada 30 minutos (RN-24). |
+| Força bruta e abuso | Rate limit por IP no login e cadastro e por usuário nas demais rotas (RN-26). Atrás de proxy reverso, ligue `ReverseProxy:TrustForwardedHeaders` para o limite usar o IP real; só faça isso se a API não for acessível diretamente, senão o cabeçalho `X-Forwarded-For` pode ser forjado. |
+| CORS | O app mobile não usa CORS. Em produção, só as origens de `Cors:AllowedOrigins` são liberadas (padrão: nenhuma). Em Development, qualquer `localhost` é liberado para testar a versão web. |
 | Chaves do DeepSeek e da Meta | Só nos servidores (user-secrets ou variáveis de ambiente), nunca no app. |
 | Conteúdo de prints e áudios | Tratado como dado no prompt; as ferramentas só alcançam a conta do remetente. |
 
@@ -336,8 +346,9 @@ flowchart LR
 | Whisper e Tesseract locais | O DeepSeek não aceita áudio nem imagem. Rodar local custa zero por uso e não manda mídia para mais um terceiro. | CPU e ~500 MB de RAM no agente; OCR erra em prints ruins. | Se a qualidade do OCR incomodar: modelo com visão. |
 | SQLite + `EnsureCreated` | Zero configuração para uso pessoal. | Sem migrations: campo novo exige apagar o banco. | Antes de ter dados reais: PostgreSQL + migrations. |
 | Somas em memória | O SQLite não agrega `decimal`. | Carrega todos os lançamentos pagos para calcular saldos. | Com milhares de lançamentos por usuário. |
-| Histórico em memória (`InMemorySaver`) | Simples e suficiente para começar. | Reiniciar o agente apaga as conversas. | Em produção: checkpointer SQLite ou Postgres. |
-| Limite de tentativas em memória (`IMemoryCache`) | Sem infraestrutura extra. | Zera se a API reiniciar e não é compartilhado entre instâncias. | Com mais de uma instância da API: Redis. |
+| Estado do agente no PostgreSQL | Um só serviço resolve as três necessidades: histórico (checkpointer oficial do LangGraph), dedupe (chave única) e fila por telefone (`pg_advisory_lock`, liberado automaticamente se a instância cair). | Mais um serviço para operar. Cada telefone em processamento segura uma conexão do pool de locks. | Se o volume crescer muito: Redis para dedupe e fila. |
+| Modo memória no agente quando `DATABASE_URL` está vazio | Desenvolvimento e CLI sem dependências. | Uma instância só; reiniciar apaga conversas. O agente avisa no log. | Não rever. |
+| Limites da API em memória (`IMemoryCache` e rate limiter do ASP.NET Core) | Sem infraestrutura extra. | Zeram se a API reiniciar e não são compartilhados entre instâncias. | Junto com a migração para PostgreSQL, se a API passar a ter réplicas. |
 | WhatsApp Cloud API oficial | Sem risco de banimento; conversas iniciadas pelo usuário são gratuitas na janela de 24h. | Exige app na Meta e HTTPS público. | Não rever. |
 | Saldo calculado, não gravado | Nunca fica dessincronizado de edições e exclusões. | Recalcula a cada leitura. | Só se virar gargalo. |
 
@@ -347,13 +358,12 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 
 | Prioridade | Ponto | Correção sugerida |
 |---|---|---|
-| Média | **Pendentes contam de um jeito no mês e de outro no saldo.** Uma conta a pagar entra no resultado do mês e no orçamento, mas não no saldo. Lançamentos pagos com data futura entram no saldo de hoje. | Deixar claro na tela ("saldo atual" vs "previsto") ou ignorar datas futuras no saldo. |
-| Média | **Agente funciona em uma instância só.** Fila por telefone, ids já vistos e histórico ficam na memória do processo. | Redis para dedupe e fila; checkpointer em banco. |
-| Média | **Rate limit e CORS.** Login e cadastro não têm limite de tentativas, e o CORS aceita qualquer origem. | Rate limiting do ASP.NET Core e CORS restrito antes de expor a API. |
+| Média | **A API ainda é de uma instância só.** SQLite com `EnsureCreated` não aceita réplicas nem migrations, e os limites (RN-24, RN-26) ficam na memória do processo. | PostgreSQL + migrations do EF Core; limites em Redis se houver réplicas. |
 | Baixa | Orçamentos não se repetem de um mês para o outro. | Opção "repetir todo mês". |
 | Baixa | Não há transferência entre contas. | Tipo de lançamento "transferência" com conta de origem e destino. |
 | Baixa | Descrições de lançamentos vão para o DeepSeek nos insights. | Avisar o usuário na tela de IA. |
 | Baixa | O Whisper `small` erra em áudios com muito ruído. | `WHISPER_MODEL=medium`, mais lento. |
+| Baixa | Se uma instância do agente cair no meio do processamento, aquela mensagem não é reprocessada (o id já foi marcado como visto). | Marcar como concluída só no fim e reprocessar as pendentes antigas. |
 
 ### Corrigido
 
@@ -362,5 +372,9 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | Código de vinculação podia ser adivinhado | Limite de 5 falhas por número em 30 minutos (RN-24). | `Numero_e_bloqueado_apos_5_codigos_errados_mesmo_acertando_depois`, `Acerto_zera_o_contador_de_falhas` |
 | Chave JWT de exemplo no `appsettings.json` | Chave removida; a API recusa subir sem chave própria fora de Development. | `Producao_nao_sobe_com_chave_de_desenvolvimento`, `Producao_nao_sobe_sem_chave_ou_com_chave_curta`, `Producao_sobe_com_chave_propria` |
 | API não conferia o tipo da categoria | Validação na criação e edição de lançamentos e nos orçamentos (RN-09, RN-14). | `Despesa_com_categoria_de_receita_e_recusada`, `Receita_com_categoria_de_despesa_e_recusada_tambem_na_edicao`, `Orcamento_so_aceita_categoria_de_despesa` |
+| Pendentes e datas futuras confundiam o saldo | Saldo atual × saldo previsto, pendentes do mês no card, e "hoje" no fuso de São Paulo (RN-05, RN-11, RN-25). | `Saldo_atual_ignora_pendentes_e_datas_futuras_e_o_previsto_inclui_ate_o_fim_do_mes`, `Hoje_segue_o_fuso_de_Sao_Paulo_e_nao_o_do_servidor` |
+| Agente só funcionava em uma instância | Histórico, dedupe e fila por telefone no PostgreSQL quando `DATABASE_URL` está definido (RN-23). | `test_postgres_duas_instancias_descartam_a_mesma_mensagem`, `test_postgres_fila_por_telefone_vale_entre_instancias`, `test_postgres_historico_continua_em_outra_instancia` |
+| Sem rate limit e CORS aberto | Rate limit por IP no login/cadastro e por usuário nas demais rotas; CORS só para origens configuradas (RN-26). | `Login_e_limitado_a_10_tentativas_por_minuto`, `Rotas_comuns_sao_limitadas_por_usuario`, `Cors_em_producao_so_libera_origens_configuradas`, `Cors_em_desenvolvimento_libera_localhost` |
 
-Os testes ficam em `backend/Financas.Api.Tests/RegrasTests.cs` e rodam com `cd backend && dotnet test`.
+Testes da API: `backend/Financas.Api.Tests` (`cd backend && dotnet test`).
+Testes do agente: `agent/tests` (`cd agent && pytest`; os de PostgreSQL rodam com `TEST_DATABASE_URL` definido).

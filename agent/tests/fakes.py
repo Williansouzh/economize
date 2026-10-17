@@ -72,5 +72,6 @@ class FakeFinance:
         self.deleted.append(tx_id)
 
     async def dashboard(self, phone, month):
-        return {"month": month, "totalBalance": 0, "income": 0, "expenses": 0, "monthResult": 0,
+        return {"month": month, "totalBalance": 0, "forecastBalance": 0, "income": 0, "expenses": 0,
+                "monthResult": 0, "pendingIncome": 0, "pendingExpenses": 0,
                 "expensesByCategory": [], "budgets": []}

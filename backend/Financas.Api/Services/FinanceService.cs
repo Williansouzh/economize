@@ -7,12 +7,15 @@ using Microsoft.EntityFrameworkCore;
 namespace Financas.Api.Services;
 
 /// <summary>Cálculos de saldo, totais por categoria e orçamentos.</summary>
-public class FinanceService(AppDbContext db)
+public class FinanceService(AppDbContext db, AppClock clock)
 {
-    public static (DateOnly Start, DateOnly End, string Key) ParseMonth(string? month)
+    public DateOnly Today => clock.Today;
+
+    /// <summary>Converte "AAAA-MM" no intervalo do mês. Vazio ou inválido = mês atual.</summary>
+    public (DateOnly Start, DateOnly End, string Key) ParseMonth(string? month)
     {
         var date = DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture,
-            DateTimeStyles.None, out var d) ? d : DateOnly.FromDateTime(DateTime.Today);
+            DateTimeStyles.None, out var d) ? d : clock.Today;
         var start = new DateOnly(date.Year, date.Month, 1);
         return (start, start.AddMonths(1).AddDays(-1), start.ToString("yyyy-MM"));
     }
@@ -24,20 +27,32 @@ public class FinanceService(AppDbContext db)
             .OrderByDescending(t => t.Date)
             .ToListAsync();
 
-    public async Task<List<AccountDto>> GetAccountsAsync(Guid userId)
+    /// <summary>
+    /// Saldo atual: só o que já aconteceu (pago e com data até hoje).
+    /// Saldo previsto: tudo até <paramref name="forecastUntil"/>, inclusive pendentes e agendados.
+    /// </summary>
+    public async Task<List<AccountDto>> GetAccountsAsync(Guid userId, DateOnly? forecastUntil = null)
     {
+        var today = clock.Today;
+        var until = forecastUntil ?? ParseMonth(null).End;
+        var lastDate = today > until ? today : until;
         var accounts = await db.Accounts.AsNoTracking().Where(a => a.UserId == userId).ToListAsync();
         // Agregação em memória: o provider SQLite não soma decimal no banco.
-        var paid = await db.Transactions.AsNoTracking()
-            .Where(t => t.UserId == userId && t.IsPaid)
-            .Select(t => new { t.AccountId, t.Amount, t.Type })
+        var txs = await db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && t.Date <= lastDate)
+            .Select(t => new { t.AccountId, t.Amount, t.Type, t.IsPaid, t.Date })
             .ToListAsync();
+
+        static decimal Signed(TransactionType type, decimal amount) =>
+            type == TransactionType.Income ? amount : -amount;
 
         return accounts.Select(a =>
         {
-            var movement = paid.Where(t => t.AccountId == a.Id)
-                .Sum(t => t.Type == TransactionType.Income ? t.Amount : -t.Amount);
-            return new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance + movement, a.Color);
+            var mine = txs.Where(t => t.AccountId == a.Id).ToList();
+            var current = mine.Where(t => t.IsPaid && t.Date <= today).Sum(t => Signed(t.Type, t.Amount));
+            var forecast = mine.Where(t => t.Date <= until).Sum(t => Signed(t.Type, t.Amount));
+            return new AccountDto(a.Id, a.Name, a.InitialBalance,
+                a.InitialBalance + current, a.InitialBalance + forecast, a.Color);
         }).OrderBy(a => a.Name).ToList();
     }
 
@@ -68,11 +83,15 @@ public class FinanceService(AppDbContext db)
     {
         var (start, end, key) = ParseMonth(month);
         var txs = await GetTransactionsAsync(userId, start, end);
-        var accounts = await GetAccountsAsync(userId);
-        var income = txs.Where(t => t.Type == TransactionType.Income).Sum(t => t.Amount);
-        var expenses = txs.Where(t => t.Type == TransactionType.Expense).Sum(t => t.Amount);
+        var accounts = await GetAccountsAsync(userId, end);
+        decimal Sum(TransactionType type, bool? paid = null) => txs
+            .Where(t => t.Type == type && (paid is null || t.IsPaid == paid)).Sum(t => t.Amount);
+        var income = Sum(TransactionType.Income);
+        var expenses = Sum(TransactionType.Expense);
 
-        return new DashboardDto(key, accounts.Sum(a => a.Balance), income, expenses, income - expenses,
+        return new DashboardDto(key, accounts.Sum(a => a.Balance), accounts.Sum(a => a.ForecastBalance),
+            income, expenses, income - expenses,
+            Sum(TransactionType.Income, paid: false), Sum(TransactionType.Expense, paid: false),
             accounts, ExpensesByCategory(txs), await GetBudgetsAsync(userId, key, txs));
     }
 }

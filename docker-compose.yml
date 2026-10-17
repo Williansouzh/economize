@@ -1,4 +1,6 @@
-# Sobe backend + agente do WhatsApp:  cp .env.example .env  (preencha)  &&  docker compose up --build
+# Sobe API + agente do WhatsApp + PostgreSQL do agente:
+#   cp .env.example .env   (preencha)
+#   docker compose up --build
 services:
   api:
     build: ./backend
@@ -7,7 +9,22 @@ services:
       DeepSeek__ApiKey: ${DEEPSEEK_API_KEY}
       Agent__ApiKey: ${AGENT_API_KEY}
       Jwt__Key: ${JWT_KEY}
+      # Origens web liberadas no CORS (o app mobile não precisa). Ex.: https://app.seudominio.com.br
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-}
+      # Ligue só se a API estiver atrás de um proxy reverso (nginx, Caddy, Cloudflare)
+      ReverseProxy__TrustForwardedHeaders: ${TRUST_PROXY:-false}
     volumes: [api-data:/data]
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: agente
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [agent-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agente"]
+      interval: 5s
+      retries: 10
 
   agent:
     build: ./agent
@@ -15,9 +32,15 @@ services:
     env_file: .env
     environment:
       FINANCE_API_URL: http://api:5000
+      # Histórico, mensagens já vistas e fila por telefone ficam no Postgres:
+      # o agente pode rodar com várias réplicas atrás de um balanceador.
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/agente
     volumes: [whisper-models:/models]
-    depends_on: [api]
+    depends_on:
+      api: { condition: service_started }
+      db: { condition: service_healthy }
 
 volumes:
   api-data:
+  agent-db:
   whisper-models:

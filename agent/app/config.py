@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     whisper_compute_type: str = "int8"
     tesseract_lang: str = "por"
 
+    # PostgreSQL para histórico, dedupe e fila por telefone. Vazio = tudo em memória (uma instância só).
+    database_url: str = ""
+    database_pool_size: int = 20
+
     timezone: str = "America/Sao_Paulo"
     # Quantas mensagens do histórico vão para o LLM a cada turno.
     history_limit: int = 30

@@ -125,11 +125,13 @@ def make_tools(finance: FinanceApi, timezone: str):
 
     @tool
     async def resumo_do_mes(config: RunnableConfig, mes: str | None = None) -> str:
-        """Resumo financeiro do mês: saldo, receitas, despesas, gastos por categoria e orçamentos. mes = AAAA-MM."""
+        """Resumo financeiro do mês: saldo atual e previsto, receitas, despesas, pendentes, gastos por categoria e orçamentos. mes = AAAA-MM."""
         d = await finance.dashboard(phone_of(config), month_or_current(mes))
         lines = [
-            f"Mês {d['month']}: saldo geral {brl(d['totalBalance'])}, receitas {brl(d['income'])}, "
-            f"despesas {brl(d['expenses'])}, resultado {brl(d['monthResult'])}.",
+            f"Mês {d['month']}: saldo atual {brl(d['totalBalance'])} (só pagos até hoje), "
+            f"saldo previsto no fim do mês {brl(d['forecastBalance'])}, receitas {brl(d['income'])}, "
+            f"despesas {brl(d['expenses'])}, resultado {brl(d['monthResult'])}, "
+            f"pendentes: a receber {brl(d['pendingIncome'])}, a pagar {brl(d['pendingExpenses'])}.",
             "Despesas por categoria: " + (", ".join(
                 f"{c['name']} {brl(c['total'])} ({c['percent']}%)" for c in d["expensesByCategory"]) or "nenhuma"),
         ]

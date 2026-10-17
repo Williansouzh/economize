@@ -5,8 +5,7 @@ URL do webhook na Meta: https://SEU-DOMINIO/webhook
 """
 
 import logging
-from collections import OrderedDict
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -14,6 +13,7 @@ from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .config import get_settings
+from .coordination import InMemoryCoordinator, postgres_backend
 from .finance_api import FinanceApi
 from .graph import Deps, build_graph
 from .media import MediaProcessor
@@ -38,12 +38,18 @@ async def lifespan(app: FastAPI):
         timezone=settings.timezone,
         history_limit=settings.history_limit,
     )
-    # InMemorySaver guarda o histórico na memória do processo.
-    # Para persistir entre reinícios, troque por um checkpointer SQLite/Postgres do LangGraph.
-    app.state.handler = MessageHandler(build_graph(deps, InMemorySaver()), finance)
-    app.state.whatsapp = whatsapp
-    app.state.seen = OrderedDict()
-    yield
+    async with AsyncExitStack() as stack:
+        if settings.database_url:
+            checkpointer, coordinator = await stack.enter_async_context(
+                postgres_backend(settings.database_url, settings.database_pool_size))
+        else:
+            log.warning("DATABASE_URL vazio: histórico e fila ficam em memória. Rode apenas UMA instância.")
+            checkpointer, coordinator = InMemorySaver(), InMemoryCoordinator()
+
+        app.state.handler = MessageHandler(build_graph(deps, checkpointer), finance, coordinator)
+        app.state.coordinator = coordinator
+        app.state.whatsapp = whatsapp
+        yield
     await finance.aclose()
     await whatsapp.aclose()
 
@@ -74,15 +80,10 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
     if not verify_signature(settings.whatsapp_app_secret, body, request.headers.get("X-Hub-Signature-256")):
         raise HTTPException(status_code=401, detail="Assinatura inválida")
 
-    seen: OrderedDict = request.app.state.seen
     for msg in parse_webhook(await request.json()):
-        # A Meta reenvia o webhook se demorarmos: ignora mensagens já vistas.
-        if msg.id in seen:
-            continue
-        seen[msg.id] = True
-        if len(seen) > 5000:
-            seen.popitem(last=False)
-        background.add_task(process, request.app, msg)
+        # A Meta reenvia o webhook se demorarmos: só a primeira entrega de cada id é processada.
+        if await request.app.state.coordinator.first_time(msg.id):
+            background.add_task(process, request.app, msg)
     # Responde 200 na hora; o processamento (IA, Whisper, OCR) roda em segundo plano.
     return {"status": "received"}
 

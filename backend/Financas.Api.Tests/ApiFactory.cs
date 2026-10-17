@@ -2,6 +2,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Financas.Api.Tests;
 
@@ -13,6 +16,10 @@ public class ApiFactory : WebApplicationFactory<Program>
 
     public string Environment { get; init; } = "Development";
     public string? JwtKey { get; init; }
+    public Dictionary<string, string> Settings { get; init; } = [];
+
+    /// <summary>Relógio controlado pelos testes. Padrão: 17/10/2026 15:00 UTC (12:00 em São Paulo).</summary>
+    public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 17, 15, 0, 0, TimeSpan.Zero));
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -20,6 +27,8 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", $"Data Source={_dbPath}");
         builder.UseSetting("Agent:ApiKey", AgentKey);
         if (JwtKey is not null) builder.UseSetting("Jwt:Key", JwtKey);
+        foreach (var (key, value) in Settings) builder.UseSetting(key, value);
+        builder.ConfigureTestServices(s => s.AddSingleton<TimeProvider>(Clock));
     }
 
     public async Task<HttpClient> CreateUserClientAsync(string email = "user@teste.com")

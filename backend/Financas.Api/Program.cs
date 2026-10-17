@@ -30,7 +30,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!)),
     });
 builder.Services.AddAuthorization();
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+builder.Services.AddHttpProtection(builder.Configuration, builder.Environment);
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<AppClock>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<LinkAttemptLimiter>();
@@ -52,9 +54,11 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-app.UseCors();
+app.UseHttpProtection();
 app.UseAuthentication();
 app.UseAuthorization();
+// Depois da autenticação, para o limite global poder separar por usuário.
+app.UseRateLimiter();
 
 app.MapGet("/", () => "Finanças API rodando 🚀");
 app.MapAuthEndpoints();

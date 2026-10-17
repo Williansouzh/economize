@@ -1,11 +1,11 @@
 """Lógica de atendimento independente de transporte (usada pelo webhook e pelo CLI)."""
 
-import asyncio
 import logging
 import re
 
 from langchain_core.messages import HumanMessage
 
+from .coordination import Coordinator, InMemoryCoordinator
 from .finance_api import FinanceApi, FinanceApiError
 from .prompts import HELP, WELCOME_UNLINKED
 from .whatsapp import IncomingMessage
@@ -23,15 +23,14 @@ def to_whatsapp_format(text: str) -> str:
 
 
 class MessageHandler:
-    def __init__(self, graph, finance: FinanceApi):
+    def __init__(self, graph, finance: FinanceApi, coordinator: Coordinator | None = None):
         self._graph = graph
         self._finance = finance
-        self._locks: dict[str, asyncio.Lock] = {}
+        self._coordinator = coordinator or InMemoryCoordinator()
 
     async def handle(self, msg: IncomingMessage) -> str | None:
-        # Mensagens do mesmo usuário são processadas em ordem, uma por vez.
-        lock = self._locks.setdefault(msg.phone, asyncio.Lock())
-        async with lock:
+        # Mensagens do mesmo usuário são processadas em ordem, uma por vez (em todas as instâncias).
+        async with self._coordinator.lock(msg.phone):
             try:
                 return await self._handle(msg)
             except Exception:

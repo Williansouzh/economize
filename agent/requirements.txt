@@ -1,4 +1,7 @@
 langgraph>=1.2
+# Opcional em dev; necessário para rodar várias instâncias (DATABASE_URL)
+langgraph-checkpoint-postgres>=3.0
+psycopg[binary,pool]>=3.2
 langchain-core>=1.0
 langchain-deepseek>=1.0
 fastapi>=0.115

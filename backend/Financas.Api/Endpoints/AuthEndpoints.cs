@@ -10,7 +10,7 @@ public static class AuthEndpoints
 {
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/auth").WithTags("Auth");
+        var g = app.MapGroup("/api/auth").WithTags("Auth").RequireRateLimiting(HttpProtection.AuthPolicy);
 
         g.MapPost("/register", async (RegisterRequest req, AppDbContext db, TokenService tokens) =>
         {
