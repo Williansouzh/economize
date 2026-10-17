@@ -104,6 +104,11 @@ class ApiClient {
       post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit});
   Future<void> deleteBudget(String id) => delete('/budgets/$id');
 
+  // ---- WhatsApp ----
+  Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];
+  Future<String> whatsAppLinkCode() async => (await post('/me/whatsapp-code', {}))['code'];
+  Future<void> unlinkWhatsApp() => delete('/me/whatsapp');
+
   // ---- IA (DeepSeek via backend) ----
   Future<Insights> insights(String month) async =>
       Insights.fromJson(await post('/insights', {'month': month}));

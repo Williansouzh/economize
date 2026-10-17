@@ -1,0 +1,23 @@
+# Sobe backend + agente do WhatsApp:  cp .env.example .env  (preencha)  &&  docker compose up --build
+services:
+  api:
+    build: ./backend
+    ports: ["5000:5000"]
+    environment:
+      DeepSeek__ApiKey: ${DEEPSEEK_API_KEY}
+      Agent__ApiKey: ${AGENT_API_KEY}
+      Jwt__Key: ${JWT_KEY}
+    volumes: [api-data:/data]
+
+  agent:
+    build: ./agent
+    ports: ["8000:8000"]
+    env_file: .env
+    environment:
+      FINANCE_API_URL: http://api:5000
+    volumes: [whisper-models:/models]
+    depends_on: [api]
+
+volumes:
+  api-data:
+  whisper-models:

@@ -7,3 +7,7 @@ const String apiBaseUrl = String.fromEnvironment(
   'API_URL',
   defaultValue: 'http://10.0.2.2:5000',
 );
+
+/// Número do WhatsApp do assistente (só para exibir na tela de vinculação).
+/// flutter run --dart-define=WHATSAPP_BOT=+55 11 99999-9999
+const String whatsappBotNumber = String.fromEnvironment('WHATSAPP_BOT');

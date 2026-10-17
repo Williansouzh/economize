@@ -9,6 +9,12 @@ public class User
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Número do WhatsApp vinculado (formato wa_id, ex.: 5511999999999).</summary>
+    public string? WhatsAppPhone { get; set; }
+    /// <summary>Código temporário que o usuário envia ao bot para provar que é dono do número.</summary>
+    public string? WhatsAppLinkCode { get; set; }
+    public DateTime? WhatsAppLinkCodeExpiresAt { get; set; }
 }
 
 /// <summary>Conta bancária, carteira, poupança etc.</summary>

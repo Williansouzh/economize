@@ -7,6 +7,7 @@ import 'dashboard_screen.dart';
 import 'insights_screen.dart';
 import 'transaction_form_screen.dart';
 import 'transactions_screen.dart';
+import 'whatsapp_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,9 +29,15 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(_titles[_index]),
         actions: [
           PopupMenuButton<String>(
-            onSelected: (v) => v == 'logout' ? state.logout() : null,
+            onSelected: (v) => switch (v) {
+              'logout' => state.logout(),
+              'whatsapp' => Navigator.push(
+                  context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
+              _ => null,
+            },
             itemBuilder: (_) => [
               PopupMenuItem(enabled: false, child: Text('Olá, ${state.userName ?? ''}')),
+              const PopupMenuItem(value: 'whatsapp', child: Text('Conectar WhatsApp')),
               const PopupMenuItem(value: 'logout', child: Text('Sair')),
             ],
           ),

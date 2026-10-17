@@ -7,6 +7,7 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 | Backend | .NET 10 (ASP.NET Core Minimal APIs) + EF Core + SQLite + JWT |
 | Mobile  | Flutter (Provider, fl_chart, http, flutter_secure_storage) |
 | IA      | DeepSeek API (`deepseek-chat`), chamada **somente pelo backend** |
+| Agente WhatsApp | Python + LangGraph + DeepSeek + Whisper (áudio) + Tesseract (prints) |
 
 ## Funcionalidades
 
@@ -18,6 +19,8 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 - Orçamentos (limite mensal por categoria) com barra de progresso e alerta de estouro
 - **Insights IA**: nota de saúde financeira, resumo do mês, alertas, dicas e economia potencial
 - **Pergunte à IA**: chat livre sobre suas finanças, com o contexto do mês
+- **Assistente no WhatsApp**: mande texto, áudio, print ou PDF de comprovante e o lançamento é criado
+  automaticamente (veja [`agent/README.md`](agent/README.md))
 
 ## Estrutura
 
@@ -29,6 +32,11 @@ backend/Financas.Api/
   Services/InsightsService.cs # monta o resumo financeiro e os prompts
   Services/FinanceService.cs  # saldos, totais por categoria, orçamentos
   Endpoints/                  # /api/auth, /api/dashboard, /api/transactions, /api/insights...
+agent/app/                    # agente WhatsApp (LangGraph)
+  graph.py                    # grafo: ingest → agent ⇄ tools
+  tools.py                    # registrar/listar/excluir lançamentos, resumo do mês
+  media.py                    # Whisper (áudio), Tesseract (imagem), pypdf (PDF)
+  main.py                     # webhook da WhatsApp Cloud API
 mobile/lib/
   config.dart                 # URL do backend
   services/api_client.dart    # chamadas HTTP
@@ -74,6 +82,17 @@ flutter run
 flutter run --dart-define=API_URL=http://192.168.0.10:5000
 ```
 
+### 3. Agente do WhatsApp
+
+Veja o passo a passo em [`agent/README.md`](agent/README.md).
+
+### Tudo com Docker
+
+```bash
+cp .env.example .env   # preencha as chaves
+docker compose up --build
+```
+
 ## Endpoints principais
 
 | Método | Rota | Descrição |
@@ -86,6 +105,8 @@ flutter run --dart-define=API_URL=http://192.168.0.10:5000
 | GET/POST/DELETE | `/api/budgets` | Orçamentos por categoria |
 | POST | `/api/insights` | Análise do mês pela IA (JSON estruturado) |
 | POST | `/api/insights/chat` | Pergunta livre para a IA |
+| GET · POST · DELETE | `/api/me` · `/api/me/whatsapp-code` · `/api/me/whatsapp` | Perfil e vinculação do WhatsApp |
+| POST | `/api/agent/link` · `/api/agent/token` | Usadas só pelo agente (header `X-Agent-Key`) |
 
 ## Como funciona a IA
 

@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().HasIndex(u => u.Email).IsUnique();
+        b.Entity<User>().HasIndex(u => u.WhatsAppPhone).IsUnique();
         b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.Date });
         b.Entity<Budget>().HasIndex(x => new { x.UserId, x.CategoryId, x.Month }).IsUnique();
 

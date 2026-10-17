@@ -485,3 +485,9 @@ $RECYCLE.BIN/
 *.db
 *.db-shm
 *.db-wal
+
+# Python / agente
+.venv/
+__pycache__/
+.pytest_cache/
+.env

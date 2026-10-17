@@ -57,5 +57,6 @@ app.MapGet("/", () => "Finanças API rodando 🚀");
 app.MapAuthEndpoints();
 app.MapFinanceEndpoints();
 app.MapInsightsEndpoints();
+app.MapWhatsAppEndpoints();
 
 app.Run();
