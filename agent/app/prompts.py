@@ -16,7 +16,7 @@ def system_prompt(ctx: UserContext, now: datetime, recovered: bool = False) -> s
     expense = ", ".join(c["name"] for c in ctx.categories if c["type"] == "Expense")
     income = ", ".join(c["name"] for c in ctx.categories if c["type"] == "Income")
     accounts = ", ".join(a["name"] for a in ctx.accounts)
-    return f"""Você é o assistente do app "Minhas Finanças" no WhatsApp, falando com {ctx.name}.
+    return f"""Você é o assistente do app "Economizze" no WhatsApp, falando com {ctx.name}.
 Hoje é {WEEKDAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} (formato ISO: {now.strftime('%Y-%m-%d')}).
 
 Sua função principal é REGISTRAR LANÇAMENTOS a partir de mensagens de texto, áudios transcritos
@@ -50,7 +50,7 @@ Contas: {accounts} (padrão: {ctx.accounts[0]["name"] if ctx.accounts else "nenh
 
 
 WELCOME_UNLINKED = (
-    "Olá! 👋 Eu sou o assistente do *Minhas Finanças*.\n\n"
+    "Olá! 👋 Eu sou o assistente do *Economizze*.\n\n"
     "Seu número ainda não está conectado. No app, toque em ⋮ → *Conectar WhatsApp* "
     "e me envie o código que aparecer, assim:\n\n*VINCULAR 123456*"
 )

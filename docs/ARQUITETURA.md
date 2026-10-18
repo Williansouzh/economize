@@ -1,4 +1,4 @@
-# Arquitetura e regras de negócio — Minhas Finanças
+# Arquitetura e regras de negócio — Economizze
 
 Como o sistema é montado, por onde passam os dados e quais regras de negócio o código aplica:
 app Flutter, API .NET 10, insights com DeepSeek e o agente de WhatsApp em LangGraph.

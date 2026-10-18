@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     await whatsapp.aclose()
 
 
-app = FastAPI(title="Minhas Finanças — Agente WhatsApp", lifespan=lifespan)
+app = FastAPI(title="Economizze — Agente WhatsApp", lifespan=lifespan)
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-# Minhas Finanças 💰
+# Economizze 💰
 
 App mobile simples de finanças pessoais (inspirado no Organizze) com **insights de IA via DeepSeek**.
 

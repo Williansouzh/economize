@@ -40,7 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('$_greeting${firstName.isEmpty ? '' : ','}',
                     style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
-                Text(firstName.isEmpty ? 'Minhas Finanças' : firstName),
+                Text(firstName.isEmpty ? 'Economizze' : firstName),
               ])
             : Text(_titles[_index]),
         actions: [

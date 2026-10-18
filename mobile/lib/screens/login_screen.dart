@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text('Minhas Finanças',
+                  Text('Economizze',
                       textAlign: TextAlign.center,
                       style: text.headlineMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
