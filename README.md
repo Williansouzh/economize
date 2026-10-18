@@ -102,6 +102,16 @@ flutter run
 flutter run --dart-define=API_URL=http://192.168.0.10:5000
 ```
 
+**No navegador:**
+
+```bash
+flutter run -d chrome --web-port 8080 --dart-define=API_URL=http://localhost:5000
+```
+
+A API só aceita chamadas de origens web liberadas no CORS. Suba o backend com
+`Cors__AllowedOrigins__0=http://localhost:8080 dotnet run` (no Docker, `CORS_ORIGIN` no `.env`).
+Para publicar: `flutter build web --dart-define=API_URL=https://api.seudominio.com.br` gera `build/web/`.
+
 ### 3. Agente do WhatsApp
 
 Veja o passo a passo em [`agent/README.md`](agent/README.md).
