@@ -1,0 +1,8 @@
+# Contexto do build do Caddy + app web (deploy/web.Dockerfile): só precisa de mobile/ e deploy/.
+**
+!deploy/
+!mobile/
+mobile/build/
+mobile/.dart_tool/
+mobile/android/
+mobile/ios/

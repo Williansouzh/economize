@@ -1,0 +1,103 @@
+# Produção numa VPS: API + agente + PostgreSQL + Caddy (HTTPS e app web) + backup diário.
+#   cp .env.prod.example .env   (preencha)
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Só o Caddy fica exposto (portas 80 e 443). Passo a passo completo: docs/DEPLOY.md
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: financas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d financas"]
+      interval: 5s
+      retries: 10
+    logging: *logging
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: Host=db;Database=financas;Username=postgres;Password=${POSTGRES_PASSWORD}
+      DeepSeek__ApiKey: ${DEEPSEEK_API_KEY:?defina DEEPSEEK_API_KEY no .env}
+      Agent__ApiKey: ${AGENT_API_KEY:?defina AGENT_API_KEY no .env}
+      Jwt__Key: ${JWT_KEY:?defina JWT_KEY no .env}
+      # A API só é alcançável pelo Caddy, então o X-Forwarded-For dele é confiável (rate limit por IP real).
+      ReverseProxy__TrustForwardedHeaders: "true"
+    depends_on:
+      db: { condition: service_healthy }
+    logging: *logging
+
+  agent:
+    build: ./agent
+    restart: unless-stopped
+    environment:
+      FINANCE_API_URL: http://api:5000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/agente
+      AGENT_API_KEY: ${AGENT_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      TESSERACT_LANG: ${TESSERACT_LANG:-por}
+      TIMEZONE: ${TIMEZONE:-America/Sao_Paulo}
+      PROCESSING_TIMEOUT_SECONDS: ${PROCESSING_TIMEOUT_SECONDS:-300}
+      RECOVERY_MAX_ATTEMPTS: ${RECOVERY_MAX_ATTEMPTS:-3}
+    volumes: [whisper-models:/models]
+    depends_on:
+      api: { condition: service_started }
+      db: { condition: service_healthy }
+    logging: *logging
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+      args:
+        DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL no .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api, agent]
+    logging: *logging
+
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backups:/backups
+      - ./deploy/backup.sh:/backup.sh:ro
+    entrypoint: ["sh", "/backup.sh"]
+    depends_on:
+      db: { condition: service_healthy }
+    logging: *logging
+
+volumes:
+  pg-data:
+  whisper-models:
+  caddy-data:   # certificados HTTPS: não apague, senão o Let's Encrypt emite de novo
+  caddy-config:

@@ -1,0 +1,47 @@
+# Um domínio só, com HTTPS automático (Let's Encrypt):
+#   https://DOMAIN/api/*    → API .NET
+#   https://DOMAIN/webhook  → agente do WhatsApp (URL cadastrada na Meta)
+#   https://DOMAIN/         → app Flutter web
+# App web e API ficam na mesma origem, então o navegador não precisa de CORS.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:5000
+	}
+
+	handle /webhook {
+		reverse_proxy agent:8000
+	}
+
+	# Checagens de saúde de fora do servidor (monitoramento).
+	handle /health/api {
+		rewrite * /health
+		reverse_proxy api:5000
+	}
+	handle /health/agent {
+		rewrite * /health
+		reverse_proxy agent:8000
+	}
+
+	handle {
+		root * /srv/web
+		# index.html e o service worker não podem ficar em cache, senão o app não atualiza.
+		@nocache path / /index.html /flutter_service_worker.js /flutter_bootstrap.js /version.json
+		header @nocache Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Só no build de debug: libera HTTP sem TLS para falar com a API local
+         (http://IP-do-PC:5000). O release usa HTTPS e não aceita tráfego em texto puro. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <application android:usesCleartextTraffic="true"/>
+</manifest>

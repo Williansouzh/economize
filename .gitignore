@@ -491,3 +491,8 @@ $RECYCLE.BIN/
 __pycache__/
 .pytest_cache/
 .env
+
+# Backups do banco em produção (docker-compose.prod.yml)
+backups/
+# Manifest do build de debug do Android (libera HTTP para a API local)
+!mobile/android/app/src/debug/

@@ -10,6 +10,7 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 | Agente WhatsApp | Python + LangGraph + DeepSeek + Whisper (áudio) + Tesseract (prints) |
 
 📐 Arquitetura, fluxos e regras de negócio: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md)
+🚀 Deploy em produção (VPS + Docker + HTTPS, APK e Google Play): [`docs/DEPLOY.md`](docs/DEPLOY.md)
 
 ## Funcionalidades
 
@@ -123,6 +124,9 @@ Veja o passo a passo em [`agent/README.md`](agent/README.md).
 cp .env.example .env   # preencha as chaves
 docker compose up --build
 ```
+
+Esse `docker-compose.yml` é para desenvolvimento. Para produção use o `docker-compose.prod.yml`
+(HTTPS, app web e backups), descrito em [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Endpoints principais
 
