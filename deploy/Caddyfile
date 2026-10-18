@@ -5,6 +5,9 @@
 # App web e API ficam na mesma origem, então o navegador não precisa de CORS.
 {
 	email {$ACME_EMAIL}
+	# Opções globais de outros sistemas hospedados nesta VPS (ex.: o
+	# on_demand_tls do Floruna). Um arquivo .global por sistema.
+	import /etc/caddy/sites/*.global
 }
 
 {$DOMAIN} {
@@ -45,3 +48,7 @@
 		file_server
 	}
 }
+
+# Sites de outros sistemas hospedados nesta VPS, atrás deste mesmo Caddy.
+# A pasta vem do host (EDGE_SITES_DIR no .env); sem ela fica vazia.
+import /etc/caddy/sites/*.caddy

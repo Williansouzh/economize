@@ -83,6 +83,12 @@ services:
     volumes:
       - caddy-data:/data
       - caddy-config:/config
+      # Montado do repositório: mudar o Caddyfile pede só `up -d caddy` ou
+      # `caddy reload`, sem recompilar o app Flutter da imagem.
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Sites de outros sistemas nesta VPS (*.caddy e *.global). Vazia por padrão.
+      - ${EDGE_SITES_DIR:-./deploy/sites}:/etc/caddy/sites:ro
+    networks: [default, edge]
     depends_on: [api, agent]
     logging: *logging
 
@@ -105,3 +111,10 @@ volumes:
   whisper-models:
   caddy-data:   # certificados HTTPS: não apague, senão o Let's Encrypt emite de novo
   caddy-config:
+
+networks:
+  # Rede compartilhada com os outros sistemas da VPS, que o Caddy alcança pelo
+  # nome do container. Criada uma vez no host:
+  #   docker network create --subnet 172.30.0.0/24 edge
+  edge:
+    external: true

@@ -69,6 +69,7 @@ systemctl restart ssh
 
 ```bash
 ssh deploy@IP-DA-VPS
+docker network create --subnet 172.30.0.0/24 edge   # uma vez por VPS (ver seção abaixo)
 git clone https://github.com/Williansouzh/economize.git && cd economize
 cp .env.prod.example .env && chmod 600 .env
 nano .env   # preencha (veja abaixo)
@@ -97,6 +98,26 @@ curl https://SEU-DOMINIO/health/agent               # {"status":"ok"}
 ```
 
 Abra `https://SEU-DOMINIO` no navegador: é o app web. Crie sua conta por ele.
+
+### Outros sistemas na mesma VPS
+
+O Caddy deste projeto é a única porta de entrada da VPS (80/443). Outro sistema
+hospedado aqui (hoje, o Floruna) não publica portas: ele entra na rede docker
+`edge` e deixa os arquivos de site dele numa pasta do host, que o Caddy importa:
+
+- `*.caddy`: blocos de site, importados no fim do Caddyfile;
+- `*.global`: opções globais (ex.: `on_demand_tls`), importadas no bloco global.
+
+```bash
+# .env deste projeto
+EDGE_SITES_DIR=/home/deploy/caddy-sites
+
+# Depois de mudar um arquivo da pasta (sem derrubar nada):
+docker compose -f docker-compose.prod.yml exec caddy caddy reload --config /etc/caddy/Caddyfile
+```
+
+A subnet da rede `edge` é fixa porque os outros sistemas confiam no
+`X-Forwarded-For` vindo dela. Não recrie a rede com outra faixa.
 
 ## 5. App Android (APK e Google Play)
 
