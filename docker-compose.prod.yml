@@ -18,7 +18,9 @@ services:
       - pg-data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d financas"]
+      # Por TCP: na primeira subida o Postgres roda os scripts de init num servidor
+      # temporário só com socket local, e o check por socket passaria cedo demais.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d financas"]
       interval: 5s
       retries: 10
     logging: *logging
