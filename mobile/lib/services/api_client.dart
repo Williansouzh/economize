@@ -108,9 +108,37 @@ class ApiClient {
     id == null ? await post('/accounts', body) : await put('/accounts/$id', body);
   }
 
-  Future<void> saveBudget(String categoryId, String month, double limit) =>
-      post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit});
-  Future<void> deleteBudget(String id) => delete('/budgets/$id');
+  Future<void> saveBudget(String categoryId, String month, double limit, {bool recurring = false}) =>
+      post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit, 'recurring': recurring});
+
+  /// No mês de origem exclui o orçamento; num mês herdado, para de repetir a partir de [month].
+  Future<void> deleteBudget(String id, String month) =>
+      _send(http.delete(_uri('/budgets/$id', {'month': month}), headers: _headers));
+
+  Future<List<Transfer>> transfers(String month) async =>
+      (await get('/transfers', {'month': month}) as List).map((e) => Transfer.fromJson(e)).toList();
+
+  Future<void> saveTransfer({
+    String? id,
+    required String fromAccountId,
+    required String toAccountId,
+    required double amount,
+    required DateTime date,
+    required String description,
+    required bool isPaid,
+  }) async {
+    final body = {
+      'fromAccountId': fromAccountId,
+      'toAccountId': toAccountId,
+      'amount': amount,
+      'date': date.toIso8601String().substring(0, 10),
+      'description': description,
+      'isPaid': isPaid,
+    };
+    id == null ? await post('/transfers', body) : await put('/transfers/$id', body);
+  }
+
+  Future<void> deleteTransfer(String id) => delete('/transfers/$id');
 
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];

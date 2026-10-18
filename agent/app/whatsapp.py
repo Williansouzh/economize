@@ -15,6 +15,8 @@ class IncomingMessage:
     text: str = ""      # corpo do texto ou legenda da mídia
     media_id: str | None = None
     mime: str = ""
+    # Retomada depois que a instância que a processava caiu (ver coordination.claim_stale).
+    recovered: bool = False
 
 
 def parse_webhook(payload: dict) -> list[IncomingMessage]:

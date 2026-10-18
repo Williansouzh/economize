@@ -5,7 +5,14 @@ from .finance_api import UserContext
 WEEKDAYS = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
 
 
-def system_prompt(ctx: UserContext, now: datetime) -> str:
+RECOVERED_NOTE = """
+ATENÇÃO: a última mensagem do usuário está sendo processada de novo porque o processamento anterior
+foi interrompido por uma falha. Antes de chamar `registrar_lancamento`, confira no histórico desta
+conversa se ela já foi registrada; se já foi, não registre de novo e apenas confirme.
+"""
+
+
+def system_prompt(ctx: UserContext, now: datetime, recovered: bool = False) -> str:
     expense = ", ".join(c["name"] for c in ctx.categories if c["type"] == "Expense")
     income = ", ".join(c["name"] for c in ctx.categories if c["type"] == "Income")
     accounts = ", ".join(a["name"] for a in ctx.accounts)
@@ -39,7 +46,7 @@ Regras:
 Categorias de despesa: {expense}
 Categorias de receita: {income}
 Contas: {accounts} (padrão: {ctx.accounts[0]["name"] if ctx.accounts else "nenhuma"})
-"""
+{RECOVERED_NOTE if recovered else ""}"""
 
 
 WELCOME_UNLINKED = (

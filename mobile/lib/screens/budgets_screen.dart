@@ -18,12 +18,23 @@ class BudgetsScreen extends StatelessWidget {
     final expenseCats = state.categories.where((c) => c.type == TxType.expense).toList();
     String? categoryId = budget?.categoryId;
     final limit = TextEditingController(text: budget?.limit.toStringAsFixed(2).replaceAll('.', ','));
+    var recurring = budget?.recurring ?? true;
+    final inherited = budget?.inherited ?? false;
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
+      builder: (c) => StatefulBuilder(builder: (c, setDialog) => AlertDialog(
         title: Text(budget == null ? 'Novo orçamento' : 'Editar orçamento'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (inherited)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Este limite vem de ${monthLabel(DateTime.parse('${budget!.month}-01'))} e se repete todo mês. '
+                'Salvar aqui muda a partir de ${monthLabel(state.month)}.',
+                style: TextStyle(fontSize: 13, color: Theme.of(c).colorScheme.onSurfaceVariant),
+              ),
+            ),
           DropdownButtonFormField<String>(
             initialValue: categoryId,
             decoration: const InputDecoration(labelText: 'Categoria'),
@@ -45,15 +56,29 @@ class BudgetsScreen extends StatelessWidget {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Limite mensal', prefixText: 'R\$ '),
           ),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.repeat),
+            title: const Text('Repetir todo mês'),
+            subtitle: Text(recurring ? 'Vale também para os próximos meses' : 'Só para ${monthLabel(state.month)}'),
+            value: recurring,
+            onChanged: (v) => setDialog(() => recurring = v),
+          ),
         ]),
         actions: [
           if (budget != null)
             TextButton(
+              style: TextButton.styleFrom(foregroundColor: expenseColor),
               onPressed: () async {
-                await state.api.deleteBudget(budget.id);
-                if (c.mounted) Navigator.pop(c, true);
+                try {
+                  await state.api.deleteBudget(budget.id, state.monthKey);
+                  if (c.mounted) Navigator.pop(c, true);
+                } catch (e) {
+                  if (c.mounted) showError(c, e);
+                }
               },
-              child: const Text('Excluir'),
+              child: Text(inherited ? 'Parar de repetir' : 'Excluir'),
             ),
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(
@@ -61,7 +86,7 @@ class BudgetsScreen extends StatelessWidget {
               final value = parseAmount(limit.text);
               if (categoryId == null || value == null || value <= 0) return;
               try {
-                await state.api.saveBudget(categoryId!, state.monthKey, value);
+                await state.api.saveBudget(categoryId!, state.monthKey, value, recurring: recurring);
                 if (c.mounted) Navigator.pop(c, true);
               } catch (e) {
                 if (c.mounted) showError(c, e);
@@ -70,7 +95,7 @@ class BudgetsScreen extends StatelessWidget {
             child: const Text('Salvar'),
           ),
         ],
-      ),
+      )),
     );
     if (ok == true) state.dataChanged();
   }

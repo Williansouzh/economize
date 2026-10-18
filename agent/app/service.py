@@ -1,5 +1,6 @@
 """Lógica de atendimento independente de transporte (usada pelo webhook e pelo CLI)."""
 
+import asyncio
 import logging
 import re
 
@@ -23,16 +24,22 @@ def to_whatsapp_format(text: str) -> str:
 
 
 class MessageHandler:
-    def __init__(self, graph, finance: FinanceApi, coordinator: Coordinator | None = None):
+    def __init__(self, graph, finance: FinanceApi, coordinator: Coordinator | None = None,
+                 timeout_seconds: float = 300):
         self._graph = graph
         self._finance = finance
         self._coordinator = coordinator or InMemoryCoordinator()
+        self._timeout = timeout_seconds
 
     async def handle(self, msg: IncomingMessage) -> str | None:
         # Mensagens do mesmo usuário são processadas em ordem, uma por vez (em todas as instâncias).
         async with self._coordinator.lock(msg.phone):
+            await self._coordinator.started(msg.id)
             try:
-                return await self._handle(msg)
+                return await asyncio.wait_for(self._handle(msg), self._timeout)
+            except TimeoutError:
+                log.error("Mensagem %s passou de %ss e foi abandonada", msg.id, self._timeout)
+                return "😕 Demorei demais para processar isso. Pode tentar de novo?"
             except Exception:
                 log.exception("Falha ao processar mensagem %s", msg.id)
                 return "😕 Tive um problema para processar isso. Pode tentar de novo em instantes?"
@@ -49,9 +56,10 @@ class MessageHandler:
             return WELCOME_UNLINKED
 
         if msg.type == "text":
-            state = {"messages": [HumanMessage(content=msg.text)], "media": None}
+            state = {"messages": [HumanMessage(content=msg.text)], "media": None, "recovered": msg.recovered}
         elif msg.type in MEDIA_TYPES and msg.media_id:
-            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text}}
+            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text},
+                     "recovered": msg.recovered}
         else:
             return "Por enquanto eu entendo *texto*, *áudio*, *imagens* e *PDFs*. 🙂"
 

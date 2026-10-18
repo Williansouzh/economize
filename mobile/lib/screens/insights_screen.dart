@@ -105,6 +105,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
             )
           else
             _InsightsView(insights, onRefresh: _loading ? null : _generate),
+          const SizedBox(height: 12),
+          const _PrivacyNote(),
           const SizedBox(height: 24),
           Row(children: [
             const IconBadge(Icons.forum_outlined, Color(0xFF6D5DF6), size: 34),
@@ -295,3 +297,31 @@ class _ListCard extends StatelessWidget {
       );
 }
 
+/// O que sai do app para a IA (DeepSeek), para o usuário decidir antes de usar.
+class _PrivacyNote extends StatelessWidget {
+  const _PrivacyNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: .6),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.shield_outlined, size: 18, color: cs.onSurfaceVariant),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Para analisar e responder, enviamos ao DeepSeek os totais do mês, os gastos por categoria, '
+            'os orçamentos e as 10 maiores despesas com data e descrição. '
+            'Seu nome, e-mail e os nomes das suas contas não são enviados.',
+            style: TextStyle(fontSize: 12, height: 1.4, color: cs.onSurfaceVariant),
+          ),
+        ),
+      ]),
+    );
+  }
+}

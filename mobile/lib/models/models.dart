@@ -64,8 +64,14 @@ class CategoryTotal {
 }
 
 class Budget {
-  final String id, categoryId, categoryName, categoryColor, month;
+  final String id, categoryId, categoryName, categoryColor;
+
+  /// Mês em que o orçamento foi definido; num mês herdado, é um mês anterior.
+  final String month;
   final double limit, spent;
+
+  /// [recurring]: repete nos meses seguintes. [inherited]: veio da repetição de um mês anterior.
+  final bool recurring, inherited;
   double get progress => limit == 0 ? 0 : spent / limit;
   Budget.fromJson(Map<String, dynamic> j)
       : id = j['id'],
@@ -74,7 +80,27 @@ class Budget {
         categoryColor = j['categoryColor'],
         month = j['month'],
         limit = _d(j['limit']),
-        spent = _d(j['spent']);
+        spent = _d(j['spent']),
+        recurring = j['recurring'] ?? false,
+        inherited = j['inherited'] ?? false;
+}
+
+/// Dinheiro movido entre duas contas: muda os saldos, mas não é receita nem despesa.
+class Transfer {
+  final String id, fromAccountId, fromAccountName, toAccountId, toAccountName, description;
+  final double amount;
+  final DateTime date;
+  final bool isPaid;
+  Transfer.fromJson(Map<String, dynamic> j)
+      : id = j['id'],
+        fromAccountId = j['fromAccountId'],
+        fromAccountName = j['fromAccountName'],
+        toAccountId = j['toAccountId'],
+        toAccountName = j['toAccountName'],
+        description = j['description'],
+        amount = _d(j['amount']),
+        date = DateTime.parse(j['date']),
+        isPaid = j['isPaid'];
 }
 
 class Dashboard {

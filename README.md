@@ -18,7 +18,8 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 - Lançamentos de receitas e despesas, agrupados por dia, com categoria, conta, data e status pago/pendente
 - Categorias padrão criadas no cadastro (Alimentação, Moradia, Transporte, Salário…)
 - Visão geral do mês: saldo, receitas, despesas e gráfico de pizza por categoria
-- Orçamentos (limite mensal por categoria) com barra de progresso e alerta de estouro
+- Orçamentos (limite mensal por categoria) que podem se repetir todo mês, com barra de progresso e alerta de estouro
+- Transferências entre contas, que mudam os saldos sem contar como receita ou despesa
 - **Insights IA**: nota de saúde financeira, resumo do mês, alertas, dicas e economia potencial
 - **Pergunte à IA**: chat livre sobre suas finanças, com o contexto do mês
 - **Assistente no WhatsApp**: mande texto, áudio, print ou PDF de comprovante e o lançamento é criado
@@ -132,7 +133,8 @@ docker compose up --build
 | GET/POST/PUT/DELETE | `/api/transactions` | Lançamentos |
 | GET/POST/PUT/DELETE | `/api/accounts` | Contas |
 | GET/POST/DELETE | `/api/categories` | Categorias |
-| GET/POST/DELETE | `/api/budgets` | Orçamentos por categoria |
+| GET/POST/DELETE | `/api/budgets` | Orçamentos por categoria, com repetição mensal (`DELETE ?month=` para de repetir) |
+| GET/POST/PUT/DELETE | `/api/transfers` | Transferências entre contas |
 | POST | `/api/insights` | Análise do mês pela IA (JSON estruturado) |
 | POST | `/api/insights/chat` | Pergunta livre para a IA |
 | GET · POST · DELETE | `/api/me` · `/api/me/whatsapp-code` · `/api/me/whatsapp` | Perfil e vinculação do WhatsApp |
@@ -150,9 +152,7 @@ A chave do DeepSeek fica **apenas no servidor**, nunca no app.
 
 ## Próximos passos sugeridos
 
-- Migrations do EF Core (`dotnet ef migrations add Initial`) e PostgreSQL em produção
 - Cartões de crédito e faturas
 - Lançamentos recorrentes / parcelados
-- Transferência entre contas
 - Importação de extrato (OFX/CSV) com categorização automática pela IA
 - Notificações quando um orçamento passar de 80%

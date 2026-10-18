@@ -99,3 +99,40 @@ async def test_postgres_historico_continua_em_outra_instancia():
     assert any("gastei 45" in str(m.content) for m in history)
     assert any("OK id=tx1" in str(m.content) for m in history)
     assert finance.deleted == ["tx1"]
+
+
+async def test_memoria_nao_tem_o_que_retomar():
+    coord = InMemoryCoordinator()
+    await coord.first_time("m1", {"id": "m1"})
+    assert await coord.claim_stale(0, 3) == []
+
+
+@needs_pg
+async def test_postgres_mensagem_abandonada_e_retomada_por_outra_instancia():
+    """A pega a mensagem e 'cai' sem concluir; B retoma uma vez só; depois de concluída, ninguém retoma."""
+    msg = {"id": f"wamid.{uuid.uuid4()}", "phone": "5511", "type": "text", "text": "gastei 45",
+           "media_id": None, "mime": "", "recovered": False}
+    async with postgres_backend(DB_URL, 4) as (_, a), postgres_backend(DB_URL, 4) as (_, b):
+        assert await a.first_time(msg["id"], msg)
+        await a.started(msg["id"])
+        await asyncio.sleep(1.1)
+
+        claimed = await asyncio.gather(b.claim_stale(1, 3), a.claim_stale(1, 3))
+        mine = [p for batch in claimed for p in batch if p["id"] == msg["id"]]
+        assert mine == [msg]  # SKIP LOCKED + prazo renovado: só uma instância pega
+
+        assert [p for p in await b.claim_stale(1, 3) if p["id"] == msg["id"]] == []  # prazo renovado
+        await b.done(msg["id"])
+        await asyncio.sleep(1.1)
+        assert [p for p in await b.claim_stale(1, 3) if p["id"] == msg["id"]] == []
+
+
+@needs_pg
+async def test_postgres_desiste_depois_do_limite_de_tentativas():
+    msg_id = f"wamid.{uuid.uuid4()}"
+    async with postgres_backend(DB_URL, 4) as (_, coord):
+        await coord.first_time(msg_id, {"id": msg_id})
+        for _ in range(2):
+            await coord.started(msg_id)
+        await asyncio.sleep(1.1)
+        assert [p for p in await coord.claim_stale(1, max_attempts=2) if p["id"] == msg_id] == []

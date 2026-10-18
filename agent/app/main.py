@@ -4,8 +4,10 @@ Rodar:  uvicorn app.main:app --host 0.0.0.0 --port 8000
 URL do webhook na Meta: https://SEU-DOMINIO/webhook
 """
 
+import asyncio
+import dataclasses
 import logging
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -46,10 +48,15 @@ async def lifespan(app: FastAPI):
             log.warning("DATABASE_URL vazio: histórico e fila ficam em memória. Rode apenas UMA instância.")
             checkpointer, coordinator = InMemorySaver(), InMemoryCoordinator()
 
-        app.state.handler = MessageHandler(build_graph(deps, checkpointer), finance, coordinator)
+        app.state.handler = MessageHandler(build_graph(deps, checkpointer), finance, coordinator,
+                                           settings.processing_timeout_seconds)
         app.state.coordinator = coordinator
         app.state.whatsapp = whatsapp
+        recovery = asyncio.create_task(recover_stale(app))
         yield
+        recovery.cancel()
+        with suppress(asyncio.CancelledError):
+            await recovery
     await finance.aclose()
     await whatsapp.aclose()
 
@@ -82,17 +89,40 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
 
     for msg in parse_webhook(await request.json()):
         # A Meta reenvia o webhook se demorarmos: só a primeira entrega de cada id é processada.
-        if await request.app.state.coordinator.first_time(msg.id):
+        if await request.app.state.coordinator.first_time(msg.id, dataclasses.asdict(msg)):
             background.add_task(process, request.app, msg)
     # Responde 200 na hora; o processamento (IA, Whisper, OCR) roda em segundo plano.
     return {"status": "received"}
 
 
 async def process(app: FastAPI, msg: IncomingMessage):
-    log.info("Mensagem %s de %s (%s)", msg.id, msg.phone, msg.type)
+    log.info("Mensagem %s de %s (%s)%s", msg.id, msg.phone, msg.type, " [retomada]" if msg.recovered else "")
     reply = await app.state.handler.handle(msg)
     if reply:
         try:
             await app.state.whatsapp.send_text(msg.phone, reply)
         except Exception:
             log.exception("Falha ao enviar resposta para %s", msg.phone)
+    # Só depois de responder: se a instância cair antes disso, outra retoma a mensagem.
+    await app.state.coordinator.done(msg.id)
+
+
+async def recover_stale(app: FastAPI, interval: float = 60):
+    """Retoma mensagens que ficaram sem conclusão porque a instância que as processava caiu."""
+    stale_after = settings.processing_timeout_seconds * 2
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            payloads = await app.state.coordinator.claim_stale(stale_after, settings.recovery_max_attempts)
+        except Exception:
+            log.exception("Falha ao procurar mensagens abandonadas")
+            continue
+        for payload in payloads:
+            msg = IncomingMessage(**{**payload, "recovered": True})
+            log.warning("Retomando mensagem %s de %s", msg.id, msg.phone)
+            task = asyncio.create_task(process(app, msg))
+            _running.add(task)  # sem referência, a tarefa pode ser coletada no meio
+            task.add_done_callback(_running.discard)
+
+
+_running: set[asyncio.Task] = set()

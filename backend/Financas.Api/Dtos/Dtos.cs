@@ -23,9 +23,16 @@ public record TransactionDto(
     string CategoryIcon, string CategoryColor, string Description, decimal Amount,
     TransactionType Type, DateOnly Date, bool IsPaid);
 
-public record BudgetRequest(Guid CategoryId, string Month, decimal Limit);
+public record BudgetRequest(Guid CategoryId, string Month, decimal Limit, bool Recurring = false);
+/// <param name="Month">Mês em que o orçamento foi definido (pode ser anterior ao consultado).</param>
+/// <param name="Inherited">Veio da repetição de um mês anterior (RN-27).</param>
 public record BudgetDto(Guid Id, Guid CategoryId, string CategoryName, string CategoryColor,
-    string Month, decimal Limit, decimal Spent);
+    string Month, decimal Limit, decimal Spent, bool Recurring, bool Inherited);
+
+public record TransferRequest(Guid FromAccountId, Guid ToAccountId, decimal Amount, DateOnly Date,
+    string? Description, bool IsPaid = true);
+public record TransferDto(Guid Id, Guid FromAccountId, string FromAccountName, Guid ToAccountId,
+    string ToAccountName, decimal Amount, DateOnly Date, string Description, bool IsPaid);
 
 public record CategoryTotal(Guid CategoryId, string Name, string Color, decimal Total, double Percent);
 

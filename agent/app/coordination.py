@@ -4,6 +4,8 @@
 - PostgreSQL: várias instâncias atrás de um balanceador. As mensagens repetidas são
   descartadas por uma tabela com chave única, e as mensagens do mesmo telefone são
   serializadas com pg_advisory_lock, que o Postgres libera sozinho se a instância morrer.
+  A tabela guarda também o conteúdo de cada mensagem e quando ela foi concluída: se uma
+  instância cair no meio do processamento, outra pega a mensagem de volta (claim_stale).
 """
 
 import asyncio
@@ -11,18 +13,30 @@ import logging
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Protocol
+from typing import Any, Protocol
 
 log = logging.getLogger(__name__)
 
 
 class Coordinator(Protocol):
-    async def first_time(self, message_id: str) -> bool:
+    async def first_time(self, message_id: str, payload: dict[str, Any] | None = None) -> bool:
         """True só na primeira vez que o id aparece, em qualquer instância."""
         ...
 
     def lock(self, phone: str):
         """Context manager assíncrono: uma mensagem por telefone de cada vez."""
+        ...
+
+    async def started(self, message_id: str) -> None:
+        """A mensagem saiu da fila do telefone e começou a ser processada."""
+        ...
+
+    async def done(self, message_id: str) -> None:
+        """A mensagem foi processada e respondida: não precisa ser retomada."""
+        ...
+
+    async def claim_stale(self, older_than_seconds: int, max_attempts: int) -> list[dict[str, Any]]:
+        """Pega para esta instância as mensagens abandonadas por uma instância que caiu."""
         ...
 
 
@@ -32,7 +46,7 @@ class InMemoryCoordinator:
         self._max_ids = max_ids
         self._locks: dict[str, asyncio.Lock] = {}
 
-    async def first_time(self, message_id: str) -> bool:
+    async def first_time(self, message_id: str, payload: dict[str, Any] | None = None) -> bool:
         if message_id in self._seen:
             return False
         self._seen[message_id] = None
@@ -44,6 +58,16 @@ class InMemoryCoordinator:
     async def lock(self, phone: str) -> AsyncIterator[None]:
         async with self._locks.setdefault(phone, asyncio.Lock()):
             yield
+
+    # Com uma instância só, se o processo cair a memória vai junto: não há o que retomar.
+    async def started(self, message_id: str) -> None:
+        pass
+
+    async def done(self, message_id: str) -> None:
+        pass
+
+    async def claim_stale(self, older_than_seconds: int, max_attempts: int) -> list[dict[str, Any]]:
+        return []
 
 
 class PostgresCoordinator:
@@ -61,18 +85,54 @@ class PostgresCoordinator:
                     id text PRIMARY KEY,
                     received_at timestamptz NOT NULL DEFAULT now()
                 )""")
+            # Colunas da retomada. Linhas antigas ficam sem payload e nunca são retomadas.
+            await conn.execute("""
+                ALTER TABLE agent_processed_messages
+                    ADD COLUMN IF NOT EXISTS payload jsonb,
+                    ADD COLUMN IF NOT EXISTS started_at timestamptz NOT NULL DEFAULT now(),
+                    ADD COLUMN IF NOT EXISTS attempts int NOT NULL DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS done_at timestamptz""")
 
-    async def first_time(self, message_id: str) -> bool:
+    async def first_time(self, message_id: str, payload: dict[str, Any] | None = None) -> bool:
+        from psycopg.types.json import Jsonb
+
         async with self._pool.connection() as conn:
             cur = await conn.execute(
-                "INSERT INTO agent_processed_messages (id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING id",
-                (message_id,))
+                "INSERT INTO agent_processed_messages (id, payload) VALUES (%s, %s) "
+                "ON CONFLICT DO NOTHING RETURNING id",
+                (message_id, Jsonb(payload) if payload is not None else None))
             inserted = await cur.fetchone() is not None
             self._inserts += 1
             if self._inserts % 500 == 0:
                 await conn.execute(
                     f"DELETE FROM agent_processed_messages WHERE received_at < now() - interval '{self.RETENTION}'")
         return inserted
+
+    async def started(self, message_id: str) -> None:
+        async with self._pool.connection() as conn:
+            await conn.execute(
+                "UPDATE agent_processed_messages SET started_at = now(), attempts = attempts + 1 WHERE id = %s",
+                (message_id,))
+
+    async def done(self, message_id: str) -> None:
+        async with self._pool.connection() as conn:
+            await conn.execute("UPDATE agent_processed_messages SET done_at = now() WHERE id = %s", (message_id,))
+
+    async def claim_stale(self, older_than_seconds: int, max_attempts: int) -> list[dict[str, Any]]:
+        # SKIP LOCKED: duas instâncias procurando ao mesmo tempo nunca pegam a mesma mensagem.
+        # started_at é renovado na hora, então quem pegou tem o mesmo prazo para terminar.
+        async with self._pool.connection() as conn:
+            cur = await conn.execute("""
+                UPDATE agent_processed_messages SET started_at = now()
+                WHERE id IN (
+                    SELECT id FROM agent_processed_messages
+                    WHERE done_at IS NULL AND payload IS NOT NULL AND attempts < %s
+                      AND started_at < now() - make_interval(secs => %s)
+                    ORDER BY received_at
+                    LIMIT 20
+                    FOR UPDATE SKIP LOCKED)
+                RETURNING payload""", (max_attempts, older_than_seconds))
+            return [row[0] for row in await cur.fetchall()]
 
     @asynccontextmanager
     async def lock(self, phone: str) -> AsyncIterator[None]:

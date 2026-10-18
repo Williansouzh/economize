@@ -36,6 +36,8 @@ MediaLoader = Callable[[str], Awaitable[tuple[bytes, str]]]
 class AgentState(MessagesState):
     # Mídia pendente da mensagem atual: {"id": ..., "mime": ..., "caption": ...}
     media: dict[str, Any] | None
+    # A mensagem atual está sendo retomada depois de uma falha (pode já ter sido registrada).
+    recovered: bool
 
 
 @dataclass
@@ -90,7 +92,7 @@ def build_graph(deps: Deps, checkpointer=None):
     async def agent(state: AgentState, config: RunnableConfig) -> dict:
         phone = config["configurable"]["thread_id"]
         ctx = await deps.finance.context(phone)
-        prompt = SystemMessage(content=system_prompt(ctx, datetime.now(tz)))
+        prompt = SystemMessage(content=system_prompt(ctx, datetime.now(tz), recovered=state.get("recovered", False)))
         response = await llm.ainvoke([prompt, *trim_history(state["messages"], deps.history_limit)])
         return {"messages": [response]}
 

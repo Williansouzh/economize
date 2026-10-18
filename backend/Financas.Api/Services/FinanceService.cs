@@ -51,13 +51,45 @@ public class FinanceService(AppDbContext db, AppClock clock)
             })
             .ToDictionaryAsync(x => x.AccountId);
 
+        // Transferências (RN-28): saem da conta de origem e entram na de destino, com as mesmas
+        // regras de pago e de data dos lançamentos.
+        var transfers = db.Transfers.AsNoTracking()
+            .Where(t => t.UserId == userId && (t.Date <= today || t.Date <= until));
+        var sent = await transfers.GroupBy(t => t.FromAccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                Current = g.Sum(t => t.IsPaid && t.Date <= today ? t.Amount : 0m),
+                Forecast = g.Sum(t => t.Date <= until ? t.Amount : 0m),
+            })
+            .ToDictionaryAsync(x => x.AccountId);
+        var received = await transfers.GroupBy(t => t.ToAccountId)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                Current = g.Sum(t => t.IsPaid && t.Date <= today ? t.Amount : 0m),
+                Forecast = g.Sum(t => t.Date <= until ? t.Amount : 0m),
+            })
+            .ToDictionaryAsync(x => x.AccountId);
+
         return accounts.Select(a =>
         {
             var s = sums.GetValueOrDefault(a.Id);
+            var o = sent.GetValueOrDefault(a.Id);
+            var i = received.GetValueOrDefault(a.Id);
+            var current = (s?.Current ?? 0) - (o?.Current ?? 0) + (i?.Current ?? 0);
+            var forecast = (s?.Forecast ?? 0) - (o?.Forecast ?? 0) + (i?.Forecast ?? 0);
             return new AccountDto(a.Id, a.Name, a.InitialBalance,
-                a.InitialBalance + (s?.Current ?? 0), a.InitialBalance + (s?.Forecast ?? 0), a.Color, a.Icon);
+                a.InitialBalance + current, a.InitialBalance + forecast, a.Color, a.Icon);
         }).OrderBy(a => a.Name).ToList();
     }
+
+    public Task<List<Transfer>> GetTransfersAsync(Guid userId, DateOnly start, DateOnly end) =>
+        db.Transfers.AsNoTracking()
+            .Include(t => t.FromAccount).Include(t => t.ToAccount)
+            .Where(t => t.UserId == userId && t.Date >= start && t.Date <= end)
+            .OrderByDescending(t => t.Date)
+            .ToListAsync();
 
     public static List<CategoryTotal> ExpensesByCategory(IEnumerable<Transaction> txs)
     {
@@ -72,14 +104,28 @@ public class FinanceService(AppDbContext db, AppClock clock)
             .ToList();
     }
 
+    /// <summary>
+    /// Orçamentos que valem no mês (RN-27): o do próprio mês ou, se não houver, o mais recente de
+    /// um mês anterior marcado para repetir e cuja repetição ainda não foi parada.
+    /// </summary>
     public async Task<List<BudgetDto>> GetBudgetsAsync(Guid userId, string monthKey, IEnumerable<Transaction> monthTxs)
     {
-        var budgets = await db.Budgets.AsNoTracking().Include(b => b.Category)
-            .Where(b => b.UserId == userId && b.Month == monthKey).ToListAsync();
-        return budgets.Select(b => new BudgetDto(
-            b.Id, b.CategoryId, b.Category!.Name, b.Category.Color, b.Month, b.Limit,
-            monthTxs.Where(t => t.CategoryId == b.CategoryId && t.Type == TransactionType.Expense)
-                .Sum(t => t.Amount))).ToList();
+        // "yyyy-MM" ordena como texto na mesma ordem das datas.
+        var candidates = await db.Budgets.AsNoTracking().Include(b => b.Category)
+            .Where(b => b.UserId == userId && (b.Month == monthKey ||
+                (b.Recurring && string.Compare(b.Month, monthKey) < 0 &&
+                 (b.UntilMonth == null || string.Compare(monthKey, b.UntilMonth) < 0))))
+            .ToListAsync();
+        return candidates
+            .GroupBy(b => b.CategoryId)
+            .Select(g => g.MaxBy(b => b.Month)!)
+            .OrderBy(b => b.Category!.Name)
+            .Select(b => new BudgetDto(
+                b.Id, b.CategoryId, b.Category!.Name, b.Category.Color, b.Month, b.Limit,
+                monthTxs.Where(t => t.CategoryId == b.CategoryId && t.Type == TransactionType.Expense)
+                    .Sum(t => t.Amount),
+                b.Recurring, b.Month != monthKey))
+            .ToList();
     }
 
     public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? month)

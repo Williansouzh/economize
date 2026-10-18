@@ -77,7 +77,9 @@ erDiagram
   USER ||--o{ CATEGORY : possui
   USER ||--o{ TRANSACTION : registra
   USER ||--o{ BUDGET : define
+  USER ||--o{ TRANSFER : move
   ACCOUNT ||--o{ TRANSACTION : "movimenta (exclui em cascata)"
+  ACCOUNT ||--o{ TRANSFER : "origem e destino (exclui em cascata)"
   CATEGORY ||--o{ TRANSACTION : "classifica (bloqueia exclusão)"
   CATEGORY ||--o{ BUDGET : limita
   USER {
@@ -95,6 +97,7 @@ erDiagram
     string Name
     decimal InitialBalance
     string Color
+    string Icon "nome do ícone no app"
   }
   CATEGORY {
     guid Id PK
@@ -121,6 +124,18 @@ erDiagram
     guid CategoryId FK
     string Month "AAAA-MM"
     decimal Limit
+    bool Recurring "repete nos meses seguintes"
+    string UntilMonth "AAAA-MM, opcional: para de repetir"
+  }
+  TRANSFER {
+    guid Id PK
+    guid UserId FK
+    guid FromAccountId FK
+    guid ToAccountId FK
+    string Description
+    decimal Amount "sempre maior que 0"
+    date Date
+    bool IsPaid "padrão true"
   }
   LINK_ATTEMPT {
     string Phone PK
@@ -154,8 +169,9 @@ isso está indicado.
 | ID | Regra |
 |---|---|
 | RN-05 | O saldo não é gravado: é calculado na hora. Cada conta tem dois saldos. **Saldo atual**: saldo inicial + lançamentos **pagos com data até hoje**. **Saldo previsto**: saldo inicial + **todos** os lançamentos (pagos, pendentes e agendados) até o fim do mês consultado. O app mostra o atual em destaque e o previsto logo abaixo. |
-| RN-06 | Excluir uma conta exclui todos os lançamentos dela. |
+| RN-06 | Excluir uma conta exclui todos os lançamentos dela e as transferências de e para ela. |
 | RN-07 | As contas são listadas em ordem alfabética. A primeira é a "conta padrão" usada pelo formulário do app e pelo agente quando a conta não é informada. |
+| RN-28 | **Transferência entre contas.** Move dinheiro de uma conta do usuário para outra. Tira da origem e põe no destino, com as mesmas regras de pago e de data da RN-11 (pendente ou com data futura só entra no saldo previsto). **Não é receita nem despesa**: fica fora dos totais e do resultado do mês, das categorias, dos orçamentos e dos insights. O valor tem que ser maior que zero, as duas contas precisam ser do usuário e diferentes. No app, aparece na lista do dia com as duas contas, mas não soma no total do dia. O agente do WhatsApp não cria transferências. |
 
 ### Lançamentos
 
@@ -178,14 +194,15 @@ isso está indicado.
 
 | ID | Regra |
 |---|---|
-| RN-14 | Existe no máximo um limite por categoria por mês; salvar de novo substitui o valor. **Só categorias de despesa aceitam orçamento.** Um orçamento não é copiado para o mês seguinte. |
+| RN-14 | Existe no máximo um limite por categoria por mês; salvar de novo substitui o valor. **Só categorias de despesa aceitam orçamento**, e o limite tem que ser maior que zero. |
+| RN-27 | **Orçamento que se repete.** Marcado como "repetir todo mês" (padrão no app), o orçamento vale também nos meses seguintes que não tiverem orçamento próprio para a categoria. Num mês, vale o orçamento do próprio mês; se não houver, o mais recente de um mês anterior que repete. Salvar num mês herdado cria um orçamento daquele mês: "repetir" faz o novo valor seguir dali em diante; "só este mês" muda só aquele mês, e o seguinte volta ao valor anterior. Excluir no mês de origem apaga o orçamento; excluir num mês herdado ("Parar de repetir") encerra a repetição a partir daquele mês, sem mexer nos anteriores. |
 | RN-15 | O gasto do orçamento é a soma das despesas da categoria no mês, incluindo as pendentes. A barra fica laranja acima de 80% do limite e vermelha acima de 100%, com o texto "Estourou em R$ X". |
 
 ### Insights com IA
 
 | ID | Regra |
 |---|---|
-| RN-16 | O DeepSeek recebe um resumo, nunca o banco: saldo total, receitas e despesas do mês e do mês anterior, despesas por categoria nos dois meses, orçamentos e as 10 maiores despesas (data, descrição, categoria, valor). Nome e e-mail não são enviados; as descrições dos lançamentos são. |
+| RN-16 | O DeepSeek recebe um resumo, nunca o banco: saldo total, receitas e despesas do mês e do mês anterior, despesas por categoria nos dois meses, orçamentos e as 10 maiores despesas (data, descrição, categoria, valor). Nome, e-mail e nomes das contas não são enviados; as descrições dos lançamentos são. A tela de IA avisa isso ao usuário. |
 | RN-17 | A análise volta como JSON com resumo, alertas, dicas, economia potencial por mês e nota de saúde de 0 a 100. A partir de 70 a nota aparece em verde, a partir de 40 em laranja, abaixo disso em vermelho. Se o JSON vier quebrado, o texto bruto vira o resumo. |
 | RN-18 | Sem chave configurada, a API responde 503 com a explicação. Se o DeepSeek falhar ou passar de 90 segundos, a resposta é 502. |
 
@@ -198,6 +215,7 @@ isso está indicado.
 | RN-21 | Mensagens de números não vinculados não passam pela IA: o remetente só recebe as instruções de vinculação. |
 | RN-22 | O agente entende texto, áudio, imagem e documento (PDF ou imagem). Outros tipos recebem uma resposta explicando o que é aceito. |
 | RN-23 | Mensagens do mesmo número são processadas uma de cada vez, na ordem de chegada, mesmo com várias instâncias do agente. Reenvios do mesmo webhook pela Meta são processados uma única vez, em qualquer instância. |
+| RN-29 | **Retomada.** Cada mensagem tem até 5 minutos para ser processada (`PROCESSING_TIMEOUT_SECONDS`) e só é marcada como concluída depois que a resposta é enviada. Uma mensagem sem conclusão há mais de 10 minutos (o dobro do prazo) é considerada abandonada por uma instância que caiu e é retomada por outra, até 3 tentativas no total (`RECOVERY_MAX_ATTEMPTS`). Na retomada, o prompt avisa o modelo para conferir no histórico se ela já foi registrada (AG-10). Só com PostgreSQL; no modo memória, o processo que cai leva tudo junto. |
 | RN-24 | **Depois de 5 códigos errados, o número fica bloqueado para vinculação por 30 minutos** (resposta 429), mesmo que o próximo código esteja certo. A janela conta a partir da primeira falha. Um acerto zera o contador. Outros números não são afetados. O contador fica no banco e vale para todas as réplicas da API. |
 
 ### Comportamento do agente
@@ -216,6 +234,7 @@ As do prompt dependem do modelo obedecer; as das ferramentas são garantidas pel
 | AG-07 | "Desfazer" exclui o lançamento pelo id que aparece no histórico da conversa. Uma correção é feita como exclusão seguida de novo registro. | Prompt + `excluir_lancamento` |
 | AG-08 | Texto vindo de OCR ou de áudio é tratado como dado: instruções escritas dentro de um print não devem ser seguidas. As ferramentas só agem na conta do remetente. | Prompt + código |
 | AG-09 | Assuntos fora de finanças pessoais são recusados com educação. Respostas curtas, com a formatação do WhatsApp (`**negrito**` vira `*negrito*`). | Prompt + código |
+| AG-10 | Numa mensagem retomada (RN-29), o agente confere no histórico se o lançamento já foi registrado antes de registrar de novo. A instância pode ter caído depois de gravar e antes de responder. | Prompt |
 
 ## Cálculos
 
@@ -226,8 +245,8 @@ Valores em dinheiro são `numeric(14,2)`.
 
 | Valor | Fórmula | Observação |
 |---|---|---|
-| Saldo atual da conta | `saldo_inicial + Σ (receitas − despesas) pagas com data ≤ hoje` | Não depende do mês selecionado. |
-| Saldo previsto da conta | `saldo_inicial + Σ (receitas − despesas) com data ≤ fim do mês consultado` | Inclui pendentes e agendados. |
+| Saldo atual da conta | `saldo_inicial + Σ (receitas − despesas) + Σ (transferências recebidas − enviadas)`, tudo pago e com data ≤ hoje | Não depende do mês selecionado. |
+| Saldo previsto da conta | Mesma soma, com tudo de data ≤ fim do mês consultado | Inclui pendentes e agendados. |
 | Saldo atual / previsto geral | `Σ` dos saldos de cada conta | Os dois números do card principal. |
 | Pendentes do mês | `Σ receitas não pagas` e `Σ despesas não pagas` do mês | "A receber" e "a pagar" no card. |
 | Resultado do mês | `Σ receitas do mês − Σ despesas do mês` | Inclui os lançamentos pendentes do mês. |
@@ -294,7 +313,8 @@ sequenceDiagram
 ```
 
 O webhook responde 200 antes de processar. Se a resposta demorar, a Meta reenvia a mesma mensagem;
-por isso o agente ignora ids repetidos.
+por isso o agente ignora ids repetidos. O id é gravado junto com o conteúdo da mensagem e só é marcado
+como concluído depois da resposta, para outra instância retomar se esta cair no meio (RN-29).
 
 ### Insights do mês no app
 
@@ -356,13 +376,15 @@ flowchart LR
 | Agente em Python, separado | LangGraph, Whisper e Tesseract são do ecossistema Python. Dá para escalar ou desligar o agente sem mexer na API. | Dois serviços para publicar e monitorar. | Se surgir um equivalente maduro em .NET. |
 | Whisper e Tesseract locais | O DeepSeek não aceita áudio nem imagem. Rodar local custa zero por uso e não manda mídia para mais um terceiro. | CPU e ~500 MB de RAM no agente; OCR erra em prints ruins. | Se a qualidade do OCR incomodar: modelo com visão. |
 | PostgreSQL + migrations do EF Core | Aceita réplicas da API, esquema versionado, somas de `numeric` no banco. Um só servidor atende API e agente. | Desenvolvimento precisa de um Postgres (um `docker run`). | Não rever. |
-| Migrations aplicadas na subida da API | Deploy em um passo. O EF Core trava o histórico de migrations, então réplicas subindo juntas não aplicam a mesma migration duas vezes. | A API precisa de permissão para alterar o esquema. | Se o banco de produção exigir usuário só de leitura e escrita: `Database:MigrateOnStartup=false` e `dotnet ef database update` no pipeline. |
+| Migrations aplicadas na subida da API | Deploy em um passo. Um advisory lock do PostgreSQL (`DatabaseMigrator`) faz as réplicas aplicarem uma de cada vez; o lock do próprio EF Core não basta quando há mais de uma migration pendente. | A API precisa de permissão para alterar o esquema. | Se o banco de produção exigir usuário só de leitura e escrita: `Database:MigrateOnStartup=false` e `dotnet ef database update` no pipeline. |
 | Estado do agente no PostgreSQL | Um só serviço resolve as três necessidades: histórico (checkpointer oficial do LangGraph), dedupe (chave única) e fila por telefone (`pg_advisory_lock`, liberado automaticamente se a instância cair). | Mais um serviço para operar. Cada telefone em processamento segura uma conexão do pool de locks. | Se o volume crescer muito: Redis para dedupe e fila. |
 | Modo memória no agente quando `DATABASE_URL` está vazio | Desenvolvimento e CLI sem dependências. | Uma instância só; reiniciar apaga conversas. O agente avisa no log. | Não rever. |
 | Limite de vinculação no banco (tabela `LinkAttempts`) | É uma regra de segurança: precisa valer em todas as réplicas e sobreviver a reinícios. O incremento é atômico (`INSERT ... ON CONFLICT DO UPDATE`). | Uma escrita no banco a cada código errado. | Não rever. |
 | Rate limit (RN-26) em memória, por réplica | É uma proteção contra abuso, não uma regra de negócio. Sem infraestrutura extra. | Com N réplicas, o limite efetivo é N vezes maior; zera ao reiniciar. | Se houver muitas réplicas: limitar no proxy reverso ou guardar contadores em Redis. |
 | WhatsApp Cloud API oficial | Sem risco de banimento; conversas iniciadas pelo usuário são gratuitas na janela de 24h. | Exige app na Meta e HTTPS público. | Não rever. |
 | Saldo calculado, não gravado | Nunca fica dessincronizado de edições e exclusões. | Recalcula a cada leitura. | Só se virar gargalo. |
+| Transferência como entidade própria, não como par de lançamentos | Não precisa de categoria falsa nem de filtros em todos os totais, gráficos, orçamentos e insights para não contá-la como receita ou despesa. | Os saldos somam mais uma tabela; o app busca lançamentos e transferências separadamente. | Não rever. |
+| Orçamento recorrente por herança, não por cópia | Um registro só vale para todos os meses seguintes; mudar o valor num mês não exige um job nem altera meses passados. | A consulta do mês precisa resolver qual orçamento vale (o mais recente que repete). | Não rever. |
 
 ## Pontos de atenção
 
@@ -370,12 +392,9 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 
 | Prioridade | Ponto | Correção sugerida |
 |---|---|---|
-| Baixa | Orçamentos não se repetem de um mês para o outro. | Opção "repetir todo mês". |
-| Baixa | Não há transferência entre contas. | Tipo de lançamento "transferência" com conta de origem e destino. |
-| Baixa | Descrições de lançamentos vão para o DeepSeek nos insights. | Avisar o usuário na tela de IA. |
 | Baixa | O Whisper `small` erra em áudios com muito ruído. | `WHISPER_MODEL=medium`, mais lento. |
-| Baixa | Se uma instância do agente cair no meio do processamento, aquela mensagem não é reprocessada (o id já foi marcado como visto). | Marcar como concluída só no fim e reprocessar as pendentes antigas. |
 | Baixa | O rate limit da API (RN-26) é contado por réplica: com 3 réplicas, um IP consegue até 30 logins por minuto. | Limitar no proxy reverso ou usar Redis. |
+| Baixa | A retomada do agente (RN-29) entrega "pelo menos uma vez": se a instância cair depois de gravar o lançamento e antes de responder, a retomada depende do modelo obedecer à AG-10 para não registrar de novo. | Gravar o id da mensagem no lançamento e recusar duplicados na API. |
 
 ### Corrigido
 
@@ -388,6 +407,11 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | Agente só funcionava em uma instância | Histórico, dedupe e fila por telefone no PostgreSQL quando `DATABASE_URL` está definido (RN-23). | `test_postgres_duas_instancias_descartam_a_mesma_mensagem`, `test_postgres_fila_por_telefone_vale_entre_instancias`, `test_postgres_historico_continua_em_outra_instancia` |
 | API presa a uma instância (SQLite, `EnsureCreated`, limite de vinculação em memória) | PostgreSQL com migrations do EF Core aplicadas na subida; limite de vinculação numa tabela com incremento atômico; saldos somados no banco. | `Duas_replicas_sobem_juntas_e_compartilham_dados_e_limite_de_vinculacao`, `Falhas_simultaneas_nao_se_perdem`, `Health_responde_com_o_banco_no_ar` |
 | Sem rate limit e CORS aberto | Rate limit por IP no login/cadastro e por usuário nas demais rotas; CORS só para origens configuradas (RN-26). | `Login_e_limitado_a_10_tentativas_por_minuto`, `Rotas_comuns_sao_limitadas_por_usuario`, `Cors_em_producao_so_libera_origens_configuradas`, `Cors_em_desenvolvimento_libera_localhost` |
+| Réplicas subindo juntas com 2+ migrations pendentes falhavam ("column already exists") | Advisory lock do PostgreSQL em volta do `Migrate` (`DatabaseMigrator`). | `Duas_replicas_sobem_juntas_e_compartilham_dados_e_limite_de_vinculacao` |
+| Orçamentos não se repetiam de um mês para o outro | Opção "repetir todo mês", com herança e "parar de repetir" (RN-27). | `Orcamento_recorrente_vale_nos_meses_seguintes_ate_ser_substituido_ou_parado`, `Excluir_no_mes_de_origem_apaga_o_orcamento_recorrente` |
+| Não havia transferência entre contas | Entidade `Transfer`, que entra nos saldos e fica fora de receitas e despesas (RN-28). | `Transferencia_move_saldo_sem_contar_como_receita_ou_despesa`, `Transferencia_recusa_mesma_conta_e_conta_de_outro_usuario` |
+| Descrições iam para o DeepSeek sem o usuário saber | Aviso na tela de IA dizendo o que é enviado e o que não é (RN-16). | — (texto no app) |
+| Mensagem perdida se a instância do agente caísse no meio | Conclusão marcada só depois da resposta; mensagens abandonadas são retomadas por outra instância (RN-29, AG-10). | `test_postgres_mensagem_abandonada_e_retomada_por_outra_instancia`, `test_postgres_desiste_depois_do_limite_de_tentativas`, `test_mensagem_retomada_avisa_o_modelo_para_nao_registrar_de_novo` |
 
 Testes da API: `backend/Financas.Api.Tests` (`cd backend && dotnet test`, com um PostgreSQL em `TEST_DATABASE_URL`).
 Testes do agente: `agent/tests` (`cd agent && pytest`; os de PostgreSQL rodam com `TEST_DATABASE_URL` definido).

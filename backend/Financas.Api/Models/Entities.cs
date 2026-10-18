@@ -73,4 +73,25 @@ public class Budget
     /// <summary>Formato yyyy-MM.</summary>
     public string Month { get; set; } = "";
     public decimal Limit { get; set; }
+    /// <summary>Vale também para os meses seguintes que não tiverem orçamento próprio (RN-27).</summary>
+    public bool Recurring { get; set; }
+    /// <summary>Primeiro mês (yyyy-MM) em que a repetição para de valer. Nulo = repete sem fim.</summary>
+    public string? UntilMonth { get; set; }
+}
+
+/// <summary>Dinheiro movido entre duas contas do usuário. Muda os saldos, mas não é receita
+/// nem despesa: fica fora dos totais do mês, das categorias e dos orçamentos (RN-28).</summary>
+public class Transfer
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public Guid FromAccountId { get; set; }
+    public Account? FromAccount { get; set; }
+    public Guid ToAccountId { get; set; }
+    public Account? ToAccount { get; set; }
+    public string Description { get; set; } = "";
+    /// <summary>Sempre positivo.</summary>
+    public decimal Amount { get; set; }
+    public DateOnly Date { get; set; }
+    public bool IsPaid { get; set; } = true;
 }

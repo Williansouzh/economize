@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
@@ -21,16 +22,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<Transaction>().HasOne(t => t.Account).WithMany().OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transaction>().HasOne(t => t.Category).WithMany().OnDelete(DeleteBehavior.Restrict);
+        // RN-06: excluir uma conta exclui também as transferências de e para ela.
+        b.Entity<Transfer>().HasOne(t => t.FromAccount).WithMany().HasForeignKey(t => t.FromAccountId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Transfer>().HasOne(t => t.ToAccount).WithMany().HasForeignKey(t => t.ToAccountId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Transfer>().HasIndex(t => new { t.UserId, t.Date });
 
         // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.
         b.Entity<Transaction>().Property(t => t.Amount).HasPrecision(14, 2);
         b.Entity<Account>().Property(a => a.InitialBalance).HasPrecision(14, 2);
         b.Entity<Budget>().Property(x => x.Limit).HasPrecision(14, 2);
+        b.Entity<Transfer>().Property(t => t.Amount).HasPrecision(14, 2);
 
         b.Entity<User>().Property(u => u.Email).HasMaxLength(254);
         b.Entity<User>().Property(u => u.WhatsAppPhone).HasMaxLength(20);
         b.Entity<User>().Property(u => u.WhatsAppLinkCode).HasMaxLength(6);
         b.Entity<Budget>().Property(x => x.Month).HasMaxLength(7);
+        b.Entity<Budget>().Property(x => x.UntilMonth).HasMaxLength(7);
+        b.Entity<Transfer>().Property(t => t.Description).HasMaxLength(200);
         b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
         b.Entity<Account>().Property(a => a.Icon).HasMaxLength(40);
 

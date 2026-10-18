@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     database_url: str = ""
     database_pool_size: int = 20
 
+    # Tempo máximo para processar uma mensagem. Passado o dobro disso sem conclusão, outra
+    # instância assume que quem a pegou caiu e processa de novo (até recovery_max_attempts vezes).
+    processing_timeout_seconds: int = 300
+    recovery_max_attempts: int = 3
+
     timezone: str = "America/Sao_Paulo"
     # Quantas mensagens do histórico vão para o LLM a cada turno.
     history_limit: int = 30

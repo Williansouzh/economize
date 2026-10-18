@@ -114,6 +114,14 @@ async def test_categoria_inexistente_cai_em_outros():
     assert finance.created[0]["categoryId"] == "c3"
 
 
+async def test_mensagem_retomada_avisa_o_modelo_para_nao_registrar_de_novo():
+    handler, _, llm = make_handler([AIMessage(content="Já estava registrado"), AIMessage(content="ok")])
+    await handler.handle(IncomingMessage(id="r1", phone=PHONE, type="text", text="gastei 45", recovered=True))
+    await handler.handle(text("e o mercado?"))
+    assert "processada de novo" in llm.received[0][0].content
+    assert "processada de novo" not in llm.received[1][0].content
+
+
 def test_match_by_name_tolera_acento_e_erro():
     assert match_by_name(CATEGORIES, "ALIMENTACAO")["id"] == "c1"
     assert match_by_name(CATEGORIES, "transporte ")["id"] == "c2"

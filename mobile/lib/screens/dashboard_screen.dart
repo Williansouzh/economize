@@ -476,8 +476,16 @@ class BudgetProgress extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Expanded(
+                Flexible(
                     child: Text(b.categoryName, style: const TextStyle(fontWeight: FontWeight.w600))),
+                if (b.recurring) ...[
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Repete todo mês',
+                    child: Icon(Icons.repeat, size: 14, color: cs.onSurfaceVariant),
+                  ),
+                ],
+                const Spacer(),
                 Text('${(b.progress * 100).round()}%',
                     style: TextStyle(fontWeight: FontWeight.w700, color: color)),
               ]),
