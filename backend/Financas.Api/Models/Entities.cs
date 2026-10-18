@@ -25,6 +25,7 @@ public class Account
     public string Name { get; set; } = "";
     public decimal InitialBalance { get; set; }
     public string Color { get; set; } = "#4CAF50";
+    public string Icon { get; set; } = "account_balance_wallet";
 }
 
 public class Category

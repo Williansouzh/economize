@@ -55,7 +55,7 @@ public class FinanceService(AppDbContext db, AppClock clock)
         {
             var s = sums.GetValueOrDefault(a.Id);
             return new AccountDto(a.Id, a.Name, a.InitialBalance,
-                a.InitialBalance + (s?.Current ?? 0), a.InitialBalance + (s?.Forecast ?? 0), a.Color);
+                a.InitialBalance + (s?.Current ?? 0), a.InitialBalance + (s?.Forecast ?? 0), a.Color, a.Icon);
         }).OrderBy(a => a.Name).ToList();
     }
 

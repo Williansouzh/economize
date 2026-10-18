@@ -32,6 +32,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<User>().Property(u => u.WhatsAppLinkCode).HasMaxLength(6);
         b.Entity<Budget>().Property(x => x.Month).HasMaxLength(7);
         b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
+        b.Entity<Account>().Property(a => a.Icon).HasMaxLength(40);
 
         b.Entity<LinkAttempt>().HasKey(x => x.Phone);
         b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);

@@ -97,8 +97,16 @@ class ApiClient {
 
   Future<void> deleteTransaction(String id) => delete('/transactions/$id');
 
-  Future<void> createAccount(String name, double initialBalance) =>
-      post('/accounts', {'name': name, 'initialBalance': initialBalance});
+  Future<void> saveAccount({
+    String? id,
+    required String name,
+    required double initialBalance,
+    required String color,
+    required String icon,
+  }) async {
+    final body = {'name': name, 'initialBalance': initialBalance, 'color': color, 'icon': icon};
+    id == null ? await post('/accounts', body) : await put('/accounts/$id', body);
+  }
 
   Future<void> saveBudget(String categoryId, String month, double limit) =>
       post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit});

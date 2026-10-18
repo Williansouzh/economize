@@ -66,18 +66,35 @@ class _InsightsScreenState extends State<InsightsScreen> {
     return Column(children: [
       const MonthSelector(),
       Expanded(
-        child: ListView(padding: const EdgeInsets.all(16), children: [
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
           if (insights == null)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(children: [
-                  Icon(Icons.auto_awesome, size: 48, color: cs.primary),
-                  const SizedBox(height: 8),
-                  const Text('Deixe a IA analisar seus gastos do mês e sugerir onde economizar.',
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6D5DF6), Color(0xFF3B82F6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .18), borderRadius: BorderRadius.circular(20)),
+                    child: const Icon(Icons.auto_awesome, size: 36, color: Colors.white),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Análise do mês com IA',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Text('A IA lê seus gastos, dá uma nota para sua saúde financeira e mostra onde dá para economizar.',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: .85))),
+                  const SizedBox(height: 18),
                   FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white, foregroundColor: const Color(0xFF4F46E5)),
                     onPressed: _loading ? null : _generate,
                     icon: _loading
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -85,13 +102,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     label: Text(_loading ? 'Analisando...' : 'Gerar insights'),
                   ),
                 ]),
-              ),
             )
           else
             _InsightsView(insights, onRefresh: _loading ? null : _generate),
-          const SizedBox(height: 16),
-          Text('Pergunte à IA', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const SizedBox(height: 24),
+          Row(children: [
+            const IconBadge(Icons.forum_outlined, Color(0xFF6D5DF6), size: 34),
+            const SizedBox(width: 10),
+            Text('Pergunte à IA',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 12),
           if (_chat.isEmpty)
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final s in const [
@@ -99,18 +120,27 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 'Como economizar R\$ 500 por mês?',
                 'Meus gastos estão saudáveis?',
               ])
-                ActionChip(label: Text(s), onPressed: _asking ? null : () => _ask(s)),
+                ActionChip(
+                  avatar: const Icon(Icons.bolt, size: 16),
+                  label: Text(s),
+                  onPressed: _asking ? null : () => _ask(s),
+                ),
             ]),
           for (final (role, text) in _chat)
             Align(
               alignment: role == 'user' ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 4),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 constraints: const BoxConstraints(maxWidth: 320),
                 decoration: BoxDecoration(
-                  color: role == 'user' ? cs.primary : cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
+                  color: role == 'user' ? cs.primary : Theme.of(context).cardTheme.color,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(role == 'user' ? 18 : 4),
+                    bottomRight: Radius.circular(role == 'user' ? 4 : 18),
+                  ),
                 ),
                 child: Text(text, style: TextStyle(color: role == 'user' ? cs.onPrimary : null)),
               ),
@@ -126,11 +156,22 @@ class _InsightsScreenState extends State<InsightsScreen> {
             Expanded(
               child: TextField(
                 controller: _question,
-                decoration: const InputDecoration(hintText: 'Ex.: posso gastar com uma viagem?', isDense: true),
+                decoration: InputDecoration(
+                  hintText: 'Ex.: posso gastar com uma viagem?',
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: cs.outlineVariant)),
+                ),
                 onSubmitted: (_) => _ask(),
               ),
             ),
-            IconButton.filled(onPressed: _asking ? null : _ask, icon: const Icon(Icons.send)),
+            const SizedBox(width: 8),
+            IconButton.filled(
+              onPressed: _asking ? null : _ask,
+              icon: const Icon(Icons.arrow_upward),
+              style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+            ),
           ]),
         ),
       ),
@@ -148,38 +189,71 @@ class _InsightsView extends StatelessWidget {
     final scoreColor = i.healthScore >= 70
         ? incomeColor
         : i.healthScore >= 40
-            ? Colors.orange
+            ? warningColor
             : expenseColor;
+    final scoreLabel = i.healthScore >= 70
+        ? 'Muito bem!'
+        : i.healthScore >= 40
+            ? 'Dá para melhorar'
+            : 'Atenção aos gastos';
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Row(children: [
             SizedBox(
-              width: 64,
-              height: 64,
-              child: Stack(alignment: Alignment.center, children: [
+              width: 88,
+              height: 88,
+              child: Stack(fit: StackFit.expand, children: [
                 CircularProgressIndicator(
-                    value: i.healthScore / 100, strokeWidth: 6, color: scoreColor, backgroundColor: scoreColor.withAlpha(40)),
-                Text('${i.healthScore}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  value: i.healthScore / 100,
+                  strokeWidth: 9,
+                  strokeCap: StrokeCap.round,
+                  color: scoreColor,
+                  backgroundColor: scoreColor.withValues(alpha: .14),
+                ),
+                Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text('${i.healthScore}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 26)),
+                    const Text('de 100', style: TextStyle(fontSize: 10)),
+                  ]),
+                ),
               ]),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 20),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Saúde financeira', style: TextStyle(fontWeight: FontWeight.bold)),
-                if (i.potentialSavings > 0)
-                  Text('Economia possível: ${money(i.potentialSavings)}/mês',
-                      style: const TextStyle(color: incomeColor)),
+                const Text('Saúde financeira', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                const SizedBox(height: 2),
+                Text(scoreLabel, style: TextStyle(color: scoreColor, fontWeight: FontWeight.w600)),
+                if (i.potentialSavings > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: incomeColor.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text('Pode economizar ${money(i.potentialSavings)}/mês',
+                        style: const TextStyle(color: incomeColor, fontWeight: FontWeight.w600, fontSize: 12)),
+                  ),
+                ],
               ]),
             ),
             IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh), tooltip: 'Gerar novamente'),
           ]),
         ),
       ),
-      Card(child: Padding(padding: const EdgeInsets.all(16), child: Text(i.summary))),
-      if (i.alerts.isNotEmpty) _ListCard('Alertas', Icons.warning_amber, Colors.orange, i.alerts),
-      if (i.tips.isNotEmpty) _ListCard('Dicas para economizar', Icons.lightbulb, incomeColor, i.tips),
+      const SizedBox(height: 12),
+      _ListCard('Resumo', Icons.description_outlined, const Color(0xFF3B82F6), [i.summary], bullets: false),
+      if (i.alerts.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _ListCard('Alertas', Icons.warning_amber_rounded, warningColor, i.alerts),
+      ],
+      if (i.tips.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _ListCard('Dicas para economizar', Icons.lightbulb_outline, incomeColor, i.tips),
+      ],
     ]);
   }
 }
@@ -189,7 +263,8 @@ class _ListCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final List<String> items;
-  const _ListCard(this.title, this.icon, this.color, this.items);
+  final bool bullets;
+  const _ListCard(this.title, this.icon, this.color, this.items, {this.bullets = true});
 
   @override
   Widget build(BuildContext context) => Card(
@@ -197,19 +272,26 @@ class _ListCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 8),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              IconBadge(icon, color, size: 34),
+              const SizedBox(width: 10),
+              Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             ]),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             ...items.map((t) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('•  '),
-                    Expanded(child: Text(t)),
+                    if (bullets)
+                      Container(
+                        margin: const EdgeInsets.only(top: 7, right: 10),
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                      ),
+                    Expanded(child: Text(t, style: const TextStyle(height: 1.4))),
                   ]),
                 )),
           ]),
         ),
       );
 }
+

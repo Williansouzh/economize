@@ -28,5 +28,35 @@ const _icons = <String, IconData>{
 };
 IconData categoryIcon(String name) => _icons[name] ?? Icons.category;
 
-const incomeColor = Color(0xFF2E7D32);
-const expenseColor = Color(0xFFC62828);
+/// Ícones que o usuário pode escolher para uma conta (nome salvo no backend → ícone).
+const accountIcons = <String, IconData>{
+  'account_balance_wallet': Icons.account_balance_wallet,
+  'account_balance': Icons.account_balance,
+  'credit_card': Icons.credit_card,
+  'savings': Icons.savings,
+  'payments': Icons.payments,
+  'trending_up': Icons.trending_up,
+  'currency_exchange': Icons.currency_exchange,
+  'store': Icons.store,
+  'work': Icons.work,
+  'home': Icons.home,
+  'flight': Icons.flight,
+  'pix': Icons.pix,
+};
+IconData accountIcon(String name) => accountIcons[name] ?? Icons.account_balance_wallet;
+
+/// Cores sugeridas para contas (as dos bancos mais comuns aparecem primeiro).
+const accountColors = [
+  '#00A86B', '#8A05BE', '#EC7000', '#CC092F', '#FFCC00', '#0070AF',
+  '#1E88E5', '#00897B', '#5E35B1', '#F4511E', '#6D4C41', '#546E7A',
+];
+
+const incomeColor = Color(0xFF1B9E5A);
+const expenseColor = Color(0xFFE5484D);
+const warningColor = Color(0xFFF5A524);
+
+String percent(double v) => '${(v * 100).toStringAsFixed(v.abs() < .1 ? 1 : 0).replaceAll('.', ',')}%';
+
+/// Texto escuro ou claro, o que contrastar melhor com [background].
+Color onColor(Color background) =>
+    background.computeLuminance() > .55 ? Colors.black87 : Colors.white;

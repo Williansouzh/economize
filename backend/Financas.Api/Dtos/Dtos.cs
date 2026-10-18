@@ -6,10 +6,10 @@ public record RegisterRequest(string Name, string Email, string Password);
 public record LoginRequest(string Email, string Password);
 public record AuthResponse(string Token, string Name, string Email);
 
-public record AccountRequest(string Name, decimal InitialBalance, string? Color);
+public record AccountRequest(string Name, decimal InitialBalance, string? Color, string? Icon);
 /// <param name="Balance">Saldo atual: lançamentos pagos com data até hoje.</param>
 /// <param name="ForecastBalance">Saldo previsto: todos os lançamentos até o fim do mês consultado.</param>
-public record AccountDto(Guid Id, string Name, decimal InitialBalance, decimal Balance, decimal ForecastBalance, string Color);
+public record AccountDto(Guid Id, string Name, decimal InitialBalance, decimal Balance, decimal ForecastBalance, string Color, string Icon);
 
 public record CategoryRequest(string Name, TransactionType Type, string? Icon, string? Color);
 public record CategoryDto(Guid Id, string Name, TransactionType Type, string Icon, string Color);

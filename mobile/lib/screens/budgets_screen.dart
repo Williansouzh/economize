@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../utils/format.dart';
 import '../widgets/common.dart';
 import '../widgets/month_loader.dart';
 import 'dashboard_screen.dart';
@@ -26,7 +27,16 @@ class BudgetsScreen extends StatelessWidget {
           DropdownButtonFormField<String>(
             initialValue: categoryId,
             decoration: const InputDecoration(labelText: 'Categoria'),
-            items: expenseCats.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+            items: expenseCats
+                .map((c) => DropdownMenuItem(
+                      value: c.id,
+                      child: Row(children: [
+                        Icon(categoryIcon(c.icon), color: hexColor(c.color), size: 20),
+                        const SizedBox(width: 8),
+                        Text(c.name),
+                      ]),
+                    ))
+                .toList(),
             onChanged: budget == null ? (v) => categoryId = v : null,
           ),
           const SizedBox(height: 12),
@@ -72,34 +82,100 @@ class BudgetsScreen extends StatelessWidget {
       Expanded(
         child: MonthLoader<Dashboard>(
           load: (s) => s.api.dashboard(s.monthKey),
-          builder: (context, d, _) => ListView(padding: const EdgeInsets.all(16), children: [
+          builder: (context, d, _) => ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
             if (d.budgets.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 32),
-                child: Text('Defina limites de gasto por categoria e acompanhe ao longo do mês.',
-                    textAlign: TextAlign.center),
+              const EmptyState(
+                icon: Icons.savings_outlined,
+                title: 'Nenhum orçamento ainda',
+                message: 'Defina limites de gasto por categoria e acompanhe ao longo do mês.',
+              )
+            else ...[
+              _BudgetsSummary(d.budgets),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Column(children: [
+                    for (final b in d.budgets) BudgetProgress(b, onTap: () => _edit(context, budget: b)),
+                  ]),
+                ),
               ),
-            ...d.budgets.map((b) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: BudgetProgress(b, onLongPress: () => _edit(context, budget: b)),
-                  ),
-                )),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Toque em um orçamento para editar.',
+                    textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
+              ),
+            ],
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
               onPressed: () => _edit(context),
               icon: const Icon(Icons.add),
               label: const Text('Adicionar orçamento'),
             ),
-            if (d.budgets.isNotEmpty)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Pressione e segure um orçamento para editar.',
-                    textAlign: TextAlign.center, style: TextStyle(fontSize: 12)),
-              ),
           ]),
         ),
       ),
     ]);
+  }
+}
+
+class _BudgetsSummary extends StatelessWidget {
+  final List<Budget> budgets;
+  const _BudgetsSummary(this.budgets);
+
+  @override
+  Widget build(BuildContext context) {
+    final limit = budgets.fold(0.0, (a, b) => a + b.limit);
+    final spent = budgets.fold(0.0, (a, b) => a + b.spent);
+    final over = budgets.where((b) => b.spent > b.limit).length;
+    final progress = limit == 0 ? 0.0 : spent / limit;
+    final color = progress > 1 ? expenseColor : (progress > .8 ? warningColor : incomeColor);
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(children: [
+          SizedBox(
+            width: 84,
+            height: 84,
+            child: Stack(fit: StackFit.expand, children: [
+              CircularProgressIndicator(
+                value: progress.clamp(0, 1),
+                strokeWidth: 9,
+                strokeCap: StrokeCap.round,
+                color: color,
+                backgroundColor: color.withValues(alpha: .14),
+              ),
+              Center(
+                child: Text('${(progress * 100).round()}%',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Orçamento do mês', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text('${money(spent)} de ${money(limit)}',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                over == 0
+                    ? 'Restam ${money((limit - spent).clamp(0, double.infinity))} para gastar'
+                    : over == 1
+                        ? '1 categoria estourou o limite'
+                        : '$over categorias estouraram o limite',
+                style: TextStyle(color: over == 0 ? incomeColor : expenseColor, fontWeight: FontWeight.w600),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
   }
 }

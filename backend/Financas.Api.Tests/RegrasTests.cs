@@ -119,6 +119,25 @@ public class RegrasTests
         Assert.Equal(HttpStatusCode.OK, (await LinkAsync(agent, phone, await NewCodeAsync(user))).StatusCode);
     }
 
+    // ---------- Ícone da conta ----------
+
+    private record AccountWithIcon(Guid Id, string Name, string Icon);
+
+    [Fact]
+    public async Task Conta_guarda_icone_e_carteira_padrao_ja_vem_com_icone()
+    {
+        using var factory = new ApiFactory();
+        var client = await factory.CreateUserClientAsync();
+
+        var res = await client.PostAsJsonAsync("/api/accounts",
+            new { name = "Nubank", initialBalance = 0m, color = "#8A05BE", icon = "credit_card" });
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+
+        var accounts = (await client.GetFromJsonAsync<List<AccountWithIcon>>("/api/accounts"))!;
+        Assert.Equal("credit_card", accounts.Single(a => a.Name == "Nubank").Icon);
+        Assert.Equal("account_balance_wallet", accounts.Single(a => a.Name == "Carteira").Icon);
+    }
+
     // ---------- Chave JWT ----------
 
     [Fact]

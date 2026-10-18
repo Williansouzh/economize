@@ -32,6 +32,11 @@ namespace Financas.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
                     b.Property<decimal>("InitialBalance")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)");

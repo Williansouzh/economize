@@ -51,13 +51,12 @@ builder.Services.AddHttpClient<DeepSeekClient>(c =>
 
 var app = builder.Build();
 
-// Aplica as migrations pendentes na subida. O EF Core trava a tabela de histórico durante a
-// aplicação, então várias réplicas subindo juntas não aplicam a mesma migration duas vezes.
+// Aplica as migrations pendentes na subida, uma réplica por vez (veja DatabaseMigrator).
 // Para aplicar fora da API (pipeline de deploy), use Database:MigrateOnStartup=false e "dotnet ef database update".
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    DatabaseMigrator.Migrate(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 }
 
 if (app.Environment.IsDevelopment())

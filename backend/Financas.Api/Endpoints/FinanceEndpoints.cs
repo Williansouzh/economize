@@ -23,17 +23,17 @@ public static class FinanceEndpoints
 
         accounts.MapPost("/", async (AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var a = new Account { UserId = user.UserId(), Name = req.Name, InitialBalance = req.InitialBalance, Color = req.Color ?? "#4CAF50" };
+            var a = new Account { UserId = user.UserId(), Name = req.Name, InitialBalance = req.InitialBalance, Color = req.Color ?? "#4CAF50", Icon = req.Icon ?? "account_balance_wallet" };
             db.Accounts.Add(a);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance, a.InitialBalance, a.Color));
+            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance, a.InitialBalance, a.Color, a.Icon));
         });
 
         accounts.MapPut("/{id:guid}", async (Guid id, AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
             var a = await db.Accounts.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
             if (a is null) return Results.NotFound();
-            a.Name = req.Name; a.InitialBalance = req.InitialBalance; a.Color = req.Color ?? a.Color;
+            a.Name = req.Name; a.InitialBalance = req.InitialBalance; a.Color = req.Color ?? a.Color; a.Icon = req.Icon ?? a.Icon;
             await db.SaveChangesAsync();
             return Results.NoContent();
         });

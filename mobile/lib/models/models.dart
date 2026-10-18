@@ -5,7 +5,7 @@ String txTypeToJson(TxType t) => t == TxType.income ? 'Income' : 'Expense';
 double _d(dynamic v) => (v as num).toDouble();
 
 class Account {
-  final String id, name, color;
+  final String id, name, color, icon;
 
   /// [balance]: só lançamentos pagos até hoje. [forecastBalance]: tudo até o fim do mês consultado.
   final double initialBalance, balance, forecastBalance;
@@ -13,6 +13,7 @@ class Account {
       : id = j['id'],
         name = j['name'],
         color = j['color'],
+        icon = j['icon'] ?? 'account_balance_wallet',
         initialBalance = _d(j['initialBalance']),
         balance = _d(j['balance']),
         forecastBalance = _d(j['forecastBalance']);
