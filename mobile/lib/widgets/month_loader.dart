@@ -31,8 +31,13 @@ class _MonthLoaderState<T> extends State<MonthLoader<T>> {
 
   Future<void> _reload() async {
     final f = widget.load(context.read<AppState>());
-    setState(() => _future = f);
-    await f.catchError((_) => null as T);
+    setState(() {
+      _future = f;
+    });
+    // O erro aparece pelo FutureBuilder; aqui só esperamos para o indicador de "atualizando" sumir.
+    try {
+      await f;
+    } catch (_) {}
   }
 
   @override
