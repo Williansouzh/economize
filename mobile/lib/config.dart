@@ -11,3 +11,6 @@ const String apiBaseUrl = String.fromEnvironment(
 /// Número do WhatsApp do assistente (só para exibir na tela de vinculação).
 /// flutter run --dart-define=WHATSAPP_BOT=+55 11 99999-9999
 const String whatsappBotNumber = String.fromEnvironment('WHATSAPP_BOT');
+
+/// Páginas públicas do site, abertas no navegador.
+const privacyPolicyUrl = 'https://economizze.tech/privacidade.html';

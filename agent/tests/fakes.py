@@ -54,6 +54,9 @@ class FakeFinance:
         self.linked[phone] = self.codes.pop(code)
         return self.linked[phone]
 
+    def forget(self, phone):
+        pass
+
     async def login(self, phone):
         return ("token", self.linked[phone]) if phone in self.linked else None
 

@@ -140,6 +140,11 @@ class ApiClient {
 
   Future<void> deleteTransfer(String id) => delete('/transfers/$id');
 
+  // ---- Conta ----
+  /// Exclui a conta e todos os dados. Pede a senha de novo (RN-30).
+  Future<void> deleteAccount(String password) => _send(
+      http.delete(_uri('/me'), headers: _headers, body: jsonEncode({'password': password})));
+
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];
   Future<String> whatsAppLinkCode() async => (await post('/me/whatsapp-code', {}))['code'];

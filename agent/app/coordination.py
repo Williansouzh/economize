@@ -39,6 +39,10 @@ class Coordinator(Protocol):
         """Pega para esta instância as mensagens abandonadas por uma instância que caiu."""
         ...
 
+    async def forget(self, phone: str) -> None:
+        """Apaga as mensagens guardadas desse número (RN-30)."""
+        ...
+
 
 class InMemoryCoordinator:
     def __init__(self, max_ids: int = 5000):
@@ -68,6 +72,9 @@ class InMemoryCoordinator:
 
     async def claim_stale(self, older_than_seconds: int, max_attempts: int) -> list[dict[str, Any]]:
         return []
+
+    async def forget(self, phone: str) -> None:
+        pass  # só guarda ids, sem conteúdo
 
 
 class PostgresCoordinator:
@@ -133,6 +140,10 @@ class PostgresCoordinator:
                     FOR UPDATE SKIP LOCKED)
                 RETURNING payload""", (max_attempts, older_than_seconds))
             return [row[0] for row in await cur.fetchall()]
+
+    async def forget(self, phone: str) -> None:
+        async with self._pool.connection() as conn:
+            await conn.execute("DELETE FROM agent_processed_messages WHERE payload->>'phone' = %s", (phone,))
 
     @asynccontextmanager
     async def lock(self, phone: str) -> AsyncIterator[None]:

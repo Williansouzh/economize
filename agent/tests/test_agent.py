@@ -122,6 +122,24 @@ async def test_mensagem_retomada_avisa_o_modelo_para_nao_registrar_de_novo():
     assert "processada de novo" not in llm.received[1][0].content
 
 
+async def test_conta_excluida_ou_desvinculada_apaga_o_historico():
+    """RN-30: forget (chamado pela API) apaga a conversa; e, se o aviso não chegar,
+    a primeira mensagem do número já desvinculado apaga também."""
+    handler, finance, _ = make_handler([AIMessage(content="ok"), AIMessage(content="ok")])
+    config = {"configurable": {"thread_id": PHONE}}
+    checkpointer = handler._graph.checkpointer
+
+    await handler.handle(text("gastei 10 no café"))
+    assert await checkpointer.aget_tuple(config) is not None
+    await handler.forget(PHONE)
+    assert await checkpointer.aget_tuple(config) is None
+
+    await handler.handle(text("gastei 20 no almoço"))
+    del finance.linked[PHONE]  # desvinculado sem o aviso da API
+    assert "VINCULAR" in await handler.handle(text("oi"))
+    assert await checkpointer.aget_tuple(config) is None
+
+
 def test_match_by_name_tolera_acento_e_erro():
     assert match_by_name(CATEGORIES, "ALIMENTACAO")["id"] == "c1"
     assert match_by_name(CATEGORIES, "transporte ")["id"] == "c2"

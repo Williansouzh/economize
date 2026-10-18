@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config.dart';
 import '../state/app_state.dart';
 import 'budgets_screen.dart';
 import 'dashboard_screen.dart';
+import 'delete_account_screen.dart';
 import 'insights_screen.dart';
 import 'transaction_form_screen.dart';
 import 'transactions_screen.dart';
@@ -53,6 +56,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 'logout' => state.logout(),
                 'whatsapp' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
+                'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
+                'delete' => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen())),
                 _ => null,
               },
               itemBuilder: (_) => [
@@ -63,8 +69,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListTile(leading: Icon(Icons.chat_outlined), title: Text('Conectar WhatsApp')),
                 ),
                 const PopupMenuItem(
+                  value: 'privacy',
+                  child: ListTile(leading: Icon(Icons.shield_outlined), title: Text('Política de privacidade')),
+                ),
+                const PopupMenuItem(
                   value: 'logout',
                   child: ListTile(leading: Icon(Icons.logout), title: Text('Sair')),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    leading: Icon(Icons.delete_forever_outlined, color: Color(0xFFE5484D)),
+                    title: Text('Excluir minha conta', style: TextStyle(color: Color(0xFFE5484D))),
+                  ),
                 ),
               ],
               child: CircleAvatar(

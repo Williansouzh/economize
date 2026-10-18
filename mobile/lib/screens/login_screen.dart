@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -116,6 +118,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: () => setState(() => _register = !_register),
                           child: Text(_register ? 'Já tenho conta' : 'Ainda não tem conta? Cadastre-se',
                               style: TextStyle(color: cs.primary)),
+                        ),
+                        if (_register)
+                          Text('Ao criar a conta, você concorda com a política de privacidade.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                        TextButton(
+                          onPressed: () => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
+                          child: const Text('Política de privacidade', style: TextStyle(fontSize: 12)),
                         ),
                       ]),
                     ),

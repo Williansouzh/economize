@@ -43,6 +43,7 @@ builder.Services.AddScoped<LinkAttemptLimiter>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
+builder.Services.AddHttpClient<AgentClient>(c => c.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddHttpClient<DeepSeekClient>(c =>
 {
     c.BaseAddress = new Uri(builder.Configuration["DeepSeek:BaseUrl"]!.TrimEnd('/') + "/");

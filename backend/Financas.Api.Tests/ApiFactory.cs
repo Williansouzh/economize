@@ -1,5 +1,7 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Financas.Api.Services;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -32,6 +34,9 @@ public class ApiFactory : WebApplicationFactory<Program>
     public string? JwtKey { get; init; }
     public Dictionary<string, string> Settings { get; init; } = [];
 
+    /// <summary>Corpo de cada chamada da API ao agente (POST /internal/forget). Só com Agent:Url definida.</summary>
+    public List<string> AgentCalls { get; } = [];
+
     /// <summary>Relógio controlado pelos testes. Padrão: 17/10/2026 15:00 UTC (12:00 em São Paulo).</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 17, 15, 0, 0, TimeSpan.Zero));
 
@@ -42,7 +47,11 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Agent:ApiKey", AgentKey);
         if (JwtKey is not null) builder.UseSetting("Jwt:Key", JwtKey);
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
-        builder.ConfigureTestServices(s => s.AddSingleton<TimeProvider>(Clock));
+        builder.ConfigureTestServices(s =>
+        {
+            s.AddSingleton<TimeProvider>(Clock);
+            s.AddHttpClient<AgentClient>().ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(AgentCalls));
+        });
     }
 
     public async Task<HttpClient> CreateUserClientAsync(string email = "user@teste.com")
@@ -74,4 +83,15 @@ public class ApiFactory : WebApplicationFactory<Program>
     }
 
     public record AuthBody(string Token, string Name, string Email);
+
+    /// <summary>Faz o papel do agente: guarda o que recebeu e responde 200.</summary>
+    private class RecordingHandler(List<string> calls) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = await request.Content!.ReadAsStringAsync(ct);
+            lock (calls) calls.Add($"{request.RequestUri!.AbsolutePath} {body}");
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }
+    }
 }

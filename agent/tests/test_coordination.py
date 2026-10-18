@@ -136,3 +136,16 @@ async def test_postgres_desiste_depois_do_limite_de_tentativas():
             await coord.started(msg_id)
         await asyncio.sleep(1.1)
         assert [p for p in await coord.claim_stale(1, max_attempts=2) if p["id"] == msg_id] == []
+
+
+@needs_pg
+async def test_postgres_forget_apaga_as_mensagens_guardadas_do_numero():
+    phone, other = f"55{uuid.uuid4().int % 10**11}", f"55{uuid.uuid4().int % 10**11}"
+    ids = [f"wamid.{uuid.uuid4()}" for _ in range(2)]
+    async with postgres_backend(DB_URL, 4) as (_, coord):
+        await coord.first_time(ids[0], {"id": ids[0], "phone": phone})
+        await coord.first_time(ids[1], {"id": ids[1], "phone": other})
+        await coord.forget(phone)
+        async with coord._pool.connection() as conn:
+            cur = await conn.execute("SELECT id FROM agent_processed_messages WHERE id = ANY(%s)", (ids,))
+            assert [r[0] for r in await cur.fetchall()] == [ids[1]]

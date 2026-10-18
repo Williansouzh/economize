@@ -4,6 +4,7 @@ using System.Text;
 using Financas.Api.Data;
 using Financas.Api.Dtos;
 using Financas.Api.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Financas.Api.Endpoints;
@@ -35,10 +36,41 @@ public static class WhatsAppEndpoints
             return Results.Ok(new LinkCodeDto(u.WhatsAppLinkCode, u.WhatsAppLinkCodeExpiresAt.Value));
         });
 
-        me.MapDelete("/whatsapp", async (ClaimsPrincipal user, AppDbContext db) =>
+        me.MapDelete("/whatsapp", async (ClaimsPrincipal user, AppDbContext db, AgentClient agentClient) =>
         {
-            await db.Users.Where(u => u.Id == user.UserId())
-                .ExecuteUpdateAsync(s => s.SetProperty(u => u.WhatsAppPhone, (string?)null));
+            var u = await db.Users.FindAsync(user.UserId());
+            if (u is null) return Results.NotFound();
+            var phone = u.WhatsAppPhone;
+            u.WhatsAppPhone = null;
+            await db.SaveChangesAsync();
+            if (phone is not null) await agentClient.ForgetAsync(phone);
+            return Results.NoContent();
+        });
+
+        // RN-30: exclui a conta e todos os dados dela. Pede a senha para que um token vazado
+        // ou um celular desbloqueado não bastem para apagar tudo.
+        me.MapDelete("/", async ([FromBody] DeleteAccountRequest req, ClaimsPrincipal user, AppDbContext db, AgentClient agentClient) =>
+        {
+            var uid = user.UserId();
+            var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == uid);
+            if (u is null) return Results.NotFound();
+            if (!BCrypt.Net.BCrypt.Verify(req.Password ?? "", u.PasswordHash))
+                return Results.BadRequest(new { error = "Senha incorreta." });
+
+            await using (var tx = await db.Database.BeginTransactionAsync())
+            {
+                // Ordem das chaves estrangeiras: lançamentos antes das categorias (exclusão restrita).
+                await db.Transactions.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await db.Transfers.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await db.Budgets.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await db.Accounts.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await db.Categories.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                if (u.WhatsAppPhone is not null)
+                    await db.LinkAttempts.Where(x => x.Phone == u.WhatsAppPhone).ExecuteDeleteAsync();
+                await db.Users.Where(x => x.Id == uid).ExecuteDeleteAsync();
+                await tx.CommitAsync();
+            }
+            if (u.WhatsAppPhone is not null) await agentClient.ForgetAsync(u.WhatsAppPhone);
             return Results.NoContent();
         });
 

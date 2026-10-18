@@ -141,7 +141,8 @@ Esse `docker-compose.yml` é para desenvolvimento. Para produção use o `docker
 | GET/POST/PUT/DELETE | `/api/transfers` | Transferências entre contas |
 | POST | `/api/insights` | Análise do mês pela IA (JSON estruturado) |
 | POST | `/api/insights/chat` | Pergunta livre para a IA |
-| GET · POST · DELETE | `/api/me` · `/api/me/whatsapp-code` · `/api/me/whatsapp` | Perfil e vinculação do WhatsApp |
+| GET · DELETE | `/api/me` | Perfil; excluir a conta e todos os dados (pede a senha) |
+| POST · DELETE | `/api/me/whatsapp-code` · `/api/me/whatsapp` | Vinculação do WhatsApp |
 | POST | `/api/agent/link` · `/api/agent/token` | Usadas só pelo agente (header `X-Agent-Key`) |
 
 ## Como funciona a IA

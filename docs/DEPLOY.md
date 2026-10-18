@@ -143,8 +143,14 @@ precisa crescer sempre).
 2. O `applicationId` é `tech.economizze.app` (`mobile/android/app/build.gradle.kts`). Depois do primeiro
    envio à Play, ele **nunca** mais pode mudar.
 3. Crie o app, envie o `.aab` em **Testes → Teste fechado** e preencha a ficha da loja.
-4. A Play exige uma **política de privacidade** (URL pública) e o formulário de **Segurança dos dados**.
-   O app coleta e-mail, nome e dados financeiros, e envia resumos ao DeepSeek (RN-16 em `ARQUITETURA.md`).
+4. Na ficha da loja, informe:
+   - **Política de privacidade:** `https://economizze.tech/privacidade.html`
+     (fonte: `mobile/web/privacidade.html`, publicada junto com o app web);
+   - **Exclusão de conta:** `https://economizze.tech/excluir-conta.html` (o app também tem
+     "Excluir minha conta" no menu, RN-30).
+   No formulário de **Segurança dos dados**, declare: nome, e-mail, informações financeiras e, para quem
+   usa o WhatsApp, número de telefone e mensagens; dados compartilhados com a DeepSeek (IA) e a Meta
+   (WhatsApp); criptografia em trânsito; exclusão a pedido. Mantenha coerente com `privacidade.html`.
 5. Ative a **Assinatura de apps do Google Play** (padrão): a Google guarda a chave final e a sua vira a
    "chave de upload".
 

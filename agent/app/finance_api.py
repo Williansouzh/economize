@@ -44,6 +44,10 @@ class FinanceApi:
         self._tokens.pop(phone, None)
         return res.json()["name"]
 
+    def forget(self, phone: str) -> None:
+        """Descarta o token em cache: o número pode ter sido desvinculado ou a conta excluída."""
+        self._tokens.pop(phone, None)
+
     async def login(self, phone: str) -> tuple[str, str] | None:
         """Retorna (token, nome) do usuário vinculado ao número, ou None."""
         cached = self._tokens.get(phone)

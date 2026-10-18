@@ -51,6 +51,7 @@ public record ChatRequest(string Question, string? Month);
 public record ChatResponse(string Answer);
 
 public record MeDto(string Name, string Email, string? WhatsAppPhone);
+public record DeleteAccountRequest(string Password);
 public record LinkCodeDto(string Code, DateTime ExpiresAt);
 public record AgentLinkRequest(string Phone, string Code);
 public record AgentTokenRequest(string Phone);

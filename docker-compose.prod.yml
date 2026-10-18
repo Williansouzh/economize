@@ -33,6 +33,8 @@ services:
       ConnectionStrings__Default: Host=db;Database=financas;Username=postgres;Password=${POSTGRES_PASSWORD}
       DeepSeek__ApiKey: ${DEEPSEEK_API_KEY:?defina DEEPSEEK_API_KEY no .env}
       Agent__ApiKey: ${AGENT_API_KEY:?defina AGENT_API_KEY no .env}
+      # Rede interna: a API pede ao agente para apagar o histórico de um número (RN-30).
+      Agent__Url: http://agent:8000
       Jwt__Key: ${JWT_KEY:?defina JWT_KEY no .env}
       # A API só é alcançável pelo Caddy, então o X-Forwarded-For dele é confiável (rate limit por IP real).
       ReverseProxy__TrustForwardedHeaders: "true"

@@ -31,6 +31,15 @@ class MessageHandler:
         self._coordinator = coordinator or InMemoryCoordinator()
         self._timeout = timeout_seconds
 
+    async def forget(self, phone: str, messages: bool = True) -> None:
+        """Apaga o histórico de conversa do número (RN-30). Com messages=False mantém os ids já
+        vistos, que ainda servem para descartar reenvios da Meta da mensagem atual."""
+        if self._graph.checkpointer is not None:
+            await self._graph.checkpointer.adelete_thread(phone)
+        self._finance.forget(phone)
+        if messages:
+            await self._coordinator.forget(phone)
+
     async def handle(self, msg: IncomingMessage) -> str | None:
         # Mensagens do mesmo usuário são processadas em ordem, uma por vez (em todas as instâncias).
         async with self._coordinator.lock(msg.phone):
@@ -50,9 +59,14 @@ class MessageHandler:
                 name = await self._finance.link(msg.phone, m.group(1))
             except FinanceApiError as e:
                 return f"❌ {e}"
+            # Conversa nova: o número pode ter sido de outra conta antes.
+            await self.forget(msg.phone, messages=False)
             return f"✅ Tudo certo, {name.split()[0]}! Seu WhatsApp está conectado.\n\n{HELP}"
 
         if await self._finance.login(msg.phone) is None:
+            # Se o aviso da API (conta excluída ou WhatsApp desconectado) não chegou, o histórico
+            # é apagado aqui, na primeira mensagem do número depois disso.
+            await self.forget(msg.phone, messages=False)
             return WELCOME_UNLINKED
 
         if msg.type == "text":

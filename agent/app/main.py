@@ -6,11 +6,13 @@ URL do webhook na Meta: https://SEU-DOMINIO/webhook
 
 import asyncio
 import dataclasses
+import hmac
 import logging
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 from langchain_deepseek import ChatDeepSeek
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -93,6 +95,21 @@ async def receive_webhook(request: Request, background: BackgroundTasks):
             background.add_task(process, request.app, msg)
     # Responde 200 na hora; o processamento (IA, Whisper, OCR) roda em segundo plano.
     return {"status": "received"}
+
+
+class ForgetRequest(BaseModel):
+    phone: str
+
+
+@app.post("/internal/forget", status_code=204)
+async def forget(body: ForgetRequest, request: Request, x_agent_key: str = Header(default="")):
+    """Chamada pela API quando a conta é excluída ou o WhatsApp é desconectado (RN-30).
+    Não passa pelo Caddy: só é alcançável pela rede interna do Docker."""
+    expected = settings.agent_api_key
+    if not expected or not hmac.compare_digest(expected.encode(), x_agent_key.encode()):
+        raise HTTPException(status_code=401)
+    await request.app.state.handler.forget(body.phone)
+    log.info("Histórico de %s apagado a pedido da API", body.phone)
 
 
 async def process(app: FastAPI, msg: IncomingMessage):
