@@ -140,9 +140,8 @@ precisa crescer sempre).
 
 1. Crie a conta de desenvolvedor em [play.google.com/console](https://play.google.com/console) (US$ 25, uma vez).
    Contas pessoais novas precisam de um **teste fechado com 12 testadores por 14 dias** antes da produção.
-2. **Antes do primeiro envio, escolha o `applicationId`** em `mobile/android/app/build.gradle.kts`.
-   O atual (`com.financas.financas_app`) é genérico; algo como `br.com.seudominio.financas` é melhor.
-   Depois de publicado, ele **nunca** mais pode mudar.
+2. O `applicationId` é `tech.economizze.app` (`mobile/android/app/build.gradle.kts`). Depois do primeiro
+   envio à Play, ele **nunca** mais pode mudar.
 3. Crie o app, envie o `.aab` em **Testes → Teste fechado** e preencha a ficha da loja.
 4. A Play exige uma **política de privacidade** (URL pública) e o formulário de **Segurança dos dados**.
    O app coleta e-mail, nome e dados financeiros, e envia resumos ao DeepSeek (RN-16 em `ARQUITETURA.md`).
