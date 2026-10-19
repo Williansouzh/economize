@@ -496,3 +496,6 @@ __pycache__/
 backups/
 # Manifest do build de debug do Android (libera HTTP para a API local)
 !mobile/android/app/src/debug/
+
+# APK publicado pela landing page (deploy/publish-apk.sh), só no servidor
+/downloads/

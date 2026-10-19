@@ -1,7 +1,9 @@
 # Um domínio só, com HTTPS automático (Let's Encrypt):
 #   https://DOMAIN/api/*    → API .NET
 #   https://DOMAIN/webhook  → agente do WhatsApp (URL cadastrada na Meta)
-#   https://DOMAIN/         → app Flutter web
+#   https://DOMAIN/app/     → app Flutter web
+#   https://DOMAIN/download → APK publicado (deploy/publish-apk.sh)
+#   https://DOMAIN/         → landing page e páginas públicas (site/)
 # App web e API ficam na mesma origem, então o navegador não precisa de CORS.
 {
 	email {$ACME_EMAIL}
@@ -39,12 +41,34 @@
 		reverse_proxy agent:8000
 	}
 
+	handle /download/* {
+		root * /srv/downloads
+		uri strip_prefix /download
+		header Cache-Control "no-cache"
+		@apk path *.apk
+		header @apk Content-Type "application/vnd.android.package-archive"
+		header @apk Content-Disposition "attachment; filename=economizze.apk"
+		file_server
+	}
+
+	redir /app /app/ 308
+	handle /app/* {
+		root * /srv/web
+		# index.html e o bootstrap não podem ficar em cache, senão o app não atualiza.
+		@nocache path /app/ /app/index.html /app/flutter_service_worker.js /app/flutter_bootstrap.js /app/version.json
+		header @nocache Cache-Control "no-cache"
+		try_files {path} /app/index.html
+		file_server
+	}
+
 	handle {
 		root * /srv/web
-		# index.html e o service worker não podem ficar em cache, senão o app não atualiza.
-		@nocache path / /index.html /flutter_service_worker.js /flutter_bootstrap.js /version.json
-		header @nocache Cache-Control "no-cache"
-		try_files {path} /index.html
+		@pages path / *.html
+		header @pages Cache-Control "no-cache"
+		# A versão antiga do app ficava na raiz e registrava este service worker; o do Flutter
+		# só se desregistra, então continua sendo servido aqui para limpar navegadores antigos.
+		rewrite /flutter_service_worker.js /app/flutter_service_worker.js
+		try_files {path} {path}.html
 		file_server
 	}
 }

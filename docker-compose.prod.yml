@@ -88,6 +88,8 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Sites de outros sistemas nesta VPS (*.caddy e *.global). Vazia por padrão.
       - ${EDGE_SITES_DIR:-./deploy/sites}:/etc/caddy/sites:ro
+      # APK do botão de download da landing page (deploy/publish-apk.sh).
+      - ./downloads:/srv/downloads:ro
     networks: [default, edge]
     depends_on: [api, agent]
     logging: *logging

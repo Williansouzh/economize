@@ -4,7 +4,9 @@ Tudo roda numa VPS com Docker: API, agente do WhatsApp, PostgreSQL, Caddy (HTTPS
 e um serviço de backup. Só as portas 80 e 443 ficam abertas.
 
 ```
-https://SEU-DOMINIO/          → app Flutter web
+https://SEU-DOMINIO/          → landing page e páginas públicas (pasta site/)
+https://SEU-DOMINIO/app/      → app Flutter web
+https://SEU-DOMINIO/download/economizze.apk → APK (deploy/publish-apk.sh)
 https://SEU-DOMINIO/api/...   → API .NET
 https://SEU-DOMINIO/webhook   → agente (URL cadastrada na Meta)
 https://SEU-DOMINIO/health/api, /health/agent → checagem de saúde
@@ -12,6 +14,7 @@ https://SEU-DOMINIO/health/api, /health/agent → checagem de saúde
 
 Arquivos: [`docker-compose.prod.yml`](../docker-compose.prod.yml), [`deploy/Caddyfile`](../deploy/Caddyfile),
 [`deploy/web.Dockerfile`](../deploy/web.Dockerfile), [`deploy/backup.sh`](../deploy/backup.sh),
+[`deploy/publish-apk.sh`](../deploy/publish-apk.sh), [`site/`](../site/),
 [`.env.prod.example`](../.env.prod.example).
 
 ## 1. Domínio
@@ -97,7 +100,8 @@ curl https://SEU-DOMINIO/health/api                 # {"status":"ok"}
 curl https://SEU-DOMINIO/health/agent               # {"status":"ok"}
 ```
 
-Abra `https://SEU-DOMINIO` no navegador: é o app web. Crie sua conta por ele.
+Abra `https://SEU-DOMINIO` no navegador: é a landing page. O app web fica em `https://SEU-DOMINIO/app/`;
+crie sua conta por ele.
 
 ### Outros sistemas na mesma VPS
 
@@ -154,6 +158,16 @@ flutter build appbundle --release --dart-define=API_URL=https://SEU-DOMINIO
 #   → build/app/outputs/bundle/release/app-release.aab
 ```
 
+**Botão "Baixar para Android" da landing page:** depois do build do APK, rode na sua máquina
+
+```bash
+deploy/publish-apk.sh            # envia o APK para ~/economize/downloads no servidor
+```
+
+O script troca o arquivo de uma vez (ninguém baixa um APK pela metade) e grava `version.json`, que a
+landing page usa para mostrar versão e tamanho. O APK não vai para o git; a pasta `downloads/` é montada
+no Caddy. Não precisa reiniciar nada.
+
 A cada nova versão, aumente `version:` no `mobile/pubspec.yaml` (ex.: `1.0.1+2`; o número depois do `+`
 precisa crescer sempre).
 
@@ -166,7 +180,7 @@ precisa crescer sempre).
 3. Crie o app, envie o `.aab` em **Testes → Teste fechado** e preencha a ficha da loja.
 4. Na ficha da loja, informe:
    - **Política de privacidade:** `https://economizze.tech/privacidade.html`
-     (fonte: `mobile/web/privacidade.html`, publicada junto com o app web);
+     (fonte: `site/privacidade.html`, publicada junto com a landing page);
    - **Exclusão de conta:** `https://economizze.tech/excluir-conta.html` (o app também tem
      "Excluir minha conta" no menu, RN-30).
    No formulário de **Segurança dos dados**, declare: nome, e-mail, informações financeiras e, para quem
@@ -196,7 +210,8 @@ docker image prune -f
 ```
 
 As migrations do banco rodam sozinhas quando a API sobe. O app web atualiza no próximo acesso;
-o app Android precisa de um APK/AAB novo só quando o código do app muda.
+o app Android precisa de um APK/AAB novo só quando o código do app muda (e de `deploy/publish-apk.sh`
+para atualizar o download da landing page). Mudanças na pasta `site/` também pedem `--build`.
 
 ## 8. Backups
 

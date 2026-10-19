@@ -1,4 +1,4 @@
-# Proxy (Caddy) com o app Flutter web já compilado dentro.
+# Proxy (Caddy) com a landing page (site/, em /) e o app Flutter web (em /app/) dentro.
 # Build: docker compose -f docker-compose.prod.yml build caddy (contexto = raiz do repositório)
 
 FROM debian:12-slim AS web
@@ -19,8 +19,9 @@ COPY mobile/ ./
 # A API fica no mesmo domínio do app (/api), então a URL base é o próprio domínio.
 ARG DOMAIN
 RUN test -n "$DOMAIN" || (echo "Defina DOMAIN no .env" && exit 1)
-RUN flutter build web --release --dart-define=API_URL=https://${DOMAIN}
+RUN flutter build web --release --base-href /app/ --dart-define=API_URL=https://${DOMAIN}
 
 FROM caddy:2.11.7-alpine
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
-COPY --from=web /src/build/web /srv/web
+COPY site/ /srv/web/
+COPY --from=web /src/build/web /srv/web/app
