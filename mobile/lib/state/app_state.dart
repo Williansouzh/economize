@@ -3,10 +3,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/reminders.dart';
 
 /// Estado global: sessão do usuário, mês selecionado e dados de apoio (contas/categorias).
 class AppState extends ChangeNotifier {
-  final api = ApiClient();
+  final ApiClient api;
+  final reminders = Reminders();
   final _storage = const FlutterSecureStorage();
 
   bool initialized = false;
@@ -60,11 +62,34 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  Future<List<Goal>> goals() => _cached('goals', api.goals);
+  Future<Progress> progress() => _cached('progress', api.progress);
+
   /// Puxar para atualizar: descarta o que estava guardado.
   void clearCache() => _cache.clear();
 
-  AppState() {
-    api.onUnauthorized = logout;
+  // Última categoria usada por tipo: o próximo lançamento já começa com ela.
+  final _lastCategory = <TxType, String>{};
+  String? lastCategory(TxType type) => _lastCategory[type];
+  void rememberCategory(TxType type, String id) {
+    _lastCategory[type] = id;
+    _storage.write(key: 'last_category_${type.name}', value: id);
+  }
+
+  // Última conta usada: sem ela, o padrão é a primeira conta que não é cartão.
+  String? _lastAccount;
+  String? get defaultAccountId {
+    if (accounts.any((a) => a.id == _lastAccount)) return _lastAccount;
+    return (accounts.where((a) => !a.isCard).firstOrNull ?? accounts.firstOrNull)?.id;
+  }
+
+  void rememberAccount(String id) {
+    _lastAccount = id;
+    _storage.write(key: 'last_account', value: id);
+  }
+
+  AppState({ApiClient? api}) : api = api ?? ApiClient() {
+    this.api.onUnauthorized = logout;
   }
 
   Future<void> init() async {
@@ -72,6 +97,11 @@ class AppState extends ChangeNotifier {
     userName = await _storage.read(key: 'name');
     onboardingSeen = await _storage.read(key: 'onboarding_seen') == '1';
     needsSetup = loggedIn && await _storage.read(key: 'setup_pending') == '1';
+    for (final t in TxType.values) {
+      final id = await _storage.read(key: 'last_category_${t.name}');
+      if (id != null) _lastCategory[t] = id;
+    }
+    _lastAccount = await _storage.read(key: 'last_account');
     initialized = true;
     notifyListeners();
     if (loggedIn) {
@@ -79,6 +109,7 @@ class AppState extends ChangeNotifier {
       dashboard().ignore();
       loadReferenceData();
       _refreshToken();
+      reminders.syncSoon(api);
     }
   }
 
@@ -95,6 +126,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) => _auth(api.login(email, password));
+  Future<void> resetPassword(String email, String code, String newPassword) =>
+      _auth(api.resetPassword(email, code, newPassword));
   Future<void> register(String name, String email, String password) async {
     await _auth(api.register(name, email, password));
     needsSetup = true;
@@ -122,6 +155,7 @@ class AppState extends ChangeNotifier {
     await _storage.write(key: 'token', value: api.token);
     await _storage.write(key: 'name', value: userName);
     _cache.clear();
+    reminders.syncSoon(api);
     await loadReferenceData();
     notifyListeners();
   }
@@ -130,9 +164,12 @@ class AppState extends ChangeNotifier {
     api.token = null;
     userName = null;
     _cache.clear();
+    reminders.cancelAll();
     needsSetup = false;
     // Só os dados da sessão: "já viu a apresentação" continua valendo neste aparelho.
-    for (final key in ['token', 'name', 'setup_pending']) {
+    _lastCategory.clear();
+    _lastAccount = null;
+    for (final key in ['token', 'name', 'setup_pending', 'last_category_income', 'last_category_expense', 'last_account']) {
       await _storage.delete(key: key);
     }
     notifyListeners();
@@ -161,6 +198,7 @@ class AppState extends ChangeNotifier {
 
   void dataChanged() {
     _cache.clear();
+    reminders.syncSoon(api);
     revision++;
     loadReferenceData();
     notifyListeners();

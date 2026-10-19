@@ -18,6 +18,8 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        // Exigido pelo flutter_local_notifications (lembretes agendados em Androids antigos).
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -36,11 +38,11 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["appName"] = "Economizze"
-        // APK de um processador só (download da landing page): --android-project-arg=onlyAbi=arm64-v8a.
-        // Sem isso, bibliotecas de plugins de outras arquiteturas entram no APK e um celular de 32 bits
-        // instalaria um app que fecha ao abrir; com o filtro, ele recusa a instalação.
     }
 
+    // APK de um processador só (download da landing page): --android-project-arg=onlyAbi=arm64-v8a.
+    // Sem isso, bibliotecas de plugins de outras arquiteturas entram no APK e um celular de 32 bits
+    // instalaria um app que fecha ao abrir; com o filtro, ele recusa a instalação.
     (project.findProperty("onlyAbi") as String?)?.let { abi ->
         packaging {
             jniLibs {
@@ -84,4 +86,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

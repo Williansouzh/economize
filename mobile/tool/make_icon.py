@@ -98,6 +98,10 @@ for dpi, mult in {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
     save(images["rounded"], f"{res}/mipmap-{dpi}/ic_launcher.png", round(48 * mult))
     save(images["fg"], f"{res}/mipmap-{dpi}/ic_launcher_foreground.png", round(108 * mult))
     save(images["mono"], f"{res}/mipmap-{dpi}/ic_launcher_monochrome.png", round(108 * mult))
+    # Ícone dos lembretes na barra de status: a silhueta branca, sem a margem do ícone adaptativo.
+    os.makedirs(f"{res}/drawable-{dpi}", exist_ok=True)
+    m = images["mono"].size[0]
+    save(images["mono"].crop((m // 6, m // 6, m - m // 6, m - m // 6)), f"{res}/drawable-{dpi}/ic_notification.png", round(24 * mult))
 
 # iOS: o tamanho sai do nome do arquivo (ex.: Icon-App-20x20@3x.png → 60 px). Sem transparência.
 ios = "ios/Runner/Assets.xcassets/AppIcon.appiconset"

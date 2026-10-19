@@ -15,63 +15,69 @@ class TransactionsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      const MonthSelector(),
-      Expanded(
-        child: MonthLoader<(List<Transaction>, List<Transfer>)>(
-          load: (s) => s.monthEntries(),
-          builder: (context, data, _) {
-            final (txs, transfers) = data;
-            if (txs.isEmpty && transfers.isEmpty) {
-              return ListView(children: const [
-                SizedBox(height: 60),
-                EmptyState(
-                  icon: Icons.receipt_long,
-                  title: 'Nenhum lançamento neste mês',
-                  message: 'Toque em + para registrar uma receita ou despesa.',
-                ),
-              ]);
-            }
-            // Agrupa por dia, como no Organizze. Transferências aparecem no dia, mas não somam
-            // nas entradas e saídas: só mudam o dinheiro de conta.
-            final byDay = <DateTime, List<Object>>{};
-            for (final t in txs) {
-              byDay.putIfAbsent(t.date, () => []).add(t);
-            }
-            for (final t in transfers) {
-              byDay.putIfAbsent(t.date, () => []).add(t);
-            }
-            final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
-            double sum(Iterable<Object> l, TxType type) =>
-                l.whereType<Transaction>().where((t) => t.type == type).fold(0.0, (a, t) => a + t.amount);
-            final income = sum(txs, TxType.income), expenses = sum(txs, TxType.expense);
+    return Column(
+      children: [
+        const MonthSelector(),
+        Expanded(
+          child: MonthLoader<(List<Transaction>, List<Transfer>)>(
+            load: (s) => s.monthEntries(),
+            builder: (context, data, _) {
+              final (txs, transfers) = data;
+              if (txs.isEmpty && transfers.isEmpty) {
+                return ListView(
+                  children: const [
+                    SizedBox(height: 60),
+                    EmptyState(
+                      icon: Icons.receipt_long,
+                      title: 'Nenhum lançamento neste mês',
+                      message: 'Toque em + para registrar uma receita ou despesa.',
+                    ),
+                  ],
+                );
+              }
+              // Agrupa por dia, como no Organizze. Transferências aparecem no dia, mas não somam
+              // nas entradas e saídas: só mudam o dinheiro de conta.
+              final byDay = <DateTime, List<Object>>{};
+              for (final t in txs) {
+                byDay.putIfAbsent(t.date, () => []).add(t);
+              }
+              for (final t in transfers) {
+                byDay.putIfAbsent(t.date, () => []).add(t);
+              }
+              final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+              double sum(Iterable<Object> l, TxType type) =>
+                  l.whereType<Transaction>().where((t) => t.type == type).fold(0.0, (a, t) => a + t.amount);
+              final income = sum(txs, TxType.income), expenses = sum(txs, TxType.expense);
 
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
-              children: [
-                _MonthSummary(income: income, expenses: expenses),
-                for (final day in days) ...[
-                  _DayHeader(day, sum(byDay[day]!, TxType.income) - sum(byDay[day]!, TxType.expense)),
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(children: [
-                      for (final (i, item) in byDay[day]!.indexed) ...[
-                        if (i > 0) const Divider(height: 1, indent: 72),
-                        switch (item) {
-                          Transaction t => _TransactionTile(t),
-                          Transfer t => _TransferTile(t),
-                          _ => const SizedBox.shrink(),
-                        },
-                      ],
-                    ]),
-                  ),
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
+                children: [
+                  _MonthSummary(income: income, expenses: expenses),
+                  for (final day in days) ...[
+                    _DayHeader(day, sum(byDay[day]!, TxType.income) - sum(byDay[day]!, TxType.expense)),
+                    Card(
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        children: [
+                          for (final (i, item) in byDay[day]!.indexed) ...[
+                            if (i > 0) const Divider(height: 1, indent: 72),
+                            switch (item) {
+                              Transaction t => TransactionTile(t),
+                              Transfer t => _TransferTile(t),
+                              _ => const SizedBox.shrink(),
+                            },
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -83,27 +89,37 @@ class _MonthSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     Widget item(String label, double v, Color color) => Expanded(
-          child: Column(children: [
-            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
-            const SizedBox(height: 2),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(money(v), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              money(v),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color),
             ),
-          ]),
-        );
+          ),
+        ],
+      ),
+    );
     Widget divider() => Container(width: 1, height: 32, color: cs.outlineVariant);
     final balance = income - expenses;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-        child: Row(children: [
-          item('Entradas', income, incomeColor),
-          divider(),
-          item('Saídas', expenses, expenseColor),
-          divider(),
-          item('Saldo', balance, balance >= 0 ? incomeColor : expenseColor),
-        ]),
+        child: Row(
+          children: [
+            item('Entradas', income, incomeColor),
+            divider(),
+            item('Saídas', expenses, expenseColor),
+            divider(),
+            item('Saldo', balance, balance >= 0 ? incomeColor : expenseColor),
+          ],
+        ),
       ),
     );
   }
@@ -124,23 +140,27 @@ class _DayHeader extends StatelessWidget {
       1 => 'Ontem',
       _ => DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(day),
     };
-    final style = Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-        );
+    final style = Theme.of(context).textTheme.labelLarge
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700);
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-      child: Row(children: [
-        Expanded(child: Text(label[0].toUpperCase() + label.substring(1), style: style)),
-        Text('${total >= 0 ? '+' : '−'} ${money(total.abs())}', style: style),
-      ]),
+      child: Row(
+        children: [
+          Expanded(child: Text(label[0].toUpperCase() + label.substring(1), style: style)),
+          Text('${total >= 0 ? '+' : '−'} ${money(total.abs())}', style: style),
+        ],
+      ),
     );
   }
 }
 
-class _TransactionTile extends StatelessWidget {
+/// Linha de um lançamento; toque edita, arrastar para a esquerda exclui. Usada também na busca e na fatura.
+class TransactionTile extends StatelessWidget {
   final Transaction t;
-  const _TransactionTile(this.t);
+
+  /// Mostra a data no lugar da conta (busca e fatura, em que os lançamentos não estão agrupados por dia).
+  final bool showDate;
+  const TransactionTile(this.t, {super.key, this.showDate = false});
 
   @override
   Widget build(BuildContext context) {
@@ -151,29 +171,52 @@ class _TransactionTile extends StatelessWidget {
       id: t.id,
       title: 'Excluir lançamento?',
       content: t.description.isEmpty ? t.categoryName : t.description,
-      onDelete: (api) => api.deleteTransaction(t.id),
+      series: t.inSeries,
+      onDelete: (api, future) => api.deleteTransaction(t.id, future: future),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        onTap: () => Navigator.push(
-            context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editing: t))),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editing: t))),
         leading: IconBadge(categoryIcon(t.categoryIcon), hexColor(t.categoryColor)),
-        title: Text(t.description.isEmpty ? t.categoryName : t.description,
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Row(children: [
-          Icon(accountIcon(account?.icon ?? ''), size: 13, color: cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text('${t.categoryName} · ${t.accountName}',
-                maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-          ),
-        ]),
-        trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(
-            '${isIncome ? '+' : '−'} ${money(t.amount)}',
-            style: TextStyle(fontWeight: FontWeight.w700, color: isIncome ? incomeColor : expenseColor),
-          ),
-          if (!t.isPaid) const _PendingBadge(),
-        ]),
+        title: Text(
+          t.description.isEmpty ? t.categoryName : t.description,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Row(
+          children: [
+            Icon(accountIcon(account?.icon ?? ''), size: 13, color: cs.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                showDate
+                    ? '${DateFormat('dd/MM/yy').format(t.date)} · ${t.categoryName} · ${t.accountName}'
+                    : '${t.categoryName} · ${t.accountName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            if (t.installmentCount case final n?) ...[
+              const SizedBox(width: 6),
+              _SmallBadge('${t.installmentNumber}/$n'),
+            ] else if (t.inSeries) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.repeat, size: 13, color: cs.onSurfaceVariant),
+            ],
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${isIncome ? '+' : '−'} ${money(t.amount)}',
+              style: TextStyle(fontWeight: FontWeight.w700, color: isIncome ? incomeColor : expenseColor),
+            ),
+            if (!t.isPaid) const _PendingBadge(),
+          ],
+        ),
       ),
     );
   }
@@ -190,20 +233,53 @@ class _TransferTile extends StatelessWidget {
       id: t.id,
       title: 'Excluir transferência?',
       content: '${t.fromAccountName} → ${t.toAccountName}: ${money(t.amount)}',
-      onDelete: (api) => api.deleteTransfer(t.id),
+      onDelete: (api, _) => api.deleteTransfer(t.id),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        onTap: () => Navigator.push(
-            context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editingTransfer: t))),
+        onTap: () =>
+            Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editingTransfer: t))),
         leading: const IconBadge(Icons.swap_horiz, transferColor),
-        title: Text(t.description.isEmpty ? 'Transferência' : t.description,
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text('${t.fromAccountName} → ${t.toAccountName}',
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-        trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(money(t.amount), style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
-          if (!t.isPaid) const _PendingBadge(),
-        ]),
+        title: Text(
+          t.description.isEmpty ? 'Transferência' : t.description,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        subtitle: Text(
+          '${t.fromAccountName} → ${t.toAccountName}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              money(t.amount),
+              style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
+            ),
+            if (!t.isPaid) const _PendingBadge(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallBadge extends StatelessWidget {
+  final String text;
+  const _SmallBadge(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(5)),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: cs.onSurfaceVariant),
       ),
     );
   }
@@ -214,40 +290,61 @@ class _PendingBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.only(top: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: warningColor.withValues(alpha: .15),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: const Text('pendente',
-            style: TextStyle(fontSize: 10, color: Color(0xFFB7791F), fontWeight: FontWeight.w700)),
-      );
+    margin: const EdgeInsets.only(top: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(color: warningColor.withValues(alpha: .15), borderRadius: BorderRadius.circular(6)),
+    child: const Text(
+      'pendente',
+      style: TextStyle(fontSize: 10, color: Color(0xFFB7791F), fontWeight: FontWeight.w700),
+    ),
+  );
 }
 
-/// Arrastar para a esquerda pede confirmação e exclui.
+/// Arrastar para a esquerda pede confirmação e exclui. Em série (fixo ou parcelado), pergunta se
+/// exclui só este ou também os próximos.
 class _Deletable extends StatelessWidget {
   final String id, title, content;
-  final Future<void> Function(ApiClient api) onDelete;
+  final bool series;
+  final Future<void> Function(ApiClient api, bool future) onDelete;
   final Widget child;
-  const _Deletable(
-      {required this.id, required this.title, required this.content, required this.onDelete, required this.child});
+  const _Deletable({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.onDelete,
+    required this.child,
+    this.series = false,
+  });
 
   @override
-  Widget build(BuildContext context) => Dismissible(
-        key: ValueKey(id),
-        direction: DismissDirection.endToStart,
-        background: Container(
-          color: expenseColor,
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 24),
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('Excluir', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+  Widget build(BuildContext context) {
+    var future = false;
+    return Dismissible(
+      key: ValueKey(id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: expenseColor,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Excluir',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
             SizedBox(width: 8),
             Icon(Icons.delete_outline, color: Colors.white),
-          ]),
+          ],
         ),
-        confirmDismiss: (_) => showDialog<bool>(
+      ),
+      confirmDismiss: (_) async {
+        if (series) {
+          final choice = await askSeriesScope(context, editing: false);
+          future = choice ?? false;
+          return choice != null;
+        }
+        return showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
             icon: const Icon(Icons.delete_outline, color: expenseColor),
@@ -262,16 +359,18 @@ class _Deletable extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        onDismissed: (_) async {
-          final state = context.read<AppState>();
-          try {
-            await onDelete(state.api);
-          } catch (e) {
-            if (context.mounted) showError(context, e);
-          }
-          state.dataChanged();
-        },
-        child: child,
-      );
+        );
+      },
+      onDismissed: (_) async {
+        final state = context.read<AppState>();
+        try {
+          await onDelete(state.api, future);
+        } catch (e) {
+          if (context.mounted) showError(context, e);
+        }
+        state.dataChanged();
+      },
+      child: child,
+    );
+  }
 }

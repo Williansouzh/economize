@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/playful.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -108,6 +109,14 @@ class _LoginScreenState extends State<LoginScreen> {
                               : Text(_register ? 'Criar conta' : 'Entrar'),
                         ),
                         const SizedBox(height: 4),
+                        if (!_register)
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => ForgotPasswordScreen(email: _email.text.trim()))),
+                            child: const Text('Esqueci minha senha'),
+                          ),
                         TextButton(
                           onPressed: () => setState(() => _register = !_register),
                           child: Text(_register ? 'Já tenho conta' : 'Ainda não tem conta? Cadastre-se',

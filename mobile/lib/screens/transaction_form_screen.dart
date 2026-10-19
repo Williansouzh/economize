@@ -17,6 +17,8 @@ double? parseAmount(String text) {
 
 enum _Kind { expense, income, transfer }
 
+enum _Repeat { none, monthly, installments }
+
 const transferColor = Color(0xFF3B82F6);
 
 /// Cria ou edita uma despesa, uma receita ou uma transferência entre contas.
@@ -45,6 +47,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   // Criada agora pelo "+ Nova": fica na lista até o AppState recarregar as categorias.
   TxCategory? _justCreated;
   bool _saving = false;
+  _Repeat _repeat = _Repeat.none;
+  int _months = 12, _installments = 2;
 
   bool get _isEditing => _tx != null || _tr != null;
   TxType get _type => _kind == _Kind.income ? TxType.income : TxType.expense;
@@ -62,6 +66,14 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       showError(context, 'Escolha contas de origem e destino diferentes.');
       return;
     }
+    // Série (fixo ou parcelado): a mudança vale só para este ou também para os próximos?
+    var future = false;
+    if (!transfer && _tx != null && _tx.inSeries) {
+      final choice = await askSeriesScope(context, editing: true);
+      if (choice == null) return;
+      future = choice;
+    }
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       if (transfer) {
@@ -84,7 +96,16 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           type: _type,
           date: _date,
           isPaid: _isPaid,
+          repeat: switch (_repeat) {
+            _Repeat.none => null,
+            _Repeat.monthly => 'monthly',
+            _Repeat.installments => 'installments',
+          },
+          repeatCount: _repeat == _Repeat.monthly ? _months : _installments,
+          future: future,
         );
+        state.rememberCategory(_type, _categoryId!);
+        state.rememberAccount(_accountId!);
       }
       state.dataChanged();
       if (mounted) Navigator.pop(context);
@@ -128,7 +149,14 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       categories.add(c);
     }
     if (!categories.any((c) => c.id == _categoryId)) _categoryId = null;
-    _accountId ??= state.accounts.isNotEmpty ? state.accounts.first.id : null;
+    // Lançamento rápido: começa com a última categoria usada nesse tipo.
+    if (!_isEditing && _categoryId == null) {
+      final last = state.lastCategory(_type);
+      if (categories.any((c) => c.id == last)) _categoryId = last;
+    }
+    final installmentsMode = !transfer && _repeat == _Repeat.installments;
+    final each = (parseAmount(_amount.text) ?? 0) / _installments;
+    _accountId ??= state.defaultAccountId;
     if (transfer && _toAccountId == _accountId) _toAccountId = null;
     final color = switch (_kind) {
       _Kind.income => incomeColor,
@@ -170,7 +198,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 enabled: _tx == null),
           ],
           selected: {_kind},
-          onSelectionChanged: (s) => setState(() => _kind = s.first),
+          onSelectionChanged: (s) => setState(() {
+            _kind = s.first;
+            if (_kind != _Kind.expense && _repeat == _Repeat.installments) _repeat = _Repeat.none;
+          }),
         ),
         const SizedBox(height: 16),
         // Valor em destaque, na cor do tipo.
@@ -183,12 +214,14 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(switch (_kind) {
+              _ when installmentsMode => 'Valor total da compra',
               _Kind.income => 'Quanto você recebeu?',
               _Kind.expense => 'Quanto você gastou?',
               _Kind.transfer => 'Quanto você vai mover?',
             }, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
             TextField(
               controller: _amount,
+              onChanged: installmentsMode ? (_) => setState(() {}) : null,
               autofocus: !_isEditing,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: color),
@@ -281,6 +314,60 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
             onSelected: (_) => _pickDate(),
           ),
         ]),
+        if (!transfer && !_isEditing) ...[
+          const SizedBox(height: 20),
+          Text('Repetir', style: text.labelLarge),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            ChoiceChip(
+              label: const Text('Não repete'),
+              selected: _repeat == _Repeat.none,
+              onSelected: (_) => setState(() => _repeat = _Repeat.none),
+            ),
+            ChoiceChip(
+              avatar: const Icon(Icons.repeat, size: 16),
+              label: const Text('Fixo todo mês'),
+              selected: _repeat == _Repeat.monthly,
+              onSelected: (_) => setState(() => _repeat = _Repeat.monthly),
+            ),
+            if (_kind == _Kind.expense)
+              ChoiceChip(
+                avatar: const Icon(Icons.view_week_outlined, size: 16),
+                label: const Text('Parcelado'),
+                selected: _repeat == _Repeat.installments,
+                onSelected: (_) => setState(() => _repeat = _Repeat.installments),
+              ),
+          ]),
+          if (_repeat != _Repeat.none) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Text(_repeat == _Repeat.monthly ? 'Por' : 'Em'),
+              const SizedBox(width: 12),
+              DropdownButton<int>(
+                value: _repeat == _Repeat.monthly ? _months : _installments,
+                items: [
+                  for (final n in _repeat == _Repeat.monthly ? const [2, 3, 6, 12, 24, 36, 48, 60] : List.generate(23, (i) => i + 2))
+                    DropdownMenuItem(value: n, child: Text(_repeat == _Repeat.monthly ? '$n meses' : '${n}x')),
+                ],
+                onChanged: (n) => setState(() => _repeat == _Repeat.monthly ? _months = n! : _installments = n!),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _repeat == _Repeat.monthly
+                      ? 'Um lançamento por mês, a partir da data escolhida.'
+                      : '${_installments}x de ${money(each)}',
+                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ),
+            ]),
+          ],
+        ],
+        if (_tx?.installmentCount case final n?) ...[
+          const SizedBox(height: 12),
+          Text('Parcela ${_tx!.installmentNumber} de $n',
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
         const SizedBox(height: 12),
         Card(
           child: SwitchListTile(
@@ -342,3 +429,19 @@ class _OptionChip extends StatelessWidget {
     );
   }
 }
+
+/// Pergunta se a ação vale só para este lançamento da série ou também para os próximos.
+/// Devolve null se o usuário cancelar.
+Future<bool?> askSeriesScope(BuildContext context, {required bool editing}) => showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.repeat),
+        title: Text(editing ? 'Salvar alterações em' : 'Excluir'),
+        content: const Text('Este lançamento faz parte de uma série (fixo ou parcelado).'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Só este')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Este e os próximos')),
+        ],
+      ),
+    );

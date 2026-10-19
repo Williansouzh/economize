@@ -3,13 +3,18 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../services/reminders.dart';
 import '../state/app_state.dart';
+import '../utils/save_file.dart';
 import '../widgets/common.dart';
+import 'achievements_screen.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_screen.dart';
 import 'delete_account_screen.dart';
 import 'insights_screen.dart';
+import 'reminders_screen.dart';
+import 'search_screen.dart';
 import 'transaction_form_screen.dart';
 import 'transactions_screen.dart';
 import 'whatsapp_screen.dart';
@@ -25,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // As abas só são montadas (e carregam dados) na primeira vez em que são abertas.
   final _visited = {0};
 
-  static const _titles = ['Visão geral', 'Lançamentos', 'Insights IA', 'Orçamentos'];
+  static const _titles = ['Visão geral', 'Lançamentos', 'Insights IA', 'Planejamento'];
   static const _pages = [DashboardScreen(), TransactionsScreen(), InsightsScreen(), BudgetsScreen()];
 
   String get _greeting {
@@ -57,6 +62,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _export() async {
+    final state = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Gerando a planilha...')));
+    try {
+      final bytes = await state.api.exportCsv();
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      await saveFile(bytes, 'economizze-$today.csv', 'text/csv');
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -75,6 +93,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ])
             : Text(_titles[_index]),
         actions: [
+          if (_index == 0) const StreakChip(),
+          if (_index == 1)
+            IconButton(
+              tooltip: 'Buscar',
+              icon: const Icon(Icons.search),
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
+            ),
+          const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: PopupMenuButton<String>(
@@ -87,6 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
                 'categories' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const CategoriesScreen())),
+                'achievements' => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const AchievementsScreen())),
+                'reminders' => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
+                'export' => _export(),
                 'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
                 'delete' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen())),
@@ -98,6 +129,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 const PopupMenuItem(
                   value: 'categories',
                   child: ListTile(leading: Icon(Icons.category_outlined), title: Text('Categorias')),
+                ),
+                const PopupMenuItem(
+                  value: 'achievements',
+                  child: ListTile(leading: Icon(Icons.emoji_events_outlined), title: Text('Conquistas')),
+                ),
+                if (Reminders.supported)
+                  const PopupMenuItem(
+                    value: 'reminders',
+                    child: ListTile(leading: Icon(Icons.notifications_outlined), title: Text('Lembretes')),
+                  ),
+                const PopupMenuItem(
+                  value: 'export',
+                  child: ListTile(leading: Icon(Icons.table_view_outlined), title: Text('Exportar planilha')),
                 ),
                 const PopupMenuItem(
                   value: 'whatsapp',
@@ -155,7 +199,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard), label: 'Início'),
           NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Lançamentos'),
           NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'IA'),
-          NavigationDestination(icon: Icon(Icons.savings_outlined), selectedIcon: Icon(Icons.savings), label: 'Orçamentos'),
+          NavigationDestination(icon: Icon(Icons.savings_outlined), selectedIcon: Icon(Icons.savings), label: 'Planejar'),
         ],
       ),
     );

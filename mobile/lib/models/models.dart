@@ -4,11 +4,19 @@ TxType _type(String v) => v == 'Income' ? TxType.income : TxType.expense;
 String txTypeToJson(TxType t) => t == TxType.income ? 'Income' : 'Expense';
 double _d(dynamic v) => (v as num).toDouble();
 
+double? _dn(dynamic v) => v == null ? null : _d(v);
+DateTime? _date(dynamic v) => v == null ? null : DateTime.parse(v);
+
 class Account {
   final String id, name, color, icon;
 
   /// [balance]: só lançamentos pagos até hoje. [forecastBalance]: tudo até o fim do mês consultado.
   final double initialBalance, balance, forecastBalance;
+
+  /// Cartão de crédito: limite, dias de fechamento e vencimento e total da fatura aberta hoje.
+  final bool isCard;
+  final double? creditLimit, openInvoice;
+  final int? closingDay, dueDay;
   Account.fromJson(Map<String, dynamic> j)
       : id = j['id'],
         name = j['name'],
@@ -16,7 +24,12 @@ class Account {
         icon = j['icon'] ?? 'account_balance_wallet',
         initialBalance = _d(j['initialBalance']),
         balance = _d(j['balance']),
-        forecastBalance = _d(j['forecastBalance']);
+        forecastBalance = _d(j['forecastBalance']),
+        isCard = j['kind'] == 'CreditCard',
+        creditLimit = _dn(j['creditLimit']),
+        openInvoice = _dn(j['openInvoice']),
+        closingDay = j['closingDay'],
+        dueDay = j['dueDay'];
 }
 
 class TxCategory {
@@ -37,6 +50,11 @@ class Transaction {
   final TxType type;
   final DateTime date;
   final bool isPaid;
+
+  /// Fixos e parcelados: [seriesId] liga os lançamentos criados juntos; parcela [installmentNumber]/[installmentCount].
+  final String? seriesId;
+  final int? installmentNumber, installmentCount;
+  bool get inSeries => seriesId != null;
   Transaction.fromJson(Map<String, dynamic> j)
       : id = j['id'],
         accountId = j['accountId'],
@@ -49,7 +67,10 @@ class Transaction {
         amount = _d(j['amount']),
         type = _type(j['type']),
         date = DateTime.parse(j['date']),
-        isPaid = j['isPaid'];
+        isPaid = j['isPaid'],
+        seriesId = j['seriesId'],
+        installmentNumber = j['installmentNumber'],
+        installmentCount = j['installmentCount'];
 }
 
 class CategoryTotal {
@@ -134,4 +155,67 @@ class Insights {
         tips = List<String>.from(j['tips'] ?? []),
         potentialSavings = _d(j['potentialSavings'] ?? 0),
         healthScore = (j['healthScore'] as num? ?? 0).toInt();
+}
+
+/// Fatura do cartão que fecha em [month] (compras de [periodStart] até a véspera de [closingDate]).
+class Invoice {
+  final String accountId, accountName, month;
+  final DateTime periodStart, closingDate, dueDate;
+  final double total, paid;
+  final bool isOpen;
+  final List<Transaction> items;
+  double get remaining => (total - paid).clamp(0, double.infinity);
+  Invoice.fromJson(Map<String, dynamic> j)
+      : accountId = j['accountId'],
+        accountName = j['accountName'],
+        month = j['month'],
+        periodStart = DateTime.parse(j['periodStart']),
+        closingDate = DateTime.parse(j['closingDate']),
+        dueDate = DateTime.parse(j['dueDate']),
+        total = _d(j['total']),
+        paid = _d(j['paid']),
+        isOpen = j['isOpen'],
+        items = (j['items'] as List).map((e) => Transaction.fromJson(e)).toList();
+}
+
+/// Meta de economia. [monthlyNeeded]: quanto guardar por mês para chegar no prazo.
+class Goal {
+  final String id, name, icon, color;
+  final double target, saved, progress;
+  final double? monthlyNeeded;
+  final DateTime? deadline;
+  bool get reached => saved >= target;
+  Goal.fromJson(Map<String, dynamic> j)
+      : id = j['id'],
+        name = j['name'],
+        icon = j['icon'],
+        color = j['color'],
+        target = _d(j['target']),
+        saved = _d(j['saved']),
+        progress = _d(j['progress']),
+        monthlyNeeded = _dn(j['monthlyNeeded']),
+        deadline = _date(j['deadline']);
+}
+
+class Achievement {
+  final String id, title, description, icon;
+  final bool unlocked;
+  Achievement.fromJson(Map<String, dynamic> j)
+      : id = j['id'],
+        title = j['title'],
+        description = j['description'],
+        icon = j['icon'],
+        unlocked = j['unlocked'];
+}
+
+/// Sequência de dias registrando e conquistas.
+class Progress {
+  final int streak, bestStreak;
+  final bool registeredToday;
+  final List<Achievement> achievements;
+  Progress.fromJson(Map<String, dynamic> j)
+      : streak = j['streak'],
+        bestStreak = j['bestStreak'],
+        registeredToday = j['registeredToday'],
+        achievements = (j['achievements'] as List).map((e) => Achievement.fromJson(e)).toList();
 }

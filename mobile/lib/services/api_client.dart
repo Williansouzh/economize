@@ -16,8 +16,10 @@ class ApiException implements Exception {
 class ApiClient {
   /// Um cliente só para o app todo: reaproveita a conexão (e o TLS) entre as chamadas,
   /// em vez de abrir uma nova a cada requisição.
-  final _http = http.Client();
+  final http.Client _http;
   String? token;
+
+  ApiClient({http.Client? client}) : _http = client ?? http.Client();
   void Function()? onUnauthorized;
 
   Map<String, String> get _headers => {
@@ -79,6 +81,22 @@ class ApiClient {
   /// Encerra a sessão em todos os aparelhos, inclusive neste (RN-32).
   Future<void> logoutEverywhere() => delete('/me/sessions');
 
+  /// "Esqueci minha senha": envia um código por e-mail (RN-38).
+  Future<void> forgotPassword(String email) => post('/auth/forgot-password', {'email': email});
+  Future<Map<String, dynamic>> resetPassword(String email, String code, String newPassword) async =>
+      await post('/auth/reset-password', {'email': email, 'code': code, 'newPassword': newPassword});
+
+  /// Erro não tratado no app: vai para o log do servidor. Nunca lança exceção.
+  Future<void> reportError(String message, String? stack, String platform, String version) async {
+    try {
+      await _http
+          .post(_uri('/client-errors'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'message': message, 'stack': stack, 'platform': platform, 'version': version}))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {}
+  }
+
   // ---- Dados ----
   Future<Dashboard> dashboard(String month) async =>
       Dashboard.fromJson(await get('/dashboard', {'month': month}));
@@ -108,6 +126,8 @@ class ApiClient {
 
   Future<void> deleteCategory(String id) => delete('/categories/$id');
 
+  /// [repeat]: só na criação. 'monthly' repete o valor por [repeatCount] meses; 'installments'
+  /// divide [amount] (total) em [repeatCount] parcelas. [future]: na edição, vale também para os próximos da série.
   Future<void> saveTransaction({
     String? id,
     required String accountId,
@@ -117,6 +137,9 @@ class ApiClient {
     required TxType type,
     required DateTime date,
     required bool isPaid,
+    String? repeat,
+    int repeatCount = 0,
+    bool future = false,
   }) async {
     final body = {
       'accountId': accountId,
@@ -124,13 +147,73 @@ class ApiClient {
       'description': description,
       'amount': amount,
       'type': txTypeToJson(type),
-      'date': date.toIso8601String().substring(0, 10),
+      'date': _day(date),
       'isPaid': isPaid,
+      if (repeat != null) 'repeat': {'kind': repeat, 'count': repeatCount},
     };
-    id == null ? await post('/transactions', body) : await put('/transactions/$id', body);
+    id == null
+        ? await post('/transactions', body)
+        : await put('/transactions/$id${future ? '?scope=future' : ''}', body);
   }
 
-  Future<void> deleteTransaction(String id) => delete('/transactions/$id');
+  Future<void> deleteTransaction(String id, {bool future = false}) =>
+      delete('/transactions/$id${future ? '?scope=future' : ''}');
+
+  /// Busca em todos os meses (até 100 resultados, os mais recentes primeiro).
+  Future<List<Transaction>> searchTransactions({String? q, String? categoryId, String? accountId, TxType? type}) async =>
+      (await get('/transactions/search', {
+        if (q != null && q.trim().isNotEmpty) 'q': q.trim(),
+        'categoryId': ?categoryId,
+        'accountId': ?accountId,
+        if (type != null) 'type': txTypeToJson(type),
+      }) as List)
+          .map((e) => Transaction.fromJson(e))
+          .toList();
+
+  /// Pendentes (a pagar e a receber) dos próximos [days] dias, para os lembretes.
+  Future<List<Transaction>> upcoming({int days = 30}) async =>
+      (await get('/transactions/upcoming', {'days': '$days'}) as List).map((e) => Transaction.fromJson(e)).toList();
+
+  /// Fatura do cartão que fecha em [month] (yyyy-MM); sem mês, a que está aberta hoje.
+  Future<Invoice> invoice(String accountId, {String? month}) async =>
+      Invoice.fromJson(await get('/accounts/$accountId/invoice', {'month': ?month}));
+
+  // ---- Metas, progresso e exportação ----
+  Future<List<Goal>> goals() async => (await get('/goals') as List).map((e) => Goal.fromJson(e)).toList();
+  Future<Goal> saveGoal({String? id, required String name, required double target, DateTime? deadline,
+      required String icon, required String color}) async {
+    final body = {
+      'name': name,
+      'target': target,
+      'deadline': deadline == null ? null : _day(deadline),
+      'icon': icon,
+      'color': color,
+    };
+    return Goal.fromJson(id == null ? await post('/goals', body) : await put('/goals/$id', body));
+  }
+
+  Future<Goal> depositGoal(String id, double amount) async =>
+      Goal.fromJson(await post('/goals/$id/deposit', {'amount': amount}));
+  Future<void> deleteGoal(String id) => delete('/goals/$id');
+  Future<Progress> progress() async => Progress.fromJson(await get('/me/progress'));
+
+  /// CSV com todos os lançamentos e transferências (bytes, com BOM para o Excel).
+  Future<List<int>> exportCsv() async {
+    final http.Response res;
+    try {
+      res = await _http.get(_uri('/export/transactions.csv'), headers: _headers).timeout(const Duration(seconds: 90));
+    } catch (_) {
+      throw ApiException('Não foi possível conectar ao servidor ($apiBaseUrl).');
+    }
+    if (res.statusCode == 401) {
+      onUnauthorized?.call();
+      throw ApiException('Sessão expirada ou credenciais inválidas.', 401);
+    }
+    if (res.statusCode >= 400) throw ApiException('Não foi possível exportar (erro ${res.statusCode}).', res.statusCode);
+    return res.bodyBytes;
+  }
+
+  static String _day(DateTime d) => d.toIso8601String().substring(0, 10);
 
   Future<void> saveAccount({
     String? id,
@@ -138,8 +221,19 @@ class ApiClient {
     required double initialBalance,
     required String color,
     required String icon,
+    bool isCard = false,
+    double? creditLimit,
+    int? closingDay,
+    int? dueDay,
   }) async {
-    final body = {'name': name, 'initialBalance': initialBalance, 'color': color, 'icon': icon};
+    final body = {
+      'name': name,
+      'initialBalance': initialBalance,
+      'color': color,
+      'icon': icon,
+      'kind': isCard ? 'CreditCard' : 'Regular',
+      if (isCard) ...{'creditLimit': creditLimit, 'closingDay': closingDay, 'dueDay': dueDay},
+    };
     id == null ? await post('/accounts', body) : await put('/accounts/$id', body);
   }
 
@@ -166,7 +260,7 @@ class ApiClient {
       'fromAccountId': fromAccountId,
       'toAccountId': toAccountId,
       'amount': amount,
-      'date': date.toIso8601String().substring(0, 10),
+      'date': _day(date),
       'description': description,
       'isPaid': isPaid,
     };

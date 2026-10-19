@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -14,7 +15,31 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('pt_BR');
-  runApp(ChangeNotifierProvider(create: (_) => AppState()..init(), child: const FinancasApp()));
+  final state = AppState();
+  _reportErrors(state);
+  runApp(ChangeNotifierProvider(create: (_) => state..init(), child: const FinancasApp()));
+}
+
+/// Erros não tratados vão para o log do servidor (só mensagem e pilha, sem dados financeiros).
+/// No máximo 5 por abertura do app e sem repetir a mesma mensagem.
+void _reportErrors(AppState state) {
+  if (kDebugMode) return;
+  final sent = <String>{};
+  void report(Object error, StackTrace? stack) {
+    final message = error.toString();
+    if (sent.length >= 5 || !sent.add(message)) return;
+    state.api.reportError(message, stack?.toString(), kIsWeb ? 'web' : defaultTargetPlatform.name,
+        const String.fromEnvironment('FLUTTER_BUILD_NAME', defaultValue: '?'));
+  }
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    report(details.exception, details.stack);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    report(error, stack);
+    return true;
+  };
 }
 
 class FinancasApp extends StatefulWidget {
