@@ -13,6 +13,15 @@ class AppState extends ChangeNotifier {
   String? userName;
   bool get loggedIn => api.token != null;
 
+  /// Já viu a apresentação do app (fica no aparelho, vale para qualquer conta).
+  bool onboardingSeen = false;
+
+  /// Acabou de criar a conta e ainda não passou pela configuração guiada.
+  bool needsSetup = false;
+
+  /// A tela de login abre no modo "criar conta" (vindo do "Começar" da apresentação).
+  bool preferRegister = false;
+
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   String get monthKey => '${month.year}-${month.month.toString().padLeft(2, '0')}';
 
@@ -29,14 +38,33 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     api.token = await _storage.read(key: 'token');
     userName = await _storage.read(key: 'name');
+    onboardingSeen = await _storage.read(key: 'onboarding_seen') == '1';
+    needsSetup = loggedIn && await _storage.read(key: 'setup_pending') == '1';
     initialized = true;
     notifyListeners();
     if (loggedIn) loadReferenceData();
   }
 
   Future<void> login(String email, String password) => _auth(api.login(email, password));
-  Future<void> register(String name, String email, String password) =>
-      _auth(api.register(name, email, password));
+  Future<void> register(String name, String email, String password) async {
+    await _auth(api.register(name, email, password));
+    needsSetup = true;
+    await _storage.write(key: 'setup_pending', value: '1');
+    notifyListeners();
+  }
+
+  Future<void> completeOnboarding({bool signIn = false}) async {
+    onboardingSeen = true;
+    preferRegister = !signIn;
+    await _storage.write(key: 'onboarding_seen', value: '1');
+    notifyListeners();
+  }
+
+  Future<void> completeSetup() async {
+    needsSetup = false;
+    await _storage.delete(key: 'setup_pending');
+    notifyListeners();
+  }
 
   Future<void> _auth(Future<Map<String, dynamic>> call) async {
     final res = await call;
@@ -51,7 +79,11 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     api.token = null;
     userName = null;
-    await _storage.deleteAll();
+    needsSetup = false;
+    // Só os dados da sessão: "já viu a apresentação" continua valendo neste aparelho.
+    for (final key in ['token', 'name', 'setup_pending']) {
+      await _storage.delete(key: key);
+    }
     notifyListeners();
   }
 

@@ -36,10 +36,22 @@ class ApiClient {
       onUnauthorized?.call();
       throw ApiException('Sessão expirada ou credenciais inválidas.', 401);
     }
-    final body = res.body.isEmpty ? null : jsonDecode(utf8.decode(res.bodyBytes));
+    // Erros de servidor ou de proxy podem vir em texto puro ou HTML, não em JSON.
+    Object? body;
+    try {
+      body = res.body.isEmpty ? null : jsonDecode(utf8.decode(res.bodyBytes));
+    } on FormatException {
+      if (res.statusCode < 400) throw ApiException('Resposta inválida do servidor.', res.statusCode);
+    }
     if (res.statusCode >= 400) {
       final msg = body is Map ? (body['error'] ?? body['detail'] ?? body['title']) : null;
-      throw ApiException(msg?.toString() ?? 'Erro ${res.statusCode}', res.statusCode);
+      throw ApiException(
+        msg?.toString() ??
+            (res.statusCode >= 500
+                ? 'O servidor teve um problema. Tente de novo em instantes.'
+                : 'Erro ${res.statusCode}'),
+        res.statusCode,
+      );
     }
     return body;
   }
@@ -72,6 +84,20 @@ class ApiClient {
 
   Future<List<TxCategory>> categories() async =>
       (await get('/categories') as List).map((e) => TxCategory.fromJson(e)).toList();
+
+  /// Cria ou edita uma categoria e devolve como ficou salva.
+  Future<TxCategory> saveCategory({
+    String? id,
+    required String name,
+    required TxType type,
+    required String icon,
+    required String color,
+  }) async {
+    final body = {'name': name, 'type': txTypeToJson(type), 'icon': icon, 'color': color};
+    return TxCategory.fromJson(id == null ? await post('/categories', body) : await put('/categories/$id', body));
+  }
+
+  Future<void> deleteCategory(String id) => delete('/categories/$id');
 
   Future<void> saveTransaction({
     String? id,

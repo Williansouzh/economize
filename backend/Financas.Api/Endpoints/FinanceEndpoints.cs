@@ -50,17 +50,35 @@ public static class FinanceEndpoints
 
         categories.MapPost("/", async (CategoryRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var c = new Category { UserId = user.UserId(), Name = req.Name, Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#9E9E9E" };
+            var uid = user.UserId();
+            if (await ValidateCategory(req, uid, null, db) is { } error) return error;
+            var c = new Category { UserId = uid, Name = req.Name.Trim(), Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#9E9E9E" };
             db.Categories.Add(c);
             await db.SaveChangesAsync();
             return Results.Created($"/api/categories/{c.Id}", new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color));
+        });
+
+        // RN-31: nome, ícone e cor sempre podem mudar; o tipo, só se a categoria não tiver
+        // lançamentos nem orçamentos (senão uma despesa viraria receita no histórico).
+        categories.MapPut("/{id:guid}", async (Guid id, CategoryRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var uid = user.UserId();
+            var c = await db.Categories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
+            if (c is null) return Results.NotFound();
+            if (await ValidateCategory(req, uid, id, db) is { } error) return error;
+            if (req.Type != c.Type &&
+                (await db.Transactions.AnyAsync(t => t.CategoryId == id) || await db.Budgets.AnyAsync(b => b.CategoryId == id)))
+                return Results.BadRequest(new { error = "Não dá para trocar o tipo de uma categoria que já tem lançamentos ou orçamentos." });
+            c.Name = req.Name.Trim(); c.Type = req.Type; c.Icon = req.Icon ?? c.Icon; c.Color = req.Color ?? c.Color;
+            await db.SaveChangesAsync();
+            return Results.Ok(new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color));
         });
 
         categories.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
         {
             var uid = user.UserId();
             if (await db.Transactions.AnyAsync(t => t.CategoryId == id && t.UserId == uid))
-                return Results.Conflict(new { error = "Categoria possui transações." });
+                return Results.Conflict(new { error = "Essa categoria tem lançamentos. Mude a categoria deles ou apague-os antes." });
             return await db.Categories.Where(x => x.Id == id && x.UserId == uid).ExecuteDeleteAsync() > 0
                 ? Results.NoContent() : Results.NotFound();
         });
@@ -174,6 +192,19 @@ public static class FinanceEndpoints
         transfers.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
             await db.Transfers.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
                 ? Results.NoContent() : Results.NotFound());
+    }
+
+    /// <summary>RN-31: nome obrigatório, até 40 caracteres e único entre as categorias do mesmo tipo.</summary>
+    private static async Task<IResult?> ValidateCategory(CategoryRequest req, Guid uid, Guid? id, AppDbContext db)
+    {
+        var name = (req.Name ?? "").Trim();
+        if (name.Length == 0) return Results.BadRequest(new { error = "Dê um nome para a categoria." });
+        if (name.Length > 40) return Results.BadRequest(new { error = "O nome pode ter no máximo 40 caracteres." });
+        if (!Enum.IsDefined(req.Type)) return Results.BadRequest(new { error = "Tipo inválido." });
+        var lower = name.ToLower();
+        if (await db.Categories.AnyAsync(c => c.UserId == uid && c.Type == req.Type && c.Id != id && c.Name.ToLower() == lower))
+            return Results.Conflict(new { error = "Você já tem uma categoria com esse nome." });
+        return null;
     }
 
     private static async Task<IResult?> Validate(TransferRequest req, Guid uid, AppDbContext db)

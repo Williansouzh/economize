@@ -35,6 +35,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "Economizze"
     }
 
     signingConfigs {
@@ -49,7 +50,13 @@ android {
     }
 
     buildTypes {
+        // Debug instala ao lado do app da loja: outro id e outro nome no celular.
+        debug {
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "Economizze Dev"
+        }
         release {
+            manifestPlaceholders["appName"] = "Economizze"
             // Sem key.properties, assina com a chave de debug: serve para testar, mas a Google Play recusa.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }

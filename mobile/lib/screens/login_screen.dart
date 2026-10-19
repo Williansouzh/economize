@@ -6,6 +6,7 @@ import '../config.dart';
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/playful.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  bool _register = false, _loading = false, _showPassword = false;
+  late bool _register = context.read<AppState>().preferRegister;
+  bool _loading = false, _showPassword = false;
 
   Future<void> _submit() async {
     setState(() => _loading = true);
@@ -53,16 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .18),
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: const Icon(Icons.account_balance_wallet, size: 48, color: Colors.white),
-                    ),
-                  ),
+                  const Center(child: Mascot(size: 120)),
                   const SizedBox(height: 16),
                   Text('Economizze',
                       textAlign: TextAlign.center,

@@ -190,6 +190,7 @@ isso está indicado.
 | ID | Regra |
 |---|---|
 | RN-13 | Uma categoria com lançamentos não pode ser excluída (409). O usuário precisa mover ou apagar os lançamentos antes. |
+| RN-31 | **Categorias próprias.** O usuário cria e edita categorias com nome, tipo, ícone e cor (menu → "Categorias", ou "+ Nova" no formulário de lançamento). O nome tem de 1 a 40 caracteres e não pode repetir no mesmo tipo, ignorando maiúsculas (409). O tipo só muda se a categoria não tiver lançamentos nem orçamentos (400). Cada usuário só vê e altera as próprias categorias (404). |
 
 ### Orçamentos
 

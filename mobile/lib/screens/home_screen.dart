@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../state/app_state.dart';
 import 'budgets_screen.dart';
+import 'categories_screen.dart';
 import 'dashboard_screen.dart';
 import 'delete_account_screen.dart';
 import 'insights_screen.dart';
@@ -56,6 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 'logout' => state.logout(),
                 'whatsapp' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
+                'categories' => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const CategoriesScreen())),
                 'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
                 'delete' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen())),
@@ -64,6 +67,10 @@ class _HomeScreenState extends State<HomeScreen> {
               itemBuilder: (_) => [
                 PopupMenuItem(enabled: false, child: Text(name.isEmpty ? 'Minha conta' : name)),
                 const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'categories',
+                  child: ListTile(leading: Icon(Icons.category_outlined), title: Text('Categorias')),
+                ),
                 const PopupMenuItem(
                   value: 'whatsapp',
                   child: ListTile(leading: Icon(Icons.chat_outlined), title: Text('Conectar WhatsApp')),

@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'categories_screen.dart';
 
 /// Converte "1.234,56" ou "1234.56" em double.
 double? parseAmount(String text) {
@@ -41,6 +42,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   late String? _accountId = _tx?.accountId ?? _tr?.fromAccountId;
   late String? _toAccountId = _tr?.toAccountId;
   late String? _categoryId = _tx?.categoryId;
+  // Criada agora pelo "+ Nova": fica na lista até o AppState recarregar as categorias.
+  TxCategory? _justCreated;
   bool _saving = false;
 
   bool get _isEditing => _tx != null || _tr != null;
@@ -121,6 +124,9 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
     final state = context.watch<AppState>();
     final transfer = _kind == _Kind.transfer;
     final categories = state.categories.where((c) => c.type == _type).toList();
+    if (_justCreated case final c? when c.type == _type && !categories.any((x) => x.id == c.id)) {
+      categories.add(c);
+    }
     if (!categories.any((c) => c.id == _categoryId)) _categoryId = null;
     _accountId ??= state.accounts.isNotEmpty ? state.accounts.first.id : null;
     if (transfer && _toAccountId == _accountId) _toAccountId = null;
@@ -233,6 +239,21 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
                 selected: c.id == _categoryId,
                 onTap: () => setState(() => _categoryId = c.id),
               ),
+            _OptionChip(
+              icon: Icons.add,
+              label: 'Nova',
+              color: Theme.of(context).colorScheme.primary,
+              selected: false,
+              onTap: () async {
+                final created = await showCategorySheet(context, type: _type);
+                if (created != null && mounted) {
+                  setState(() {
+                    _justCreated = created;
+                    _categoryId = created.id;
+                  });
+                }
+              },
+            ),
           ]),
           const SizedBox(height: 20),
           Text(_kind == _Kind.income ? 'Recebido em' : 'Pago com', style: text.labelLarge),
