@@ -1,0 +1,29 @@
+# Monitor de disponibilidade: a cada 15 minutos confere a API, o agente e o site.
+# Se algo cair, o job falha e o GitHub manda e-mail para quem configurou este agendamento
+# (Settings → Notifications → Actions do GitHub, "Notify me: only failed workflows").
+# Obs.: o GitHub pausa agendamentos depois de 60 dias sem commits no repositório.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Conferir economizze.tech
+        run: |
+          fail=0
+          for path in /health/api /health/agent / /app/; do
+            # Tenta 3 vezes antes de acusar queda (evita alarme por um soluço de rede).
+            for i in 1 2 3; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://economizze.tech$path") && [ "$code" = 200 ] && break
+              sleep 10
+            done
+            echo "$path → $code"
+            [ "$code" = 200 ] || fail=1
+          done
+          exit $fail

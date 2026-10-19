@@ -52,7 +52,7 @@
   <header>
     <a class="brand" href="/">Economizze</a>
     <h1>Política de Privacidade</h1>
-    <p class="updated">Última atualização: 19 de outubro de 2026</p>
+    <p class="updated">Última atualização: 19 de outubro de 2026 (revisão 2)</p>
   </header>
 
   <section>
@@ -96,6 +96,8 @@
       <li>Contas (nome, saldo inicial, cor e ícone).</li>
       <li>Lançamentos de receitas e despesas (valor, data, descrição, categoria, conta e se já foi pago).</li>
       <li>Transferências entre contas, categorias e orçamentos mensais.</li>
+      <li>Cartões de crédito que você cadastrar (nome, limite e os dias de fechamento e de vencimento; nunca o
+        número do cartão) e metas de economia (nome, valor, prazo e quanto você informou ter guardado).</li>
     </ul>
     <p>
       O app <strong>não</strong> se conecta ao seu banco e não pede dados bancários, de cartão ou senhas de
@@ -125,9 +127,15 @@
         o número de telefone que enviou a mensagem, mascarado (só o código do país, o DDD e os 4 últimos
         dígitos aparecem, por exemplo 5511*****4321). Eles têm tamanho limitado e são descartados automaticamente
         conforme novos registros são gerados.</li>
-      <li><strong>No seu aparelho</strong>, guardamos o token de acesso e seu nome, para você não precisar entrar
-        toda vez: no armazenamento seguro do sistema (Android) ou no armazenamento do navegador (versão web).
-        Saia da conta para apagá-los.</li>
+      <li><strong>Erros do app</strong>: quando o app falha, ele envia ao servidor a mensagem do erro, o trecho
+        do código onde aconteceu, o sistema (Android ou web) e a versão do app. Não envia seus lançamentos,
+        valores, nome ou e-mail. Esses registros entram nos logs descritos acima.</li>
+      <li><strong>Data e hora em que cada lançamento foi registrado</strong>, para calcular a sua sequência de dias
+        e as conquistas.</li>
+      <li><strong>No seu aparelho</strong>, guardamos o token de acesso, seu nome, a última categoria usada e as
+        preferências de lembretes, para você não precisar entrar toda vez: no armazenamento seguro do sistema
+        (Android) ou no armazenamento do navegador (versão web). Saia da conta para apagá-los. Os lembretes do
+        Android são agendados no próprio celular; o servidor não envia notificações.</li>
     </ul>
   </section>
 
@@ -188,6 +196,19 @@
       O servidor onde ficam o banco de dados, o app web e o assistente é contratado da Hostinger, que atua
       como operadora: guarda os dados em nosso nome e não os usa para fins próprios. O servidor pode ficar
       fora do Brasil.
+    </p>
+
+    <h3>Envio de e-mail</h3>
+    <p>
+      Para o "esqueci minha senha", seu e-mail e um código temporário passam por um serviço de envio de e-mails
+      contratado por nós, que atua como operador e só entrega a mensagem.
+    </p>
+
+    <h3>Armazenamento de cópias de segurança</h3>
+    <p>
+      As cópias de segurança podem ser guardadas também fora do servidor, num serviço de armazenamento em nuvem.
+      Elas são criptografadas antes de sair do servidor (o serviço de armazenamento não consegue ler o conteúdo)
+      e seguem o mesmo prazo de 14 dias da seção 5.
     </p>
 
     <h3>Autoridades</h3>
@@ -254,7 +275,8 @@
     <ul>
       <li>confirmar se tratamos seus dados e acessá-los;</li>
       <li>corrigir dados incompletos ou errados (a maior parte pode ser editada no próprio app);</li>
-      <li>pedir a portabilidade dos seus dados (enviamos uma cópia em formato aberto);</li>
+      <li>pedir a portabilidade dos seus dados: no menu do app, <strong>Exportar planilha</strong> baixa todos os
+        seus lançamentos e transferências em CSV, que abre no Excel ou no Google Planilhas;</li>
       <li>pedir a exclusão dos seus dados;</li>
       <li>saber com quem compartilhamos seus dados;</li>
       <li>deixar de usar os recursos de IA ou desconectar o WhatsApp a qualquer momento.</li>

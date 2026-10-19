@@ -219,11 +219,33 @@ para atualizar o download da landing page). Mudanças na pasta `site/` também p
 ## 8. Backups
 
 O serviço `backup` faz um `pg_dump` dos bancos `financas` e `agente` uma vez por dia em `~/economize/backups/`
-e apaga os com mais de `BACKUP_KEEP_DAYS` dias. **Esses arquivos ficam no mesmo servidor**: copie para fora
-regularmente, por exemplo da sua máquina:
+e apaga os com mais de `BACKUP_KEEP_DAYS` dias. Esses arquivos ficam no mesmo servidor, então ligue também a
+**cópia externa**: o serviço `offsite` usa o [restic](https://restic.net) para enviar os backups, criptografados
+no próprio servidor, para um armazenamento de fora. Guarda 14 dias, como os backups locais, porque a política
+de privacidade promete que dados excluídos somem das cópias nesse prazo.
+
+Com o Backblaze B2 (10 GB grátis):
+
+1. Crie uma conta em backblaze.com, um bucket **privado** (ex.: `economizze-backup`) e uma *Application Key*
+   com acesso só a esse bucket.
+2. No `.env` do servidor:
+   ```bash
+   RESTIC_REPOSITORY=b2:economizze-backup:economizze
+   RESTIC_PASSWORD=$(openssl rand -hex 32)   # gere e guarde também num gerenciador de senhas
+   OFFSITE_KEY_ID=keyID-da-chave
+   OFFSITE_KEY_SECRET=applicationKey-da-chave
+   ```
+3. `docker compose -f docker-compose.prod.yml up -d offsite` e confira: `docker compose -f docker-compose.prod.yml logs offsite`
+   deve mostrar `backup externo ok`.
+
+Qualquer S3 compatível também serve (`RESTIC_REPOSITORY=s3:https://endpoint/bucket/economizze`). **Sem a
+`RESTIC_PASSWORD` a cópia não abre**: não a guarde só no servidor.
+
+Para trazer uma cópia do armazenamento externo (ex.: servidor perdido), numa máquina com Docker:
 
 ```bash
-rsync -av deploy@IP-DA-VPS:economize/backups/ ~/backups-financas/
+docker run --rm -e RESTIC_REPOSITORY=... -e RESTIC_PASSWORD=... -e B2_ACCOUNT_ID=... -e B2_ACCOUNT_KEY=... \
+  -v "$PWD/restaurado:/out" restic/restic:0.17.3 restore latest --target /out
 ```
 
 **Restaurar** (apaga o que estiver no banco):
@@ -233,6 +255,47 @@ docker compose -f docker-compose.prod.yml stop api agent
 docker compose -f docker-compose.prod.yml exec -T db pg_restore -U postgres -d financas --clean --if-exists < backups/financas_AAAA-MM-DD_HHMM.dump
 docker compose -f docker-compose.prod.yml start api agent
 ```
+
+## 9. E-mail ("esqueci minha senha")
+
+A recuperação de senha manda um código por e-mail (RN-38). Sem SMTP configurado, o app avisa que ela ainda não
+está disponível. Com o [Resend](https://resend.com) (3.000 e-mails por mês grátis):
+
+1. Crie a conta, adicione o domínio `economizze.tech` e cadastre na Hostinger os registros DNS que o Resend
+   mostrar (SPF e DKIM; sem eles os e-mails caem no spam).
+2. Crie uma API key e preencha no `.env`:
+   ```bash
+   SMTP_HOST=smtp.resend.com
+   SMTP_USERNAME=resend
+   SMTP_PASSWORD=re_...
+   SMTP_FROM=Economizze <nao-responda@economizze.tech>
+   ```
+3. `docker compose -f docker-compose.prod.yml up -d api`.
+
+## 10. Monitoramento
+
+- **Disponibilidade:** o workflow [`uptime.yml`](../.github/workflows/uptime.yml) confere API, agente, site e app
+  a cada 15 minutos. Se algo cair, o GitHub manda e-mail (ative em *Settings → Notifications → Actions*:
+  "Only notify for failed workflows"). O GitHub pausa agendamentos depois de 60 dias sem commits.
+- **Erros do app:** exceções não tratadas chegam ao log da API como `Erro no app`:
+  `docker compose -f docker-compose.prod.yml logs api | grep "Erro no app"`.
+- **Testes:** o workflow [`ci.yml`](../.github/workflows/ci.yml) roda os testes da API, do agente e do app a cada push.
+
+## 11. Mudar o servidor para São Paulo
+
+A VPS atual fica em Boston: cada chamada do Brasil leva cerca de 125 ms só de ida e volta. Num datacenter em
+São Paulo, cerca de 20 ms. Para migrar com poucos minutos fora do ar:
+
+1. Contrate a nova VPS (Hostinger: escolha o datacenter "Brasil") e prepare-a como nos passos 3 e 4,
+   **sem** subir ainda. Copie o `.env` antigo para ela (`scp`, de servidor para servidor).
+2. Baixe o TTL do registro A do domínio para 300 segundos e espere uma hora.
+3. No servidor antigo, pare a API e o agente (`docker compose -f docker-compose.prod.yml stop api agent`) e
+   gere um dump de cada banco na hora:
+   `docker compose -f docker-compose.prod.yml exec -T db pg_dump -U postgres -Fc financas > financas.dump`
+   (e o mesmo para `agente`).
+4. Copie os dumps para o servidor novo, suba só o banco (`up -d db`), restaure com `pg_restore` (seção 8),
+   suba o resto (`up -d`) e troque o IP do registro A.
+5. Confira o checklist abaixo e, depois de alguns dias, desligue a VPS antiga.
 
 ## Checklist antes de divulgar
 

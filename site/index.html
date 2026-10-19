@@ -84,26 +84,15 @@
       width: 300px; max-width: 100%; margin: 0 auto; background: #0c100f; border-radius: 40px; padding: 12px;
       box-shadow: 0 40px 80px rgba(0,0,0,.35); position: relative;
     }
-    .screen { background: #f3f6f5; border-radius: 30px; overflow: hidden; color: #1a1f1d; font-size: 13px; }
-    .scr-top { padding: 18px 16px 8px; display: flex; justify-content: space-between; align-items: center; }
-    .scr-top small { color: #5b6662; display: block; font-size: 11px; }
-    .scr-top b { font-size: 17px; }
-    .avatar { width: 32px; height: 32px; border-radius: 50%; background: #c9f0dd; color: #00653f; display: grid; place-items: center; font-weight: 900; }
-    .balance {
-      margin: 6px 12px 10px; padding: 16px; border-radius: 20px; color: #fff;
-      background: linear-gradient(135deg, var(--brand-2), var(--brand-dark));
-    }
-    .balance small { opacity: .85; }
-    .balance .v { font-size: 26px; font-weight: 900; line-height: 1.2; }
-    .balance .row { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; }
-    .balance .row span { background: rgba(255,255,255,.18); padding: 3px 8px; border-radius: 8px; }
-    .card-s { margin: 0 12px 10px; background: #fff; border-radius: 18px; padding: 12px 14px; }
-    .card-s h4 { margin: 0 0 8px; font-size: 13px; }
-    .cat { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; margin: 7px 0; }
-    .cat i { font-style: normal; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; }
-    .bar { height: 6px; background: #e6ece9; border-radius: 6px; overflow: hidden; margin-top: 3px; }
-    .bar div { height: 100%; border-radius: 6px; }
-    .cat b { font-size: 12px; }
+    .screen { border-radius: 30px; overflow: hidden; background: #f3f6f5; aspect-ratio: 412 / 915; }
+    .screen img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+    .shots { display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 8px 4px 24px; margin-top: 36px; }
+    .shot { flex: 0 0 230px; margin: 0; scroll-snap-align: center; text-align: center; }
+    .shot .phone { width: 230px; padding: 9px; border-radius: 34px; box-shadow: 0 18px 40px rgba(0,0,0,.18); }
+    .shot .screen { border-radius: 26px; }
+    .shot p { margin: 14px 0 0; font-weight: 800; }
+    .shot small { display: block; color: var(--muted); font-weight: 600; }
+    @media (min-width: 1100px) { .shots { justify-content: center; } }
     .tip {
       position: absolute; right: -36px; bottom: 70px; width: 210px; background: #fff; color: #1a1f1d;
       border-radius: 18px; padding: 12px 14px; font-size: 13px; box-shadow: 0 16px 40px rgba(0,0,0,.22);
@@ -222,32 +211,13 @@
 
       <div style="position:relative">
         <img class="float-pig" src="img/mascot.png" alt="" width="96" height="96">
-        <div class="phone" role="img" aria-label="Tela inicial do app com saldo do mês e gastos por categoria">
-          <div class="screen" aria-hidden="true">
-            <div class="scr-top">
-              <div><small>Boa tarde,</small><b>Ana</b></div>
-              <div class="avatar">A</div>
-            </div>
-            <div class="balance">
-              <small>Saldo atual</small>
-              <div class="v">R$ 3.482,90</div>
-              <div class="row"><span>▲ R$ 5.200</span><span>▼ R$ 1.717</span></div>
-            </div>
-            <div class="card-s">
-              <h4>Orçamentos de outubro</h4>
-              <div class="cat"><i style="background:#ffe9d6">🍔</i><div>Alimentação<div class="bar"><div style="width:72%;background:#ff8a3d"></div></div></div><b>72%</b></div>
-              <div class="cat"><i style="background:#dff1ff">🚗</i><div>Transporte<div class="bar"><div style="width:45%;background:#3b9eff"></div></div></div><b>45%</b></div>
-              <div class="cat"><i style="background:#f0e6ff">🎮</i><div>Lazer<div class="bar"><div style="width:93%;background:#e5484d"></div></div></div><b>93%</b></div>
-              <div class="cat"><i style="background:#dcf6ea">🛒</i><div>Compras<div class="bar"><div style="width:30%;background:#00a86b"></div></div></div><b>30%</b></div>
-            </div>
-            <div class="card-s" style="margin-bottom:14px">
-              <h4>Últimos lançamentos</h4>
-              <div class="cat"><i style="background:#ffe9d6">🍕</i><div>Pizza com amigos</div><b style="color:#e5484d">−R$ 64</b></div>
-              <div class="cat"><i style="background:#dcf6ea">💼</i><div>Salário</div><b style="color:#00a86b">+R$ 5.200</b></div>
-            </div>
+        <div class="phone">
+          <div class="screen">
+            <img src="img/telas/inicio.webp" width="540" height="1199"
+                 alt="Tela inicial do app: saldo do mês, métricas, contas e cartão de crédito">
           </div>
         </div>
-        <div class="tip"><strong>DICA DA IA</strong>Lazer já usou 93% do limite. Que tal um programa em casa no fim de semana? 🍿</div>
+        <div class="tip"><strong>DICA DA IA</strong>Lazer já usou 99% do limite. Que tal um programa em casa no fim de semana? 🍿</div>
       </div>
     </div>
   </div>
@@ -279,9 +249,39 @@
           <p>Veja para onde vai o dinheiro por categoria e compare com o mês anterior.</p>
         </div>
         <div class="feature">
-          <div class="ico" style="background:#fff3cd">🏦</div>
-          <h3>Todas as contas</h3>
-          <p>Carteira, banco, poupança: cada uma com seu saldo, transferências entre elas e categorias do seu jeito.</p>
+          <div class="ico" style="background:#f0e6ff">💳</div>
+          <h3>Cartão e fatura</h3>
+          <p>Cadastre o cartão com fechamento e vencimento e veja a fatura de cada mês, o limite livre e o pagamento.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#fff3cd">🔁</div>
+          <h3>Fixos e parcelados</h3>
+          <p>Aluguel, salário e assinaturas se repetem sozinhos. Compra em 10x vira 10 parcelas, cada uma no seu mês.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#dff1ff">✈️</div>
+          <h3>Metas de economia</h3>
+          <p>"R$ 5 mil para a viagem até junho": o app diz quanto guardar por mês e comemora quando você chega lá.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#ffe9d6">🔥</div>
+          <h3>Sequência e conquistas</h3>
+          <p>Registre um pouco todo dia, mantenha a chama acesa e desbloqueie conquistas, como num jogo.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#dcf6ea">🔍</div>
+          <h3>Busca e planilha</h3>
+          <p>Ache qualquer gasto antigo em segundos e exporte tudo para o Excel ou o Google Planilhas.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#fff3cd">🔔</div>
+          <h3>Lembretes</h3>
+          <p>Um aviso para anotar os gastos do dia e outro na véspera das contas que vão vencer.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#dff1ff">💻</div>
+          <h3>Celular e computador</h3>
+          <p>App para Android e versão no navegador, com a mesma conta e os dados sempre sincronizados.</p>
         </div>
         <div class="feature">
           <div class="ico" style="background:#dcf6ea">💬</div>
@@ -294,6 +294,19 @@
 
   <section class="soft">
     <div class="wrap center">
+      <div class="kicker">Veja por dentro</div>
+      <h2>Simples de usar, bonito de ver</h2>
+      <div class="shots">
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/lancamentos.webp" loading="lazy" width="540" height="1199" alt="Lista de lançamentos do mês agrupada por dia"></div></div><p>Lançamentos<small>Tudo do mês, dia a dia</small></p></figure>
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/fatura.webp" loading="lazy" width="540" height="1199" alt="Fatura do cartão de crédito com limite livre"></div></div><p>Cartão de crédito<small>Fatura, limite e parcelas</small></p></figure>
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/metas.webp" loading="lazy" width="540" height="1199" alt="Orçamentos por categoria e metas de economia"></div></div><p>Planejamento<small>Orçamentos e metas</small></p></figure>
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/conquistas.webp" loading="lazy" width="540" height="1199" alt="Sequência de dias e conquistas"></div></div><p>Conquistas<small>Economizar vira hábito</small></p></figure>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap center">
       <div class="kicker">Comece hoje</div>
       <h2>Três passos e seu mês está organizado</h2>
       <div class="steps">
@@ -304,7 +317,7 @@
     </div>
   </section>
 
-  <section>
+  <section class="soft">
     <div class="wrap privacy">
       <img src="img/mascot.png" alt="" width="160" height="160" style="background:linear-gradient(160deg,var(--brand-2),var(--brand-dark));border-radius:50%">
       <div>
@@ -321,7 +334,7 @@
     </div>
   </section>
 
-  <section class="soft">
+  <section>
     <div class="wrap">
       <div class="center">
         <div class="kicker">Dúvidas</div>
@@ -353,6 +366,10 @@
         <details>
           <summary>O que a inteligência artificial vê?</summary>
           <p>Só quando você pede uma análise ou faz uma pergunta, um resumo do mês (totais, categorias e maiores gastos) é enviado ao serviço de IA. Seu nome e seu e-mail não são enviados. Os detalhes estão na <a href="privacidade.html" style="color:var(--brand)">política de privacidade</a>.</p>
+        </details>
+        <details>
+          <summary>Consigo levar meus dados para uma planilha?</summary>
+          <p>Sim. No menu do app, toque em <strong>Exportar planilha</strong>: todos os seus lançamentos e transferências vão para um arquivo que abre no Excel ou no Google Planilhas.</p>
         </details>
         <details>
           <summary>Posso usar no celular e no computador?</summary>
