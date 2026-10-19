@@ -52,7 +52,7 @@
   <header>
     <a class="brand" href="/">Economizze</a>
     <h1>Política de Privacidade</h1>
-    <p class="updated">Última atualização: 18 de outubro de 2026</p>
+    <p class="updated">Última atualização: 19 de outubro de 2026</p>
   </header>
 
   <section>
@@ -67,7 +67,8 @@
       <strong>Resumo:</strong> usamos seus dados só para fazer o app funcionar. Não vendemos dados, não
       mostramos anúncios e não usamos ferramentas de rastreamento ou analytics. Para os recursos de
       inteligência artificial, parte dos seus dados é enviada à DeepSeek, como explicado na seção 4.
-      Você pode excluir sua conta e todos os dados a qualquer momento, pelo próprio app.
+      O responsável pelo serviço tem acesso técnico ao servidor, mas não consulta seus registros sem
+      motivo, como explicado na seção 6. Você pode excluir sua conta e todos os dados a qualquer momento, pelo próprio app.
     </p>
   </section>
 
@@ -121,7 +122,8 @@
       <li><strong>Endereço IP</strong>: usado no momento da requisição para limitar tentativas de login e
         proteger o serviço contra abuso. Não é gravado em banco de dados.</li>
       <li><strong>Registros técnicos (logs)</strong> do servidor, com horários, erros e, no caso do assistente,
-        o número de telefone que enviou a mensagem. Eles têm tamanho limitado e são descartados automaticamente
+        o número de telefone que enviou a mensagem, mascarado (só o código do país, o DDD e os 4 últimos
+        dígitos aparecem, por exemplo 5511*****4321). Eles têm tamanho limitado e são descartados automaticamente
         conforme novos registros são gerados.</li>
       <li><strong>No seu aparelho</strong>, guardamos o token de acesso e seu nome, para você não precisar entrar
         toda vez: no armazenamento seguro do sistema (Android) ou no armazenamento do navegador (versão web).
@@ -216,8 +218,30 @@
       <li>Banco de dados sem acesso direto pela internet; acesso administrativo ao servidor só por chave
         criptográfica.</li>
       <li>Cada usuário só acessa os próprios dados, e excluir a conta exige confirmar a senha.</li>
+      <li>Senhas novas precisam ter pelo menos 8 caracteres. O acesso no aparelho expira depois de 14 dias
+        sem uso, e você pode encerrar o acesso em todos os aparelhos pelo menu do app ("Sair de todos os
+        aparelhos"), por exemplo se perder o celular.</li>
       <li>Cópias de segurança diárias.</li>
     </ul>
+
+    <h3>Quem tem acesso aos seus dados</h3>
+    <p>
+      Seus dados não são criptografados de ponta a ponta: o servidor precisa lê-los para calcular saldos,
+      gráficos e orçamentos e para o assistente funcionar, como acontece na maioria dos serviços na nuvem.
+      Por isso, o responsável pelo Economizze, que administra o servidor, tem acesso técnico ao banco de
+      dados. Sua senha ele não consegue ver, porque ela é guardada só como hash.
+    </p>
+    <p>Esse acesso é usado apenas para:</p>
+    <ul>
+      <li>manter o serviço funcionando, corrigir erros e restaurar cópias de segurança;</li>
+      <li>dar suporte quando você pedir, e só com a sua autorização para olhar os seus registros;</li>
+      <li>cumprir obrigação legal ou ordem judicial.</li>
+    </ul>
+    <p>
+      Seus lançamentos não são consultados por curiosidade, para análise comercial ou para qualquer outro fim.
+      Nenhuma outra pessoa tem acesso administrativo ao servidor. A Hostinger, que hospeda o servidor, não
+      acessa os dados (veja a seção 4).
+    </p>
     <p>
       Nenhum sistema é 100% seguro. Se acontecer um incidente de segurança que possa trazer risco ou dano
       relevante a você, avisaremos você e a Autoridade Nacional de Proteção de Dados (ANPD), como manda a LGPD.
