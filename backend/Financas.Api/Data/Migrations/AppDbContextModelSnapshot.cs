@@ -28,9 +28,19 @@ namespace Financas.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("ClosingDay")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("CreditLimit")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<int?>("DueDay")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Icon")
                         .IsRequired()
@@ -40,6 +50,9 @@ namespace Financas.Api.Data.Migrations
                     b.Property<decimal>("InitialBalance")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -120,6 +133,51 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.Goal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("Deadline")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Icon")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<decimal>("Saved")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<decimal>("Target")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Goals");
+                });
+
             modelBuilder.Entity("Financas.Api.Models.LinkAttempt", b =>
                 {
                     b.Property<string>("Phone")
@@ -153,6 +211,11 @@ namespace Financas.Api.Data.Migrations
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
 
@@ -161,8 +224,17 @@ namespace Financas.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int?>("InstallmentCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("InstallmentNumber")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsPaid")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid?>("SeriesId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Type")
                         .HasColumnType("integer");
@@ -175,6 +247,8 @@ namespace Financas.Api.Data.Migrations
                     b.HasIndex("AccountId");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("SeriesId");
 
                     b.HasIndex("UserId", "Date");
 
@@ -243,6 +317,16 @@ namespace Financas.Api.Data.Migrations
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("ResetAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ResetCodeExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResetCodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");

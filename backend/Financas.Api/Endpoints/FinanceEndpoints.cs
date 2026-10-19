@@ -23,20 +23,30 @@ public static class FinanceEndpoints
 
         accounts.MapPost("/", async (AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var a = new Account { UserId = user.UserId(), Name = req.Name, InitialBalance = req.InitialBalance, Color = req.Color ?? "#4CAF50", Icon = req.Icon ?? "account_balance_wallet" };
+            if (Validate(req) is { } error) return error;
+            var a = new Account { UserId = user.UserId() };
+            Apply(a, req);
             db.Accounts.Add(a);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance, a.InitialBalance, a.Color, a.Icon));
+            return Results.Created($"/api/accounts/{a.Id}", new AccountDto(a.Id, a.Name, a.InitialBalance, a.InitialBalance,
+                a.InitialBalance, a.Color, a.Icon, a.Kind, a.CreditLimit, a.ClosingDay, a.DueDay));
         });
 
         accounts.MapPut("/{id:guid}", async (Guid id, AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
             var a = await db.Accounts.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
             if (a is null) return Results.NotFound();
-            a.Name = req.Name; a.InitialBalance = req.InitialBalance; a.Color = req.Color ?? a.Color; a.Icon = req.Icon ?? a.Icon;
+            if (Validate(req) is { } error) return error;
+            Apply(a, req);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
+
+        // RN-35: fatura do cartão que fecha no mês informado (sem mês: a que está aberta hoje).
+        accounts.MapGet("/{id:guid}/invoice", async (Guid id, string? month, ClaimsPrincipal user, FinanceService finance) =>
+            await finance.GetInvoiceAsync(user.UserId(), id, month) is { } invoice
+                ? Results.Ok(invoice)
+                : Results.NotFound(new { error = "Cartão não encontrado." }));
 
         accounts.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
             await db.Accounts.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
@@ -88,34 +98,91 @@ public static class FinanceEndpoints
         txs.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
             var (start, end, _) = finance.ParseMonth(month);
-            return (await finance.GetTransactionsAsync(user.UserId(), start, end)).Select(ToDto);
+            return (await finance.GetTransactionsAsync(user.UserId(), start, end)).Select(FinanceService.ToDto);
         });
 
-        txs.MapPost("/", async (TransactionRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        // RN-34: busca em todos os meses por texto (descrição ou categoria), categoria, conta e tipo.
+        txs.MapGet("/search", async (string? q, Guid? categoryId, Guid? accountId, TransactionType? type,
+            ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var uid = user.UserId();
+            var query = db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
+                .Where(t => t.UserId == uid);
+            var text = (q ?? "").Trim();
+            if (text.Length > 0)
+            {
+                var pattern = "%" + text.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+                // Sem o escape explícito, o Npgsql gera ESCAPE '' e o "\" deixaria de proteger % e _.
+                query = query.Where(t => EF.Functions.ILike(t.Description, pattern, "\\")
+                                      || EF.Functions.ILike(t.Category!.Name, pattern, "\\"));
+            }
+            if (categoryId is not null) query = query.Where(t => t.CategoryId == categoryId);
+            if (accountId is not null) query = query.Where(t => t.AccountId == accountId);
+            if (type is not null) query = query.Where(t => t.Type == type);
+            var found = await query.OrderByDescending(t => t.Date).ThenByDescending(t => t.CreatedAt).Take(SearchLimit).ToListAsync();
+            return found.Select(FinanceService.ToDto);
+        });
+
+        // Contas a pagar e a receber nos próximos dias (lembretes do app, RN-39).
+        txs.MapGet("/upcoming", async (int? days, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
+        {
+            var uid = user.UserId();
+            var today = clock.Today;
+            var until = today.AddDays(Math.Clamp(days ?? 30, 1, 90));
+            var found = await db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
+                .Where(t => t.UserId == uid && !t.IsPaid && t.Date >= today && t.Date <= until)
+                .OrderBy(t => t.Date).Take(100).ToListAsync();
+            return found.Select(FinanceService.ToDto);
+        });
+
+        txs.MapPost("/", async (TransactionRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
             var uid = user.UserId();
             if (await Validate(req, uid, db) is { } error) return error;
-            var t = new Transaction { UserId = uid };
-            Apply(t, req);
-            db.Transactions.Add(t);
+            if (ValidateRepeat(req.Repeat) is { } repeatError) return repeatError;
+            var created = Expand(req, uid, clock);
+            db.Transactions.AddRange(created);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/transactions/{t.Id}", new { t.Id });
+            return Results.Created($"/api/transactions/{created[0].Id}", new { created[0].Id });
         });
 
-        txs.MapPut("/{id:guid}", async (Guid id, TransactionRequest req, ClaimsPrincipal user, AppDbContext db) =>
+        // scope=future: aplica a mudança também nos próximos lançamentos da mesma série (RN-33).
+        // Cada um mantém a própria data e a situação (pago ou não).
+        txs.MapPut("/{id:guid}", async (Guid id, string? scope, TransactionRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
             var uid = user.UserId();
             var t = await db.Transactions.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
             if (t is null) return Results.NotFound();
             if (await Validate(req, uid, db) is { } error) return error;
+            if (scope == "future" && t.SeriesId is not null)
+            {
+                var amount = t.InstallmentCount is null ? req.Amount : (decimal?)null; // parcela: valor de cada uma não muda em lote
+                await db.Transactions
+                    .Where(x => x.UserId == uid && x.SeriesId == t.SeriesId && x.Date > t.Date)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.AccountId, req.AccountId)
+                        .SetProperty(x => x.CategoryId, req.CategoryId)
+                        .SetProperty(x => x.Description, (req.Description ?? "").Trim())
+                        .SetProperty(x => x.Type, req.Type)
+                        .SetProperty(x => x.Amount, x => amount ?? x.Amount));
+            }
             Apply(t, req);
             await db.SaveChangesAsync();
             return Results.NoContent();
         });
 
-        txs.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
-            await db.Transactions.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
-                ? Results.NoContent() : Results.NotFound());
+        // scope=future: exclui este e os próximos da mesma série (RN-33).
+        txs.MapDelete("/{id:guid}", async (Guid id, string? scope, ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var uid = user.UserId();
+            var t = await db.Transactions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
+            if (t is null) return Results.NotFound();
+            if (scope == "future" && t.SeriesId is not null)
+                await db.Transactions.Where(x => x.UserId == uid && x.SeriesId == t.SeriesId && x.Date >= t.Date).ExecuteDeleteAsync();
+            else
+                await db.Transactions.Where(x => x.Id == id).ExecuteDeleteAsync();
+            return Results.NoContent();
+        });
 
         // ---------- Orçamentos ----------
         var budgets = api.MapGroup("/budgets").WithTags("Orçamentos");
@@ -253,7 +320,76 @@ public static class FinanceEndpoints
         t.Amount = req.Amount; t.Type = req.Type; t.Date = req.Date; t.IsPaid = req.IsPaid;
     }
 
-    private static TransactionDto ToDto(Transaction t) => new(
-        t.Id, t.AccountId, t.Account!.Name, t.CategoryId, t.Category!.Name, t.Category.Icon, t.Category.Color,
-        t.Description, t.Amount, t.Type, t.Date, t.IsPaid);
+    public const int SearchLimit = 100;
+    public const int MaxRepeat = 60;
+
+    private static IResult? ValidateRepeat(RepeatRequest? r)
+    {
+        if (r is null) return null;
+        if (r.Kind is not ("monthly" or "installments")) return Results.BadRequest(new { error = "Repetição inválida." });
+        if (r.Kind == "installments" && r.Count is < 2 or > MaxRepeat)
+            return Results.BadRequest(new { error = $"Parcelas: de 2 a {MaxRepeat}." });
+        if (r.Kind == "monthly" && r.Count is < 2 or > MaxRepeat)
+            return Results.BadRequest(new { error = $"Repetição: de 2 a {MaxRepeat} meses." });
+        return null;
+    }
+
+    /// <summary>
+    /// RN-33: um lançamento vira vários, um por mês, na mesma série. Fixo: mesmo valor todo mês.
+    /// Parcelado: o total é dividido e os centavos que sobram ficam na 1ª parcela. Só o primeiro segue
+    /// o "pago" informado; os dos meses seguintes nascem pendentes (exceto no cartão, que é cobrado na fatura).
+    /// O dia é mantido; em meses mais curtos, cai no último dia.
+    /// </summary>
+    private static List<Transaction> Expand(TransactionRequest req, Guid uid, AppClock clock)
+    {
+        var now = clock.UtcNow;
+        var first = new Transaction { UserId = uid, CreatedAt = now };
+        Apply(first, req);
+        if (req.Repeat is not { } r) return [first];
+
+        var seriesId = Guid.NewGuid();
+        var installments = r.Kind == "installments";
+        var each = installments ? Math.Floor(req.Amount / r.Count * 100) / 100 : req.Amount;
+        if (each <= 0) each = 0.01m;
+        var list = new List<Transaction>();
+        var monthStart = new DateOnly(req.Date.Year, req.Date.Month, 1);
+        for (var i = 0; i < r.Count; i++)
+        {
+            var t = new Transaction { UserId = uid, CreatedAt = now };
+            Apply(t, req);
+            t.SeriesId = seriesId;
+            t.Date = FinanceService.DayOfMonth(monthStart.AddMonths(i), req.Date.Day);
+            t.Amount = installments && i == 0 ? req.Amount - each * (r.Count - 1) : each;
+            if (i > 0) t.IsPaid = false;
+            if (installments) { t.InstallmentNumber = i + 1; t.InstallmentCount = r.Count; }
+            list.Add(t);
+        }
+        return list;
+    }
+
+    private static IResult? Validate(AccountRequest req)
+    {
+        var name = (req.Name ?? "").Trim();
+        if (name.Length == 0) return Results.BadRequest(new { error = "Dê um nome para a conta." });
+        if (name.Length > 60) return Results.BadRequest(new { error = "O nome pode ter no máximo 60 caracteres." });
+        if (!Enum.IsDefined(req.Kind)) return Results.BadRequest(new { error = "Tipo de conta inválido." });
+        if (req.Kind == AccountKind.CreditCard)
+        {
+            if (req.ClosingDay is not (>= 1 and <= 31) || req.DueDay is not (>= 1 and <= 31))
+                return Results.BadRequest(new { error = "Informe o dia de fechamento e o de vencimento da fatura (1 a 31)." });
+            if (req.CreditLimit is < 0) return Results.BadRequest(new { error = "O limite não pode ser negativo." });
+        }
+        return null;
+    }
+
+    private static void Apply(Account a, AccountRequest req)
+    {
+        a.Name = req.Name.Trim(); a.InitialBalance = req.InitialBalance; a.Kind = req.Kind;
+        a.Color = req.Color ?? a.Color;
+        a.Icon = req.Icon ?? (req.Kind == AccountKind.CreditCard ? "credit_card" : a.Icon);
+        var card = req.Kind == AccountKind.CreditCard;
+        a.CreditLimit = card ? req.CreditLimit : null;
+        a.ClosingDay = card ? req.ClosingDay : null;
+        a.DueDay = card ? req.DueDay : null;
+    }
 }

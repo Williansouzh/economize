@@ -6,22 +6,37 @@ public record RegisterRequest(string Name, string Email, string Password);
 public record LoginRequest(string Email, string Password);
 public record AuthResponse(string Token, string Name, string Email);
 
-public record AccountRequest(string Name, decimal InitialBalance, string? Color, string? Icon);
+public record AccountRequest(string Name, decimal InitialBalance, string? Color, string? Icon,
+    AccountKind Kind = AccountKind.Regular, decimal? CreditLimit = null, int? ClosingDay = null, int? DueDay = null);
 /// <param name="Balance">Saldo atual: lançamentos pagos com data até hoje.</param>
 /// <param name="ForecastBalance">Saldo previsto: todos os lançamentos até o fim do mês consultado.</param>
-public record AccountDto(Guid Id, string Name, decimal InitialBalance, decimal Balance, decimal ForecastBalance, string Color, string Icon);
+/// <param name="OpenInvoice">Só cartão: total da fatura aberta hoje (RN-35).</param>
+public record AccountDto(Guid Id, string Name, decimal InitialBalance, decimal Balance, decimal ForecastBalance,
+    string Color, string Icon, AccountKind Kind = AccountKind.Regular, decimal? CreditLimit = null,
+    int? ClosingDay = null, int? DueDay = null, decimal? OpenInvoice = null);
+
+/// <param name="Month">Mês (yyyy-MM) em que a fatura fecha.</param>
+/// <param name="Paid">Pagamentos (transferências para o cartão) feitos entre o fechamento desta fatura e o da próxima.</param>
+public record InvoiceDto(Guid AccountId, string AccountName, string Month, DateOnly PeriodStart, DateOnly ClosingDate,
+    DateOnly DueDate, decimal Total, decimal Paid, bool IsOpen, IReadOnlyList<TransactionDto> Items);
 
 public record CategoryRequest(string Name, TransactionType Type, string? Icon, string? Color);
 public record CategoryDto(Guid Id, string Name, TransactionType Type, string Icon, string Color);
 
+/// <param name="Repeat">Só na criação: repete todo mês ou divide em parcelas (RN-33).</param>
 public record TransactionRequest(
     Guid AccountId, Guid CategoryId, string Description, decimal Amount,
-    TransactionType Type, DateOnly Date, bool IsPaid = true);
+    TransactionType Type, DateOnly Date, bool IsPaid = true, RepeatRequest? Repeat = null);
+
+/// <param name="Kind">"monthly": o mesmo valor por <paramref name="Count"/> meses.
+/// "installments": <c>Amount</c> é o total, dividido em <paramref name="Count"/> parcelas mensais.</param>
+public record RepeatRequest(string Kind, int Count);
 
 public record TransactionDto(
     Guid Id, Guid AccountId, string AccountName, Guid CategoryId, string CategoryName,
     string CategoryIcon, string CategoryColor, string Description, decimal Amount,
-    TransactionType Type, DateOnly Date, bool IsPaid);
+    TransactionType Type, DateOnly Date, bool IsPaid,
+    Guid? SeriesId = null, int? InstallmentNumber = null, int? InstallmentCount = null);
 
 public record BudgetRequest(Guid CategoryId, string Month, decimal Limit, bool Recurring = false);
 /// <param name="Month">Mês em que o orçamento foi definido (pode ser anterior ao consultado).</param>
@@ -49,6 +64,19 @@ public record InsightsDto(string Summary, List<string> Alerts, List<string> Tips
 
 public record ChatRequest(string Question, string? Month);
 public record ChatResponse(string Answer);
+
+public record GoalRequest(string Name, decimal Target, DateOnly? Deadline, string? Icon, string? Color);
+public record GoalDepositRequest(decimal Amount);
+public record GoalDto(Guid Id, string Name, decimal Target, decimal Saved, DateOnly? Deadline, string Icon, string Color,
+    double Progress, decimal? MonthlyNeeded);
+
+public record AchievementDto(string Id, string Title, string Description, string Icon, bool Unlocked);
+/// <param name="Streak">Dias seguidos, até hoje ou ontem, com pelo menos um lançamento registrado (RN-37).</param>
+public record ProgressDto(int Streak, int BestStreak, bool RegisteredToday, IReadOnlyList<AchievementDto> Achievements);
+
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Email, string Code, string NewPassword);
+public record ClientErrorRequest(string Message, string? Stack, string? Platform, string? Version);
 
 public record MeDto(string Name, string Email, string? WhatsAppPhone);
 public record DeleteAccountRequest(string Password);

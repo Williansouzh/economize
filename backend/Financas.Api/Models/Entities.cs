@@ -2,6 +2,9 @@ namespace Financas.Api.Models;
 
 public enum TransactionType { Income = 1, Expense = 2 }
 
+/// <summary>Conta comum (carteira, banco, poupança) ou cartão de crédito com fatura (RN-35).</summary>
+public enum AccountKind { Regular = 0, CreditCard = 1 }
+
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -17,6 +20,11 @@ public class User
     /// <summary>Código temporário que o usuário envia ao bot para provar que é dono do número.</summary>
     public string? WhatsAppLinkCode { get; set; }
     public DateTime? WhatsAppLinkCodeExpiresAt { get; set; }
+
+    /// <summary>Hash do código de "esqueci minha senha" enviado por e-mail (RN-38).</summary>
+    public string? ResetCodeHash { get; set; }
+    public DateTime? ResetCodeExpiresAt { get; set; }
+    public int ResetAttempts { get; set; }
 }
 
 /// <summary>Conta bancária, carteira, poupança etc.</summary>
@@ -28,6 +36,12 @@ public class Account
     public decimal InitialBalance { get; set; }
     public string Color { get; set; } = "#4CAF50";
     public string Icon { get; set; } = "account_balance_wallet";
+
+    public AccountKind Kind { get; set; }
+    /// <summary>Só cartão: limite, dia em que a fatura fecha e dia do vencimento (RN-35).</summary>
+    public decimal? CreditLimit { get; set; }
+    public int? ClosingDay { get; set; }
+    public int? DueDay { get; set; }
 }
 
 public class Category
@@ -54,6 +68,29 @@ public class Transaction
     public TransactionType Type { get; set; }
     public DateOnly Date { get; set; }
     public bool IsPaid { get; set; } = true;
+
+    /// <summary>Lançamentos criados juntos como fixos ou parcelados compartilham a série (RN-33).</summary>
+    public Guid? SeriesId { get; set; }
+    /// <summary>Só parcelados: número da parcela (1..N) e total de parcelas.</summary>
+    public int? InstallmentNumber { get; set; }
+    public int? InstallmentCount { get; set; }
+    /// <summary>Quando foi registrado (não a data do lançamento): base da sequência de dias (RN-37).</summary>
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Meta de economia, como "R$ 5 mil para a viagem até dezembro" (RN-36). O valor guardado
+/// é informado pelo usuário e não mexe no saldo das contas.</summary>
+public class Goal
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = "";
+    public decimal Target { get; set; }
+    public decimal Saved { get; set; }
+    public DateOnly? Deadline { get; set; }
+    public string Icon { get; set; } = "savings";
+    public string Color { get; set; } = "#00A86B";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
 /// <summary>Tentativas erradas de código de vinculação por número (RN-24). Fica no banco

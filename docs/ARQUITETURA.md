@@ -78,6 +78,7 @@ erDiagram
   USER ||--o{ TRANSACTION : registra
   USER ||--o{ BUDGET : define
   USER ||--o{ TRANSFER : move
+  USER ||--o{ GOAL : planeja
   ACCOUNT ||--o{ TRANSACTION : "movimenta (exclui em cascata)"
   ACCOUNT ||--o{ TRANSFER : "origem e destino (exclui em cascata)"
   CATEGORY ||--o{ TRANSACTION : "classifica (bloqueia exclusão)"
@@ -90,6 +91,10 @@ erDiagram
     string WhatsAppPhone UK "opcional"
     string WhatsAppLinkCode "6 dígitos"
     datetime WhatsAppLinkCodeExpiresAt
+    int TokenVersion "RN-32"
+    string ResetCodeHash "SHA-256 do código de nova senha"
+    datetime ResetCodeExpiresAt
+    int ResetAttempts
   }
   ACCOUNT {
     guid Id PK
@@ -98,6 +103,10 @@ erDiagram
     decimal InitialBalance
     string Color
     string Icon "nome do ícone no app"
+    enum Kind "Regular ou CreditCard"
+    decimal CreditLimit "só cartão, opcional"
+    int ClosingDay "só cartão"
+    int DueDay "só cartão"
   }
   CATEGORY {
     guid Id PK
@@ -117,6 +126,20 @@ erDiagram
     enum Type "Income ou Expense"
     date Date "define o mês"
     bool IsPaid "padrão true"
+    guid SeriesId "fixos e parcelados"
+    int InstallmentNumber "parcela N"
+    int InstallmentCount "de M"
+    timestamptz CreatedAt "dia do registro"
+  }
+  GOAL {
+    guid Id PK
+    guid UserId FK
+    string Name
+    decimal Target
+    decimal Saved "não mexe nas contas"
+    date Deadline "opcional"
+    string Icon
+    string Color
   }
   BUDGET {
     guid Id PK
@@ -147,7 +170,7 @@ erDiagram
 `LINK_ATTEMPT` não se liga a nenhum usuário: conta as tentativas erradas de vinculação por número de telefone (RN-24).
 Tipos no PostgreSQL: ids `uuid`, dinheiro `numeric(14,2)`, datas de lançamento `date`, instantes `timestamptz`.
 Índices únicos: e-mail do usuário, número do WhatsApp e a combinação usuário + categoria + mês do orçamento.
-Há também um índice em usuário + data dos lançamentos, a consulta mais frequente.
+Há também um índice em usuário + data dos lançamentos, a consulta mais frequente, e um na série dos lançamentos.
 
 ## Regras de negócio
 
@@ -163,6 +186,7 @@ isso está indicado.
 | RN-03 | A sessão dura 14 dias (JWT, `Jwt:ExpirationDays`) e é renovada sempre que o app abre (RN-32). Qualquer resposta 401 desloga o app e volta para a tela de login. |
 | RN-04 | Um usuário só vê e altera os próprios dados. Ids de outro usuário se comportam como inexistentes (404) ou inválidos (400). |
 | RN-30 | **Exclusão da conta.** O usuário exclui a conta pelo app (menu → "Excluir minha conta"), confirmando a senha (`DELETE /api/me`). Numa transação, a API apaga lançamentos, transferências, orçamentos, contas, categorias, tentativas de vinculação do número e o usuário; depois pede ao agente (`POST /internal/forget`, rede interna, `X-Agent-Key`) para apagar o histórico de conversa e as mensagens guardadas do número. Desconectar o WhatsApp também apaga o histórico. Se o aviso ao agente falhar, a exclusão continua e o agente apaga o histórico na próxima mensagem do número, ao ver que ele não está mais vinculado; vincular um número também começa uma conversa nova. Cópias de segurança mantêm os dados por até 14 dias. Política pública: `site/privacidade.html` e `site/excluir-conta.html`. |
+| RN-38 | **Esqueci minha senha.** `POST /api/auth/forgot-password` envia por e-mail (SMTP em `Email:*`) um código de 6 dígitos, guardado só como hash, que vale 15 minutos e aceita 5 tentativas. A resposta é a mesma exista ou não a conta. `POST /api/auth/reset-password` troca a senha (mínimo de 8), apaga o código, desconecta todas as sessões (RN-32) e já devolve um token novo. Sem SMTP configurado, responde 503 e o app mostra que a recuperação ainda não está disponível. |
 | RN-32 | **Sessões.** O token leva a versão de sessão do usuário (`TokenVersion`), conferida em toda requisição: token de conta excluída ou de versão antiga recebe 401. "Sair de todos os aparelhos" (menu do app, `DELETE /api/me/sessions`) aumenta a versão e desconecta todos os aparelhos, inclusive o atual. Ao abrir, o app troca o token por um novo (`POST /api/me/token`), então só precisa entrar de novo quem ficou 14 dias sem usar. Senhas novas têm no mínimo 8 caracteres; contas criadas com a regra antiga (6) continuam entrando. Tokens emitidos antes da RN-32 valem como versão 0. |
 | RN-26 | **Limite de requisições.** Login e cadastro: 10 por minuto por IP. Demais rotas: 300 por minuto por usuário logado (ou por IP, sem login). Acima disso, a API responde 429 com o cabeçalho `Retry-After`. As rotas `/api/agent/*` ficam fora do limite global porque concentram o tráfego de todos os usuários do WhatsApp e já são protegidas pela chave do agente e pela RN-24. Os limites são configuráveis em `RateLimit`. |
 
@@ -173,6 +197,7 @@ isso está indicado.
 | RN-05 | O saldo não é gravado: é calculado na hora. Cada conta tem dois saldos. **Saldo atual**: saldo inicial + lançamentos **pagos com data até hoje**. **Saldo previsto**: saldo inicial + **todos** os lançamentos (pagos, pendentes e agendados) até o fim do mês consultado. O app mostra o atual em destaque e o previsto logo abaixo. |
 | RN-06 | Excluir uma conta exclui todos os lançamentos dela e as transferências de e para ela. |
 | RN-07 | As contas são listadas em ordem alfabética. A primeira é a "conta padrão" usada pelo formulário do app e pelo agente quando a conta não é informada. |
+| RN-35 | **Cartão de crédito.** Uma conta pode ser cartão, com dia de fechamento, dia de vencimento e limite opcional. A fatura que fecha no mês M reúne as compras do dia do fechamento do mês anterior (inclusive) até a véspera do fechamento de M: compra feita no dia do fechamento já vai para a próxima. O vencimento cai em M se o dia dele for depois do fechamento, senão em M+1; dias que não existem no mês viram o último dia. Total = despesas menos receitas (estornos) do período. Pagar a fatura é uma transferência para o cartão; conta como pagamento da fatura de M a transferência feita entre o fechamento de M e o de M+1. O saldo do cartão fica negativo (dívida) e entra no saldo total. `GET /api/accounts/{id}/invoice?month=` |
 | RN-28 | **Transferência entre contas.** Move dinheiro de uma conta do usuário para outra. Tira da origem e põe no destino, com as mesmas regras de pago e de data da RN-11 (pendente ou com data futura só entra no saldo previsto). **Não é receita nem despesa**: fica fora dos totais e do resultado do mês, das categorias, dos orçamentos e dos insights. O valor tem que ser maior que zero, as duas contas precisam ser do usuário e diferentes. No app, aparece na lista do dia com as duas contas, mas não soma no total do dia. O agente do WhatsApp não cria transferências. |
 
 ### Lançamentos
@@ -184,6 +209,8 @@ isso está indicado.
 | RN-10 | O lançamento pertence ao mês da sua data (regime de competência). Pedidos sem mês ou com mês inválido usam o mês atual. |
 | RN-25 | "Hoje" e "mês atual" seguem o fuso `America/Sao_Paulo` (configurável em `App:TimeZone`), não o relógio do servidor. Às 22h de 17/10 no Brasil, um servidor em UTC já está no dia 18, mas para a API ainda é dia 17. |
 | RN-11 | Lançamentos nascem como pagos. Um lançamento pendente entra nos totais do mês, no gasto do orçamento e no saldo previsto, mas não no saldo atual. Um lançamento pago com data futura também só entra no saldo atual quando a data chega. O app mostra os pendentes do mês ("a receber" e "a pagar") no card de saldo. |
+| RN-33 | **Fixos e parcelados.** Na criação, `repeat` gera um lançamento por mês na mesma série: `monthly` repete o valor por N meses (2 a 60); `installments` divide o total em N parcelas (2 a 60), com os centavos que sobram na primeira. O dia se mantém e, em mês mais curto, cai no último dia. Só o primeiro segue o "pago" informado; os seguintes nascem pendentes. Editar ou excluir com `scope=future` vale para este e os próximos da série (cada um mantém data e situação; em parcelados, o valor de cada parcela não muda em lote). |
+| RN-34 | **Busca.** `GET /api/transactions/search` procura em todos os meses pela descrição ou pelo nome da categoria (sem diferenciar maiúsculas, com `%` e `_` tratados como texto), com filtros de categoria, conta e tipo. Devolve os 100 mais recentes. |
 | RN-12 | No app, a lista do mês é agrupada por dia, do mais recente para o mais antigo. Excluir pede confirmação; editar reaproveita o mesmo formulário. O app aceita valores como "1.234,56" ou "1234.56". |
 
 ### Categorias
@@ -199,7 +226,16 @@ isso está indicado.
 |---|---|
 | RN-14 | Existe no máximo um limite por categoria por mês; salvar de novo substitui o valor. **Só categorias de despesa aceitam orçamento**, e o limite tem que ser maior que zero. |
 | RN-27 | **Orçamento que se repete.** Marcado como "repetir todo mês" (padrão no app), o orçamento vale também nos meses seguintes que não tiverem orçamento próprio para a categoria. Num mês, vale o orçamento do próprio mês; se não houver, o mais recente de um mês anterior que repete. Salvar num mês herdado cria um orçamento daquele mês: "repetir" faz o novo valor seguir dali em diante; "só este mês" muda só aquele mês, e o seguinte volta ao valor anterior. Excluir no mês de origem apaga o orçamento; excluir num mês herdado ("Parar de repetir") encerra a repetição a partir daquele mês, sem mexer nos anteriores. |
+| RN-36 | **Metas de economia.** Nome, valor alvo, prazo opcional, ícone e cor. "Guardar" e "retirar" só mudam o valor guardado da meta (nunca abaixo de zero), sem mexer no saldo das contas. Com prazo, a API calcula quanto guardar por mês contando o mês atual. |
 | RN-15 | O gasto do orçamento é a soma das despesas da categoria no mês, incluindo as pendentes. A barra fica laranja acima de 80% do limite e vermelha acima de 100%, com o texto "Estourou em R$ X". |
+
+### Hábito e dados do usuário
+
+| ID | Regra |
+|---|---|
+| RN-37 | **Sequência e conquistas.** A sequência conta dias seguidos (no fuso do usuário) em que algum lançamento foi *registrado*, pela data de registro e não pela data do lançamento. Ela termina hoje ou, se hoje ainda não houve registro, ontem, para não zerar de manhã. As conquistas são calculadas na hora (`GET /api/me/progress`), sem tabela própria: primeiro lançamento, 50 lançamentos, 7 e 30 dias seguidos, primeiro orçamento, mês passado dentro de todos os orçamentos, 20% de economia no mês passado, primeira meta, meta batida e cartão cadastrado. |
+| RN-39 | **Lembretes.** Só no app Android, agendados no próprio aparelho (`flutter_local_notifications`, sem alarme exato): um diário no horário escolhido e um às 9h da véspera de cada despesa pendente dos próximos 30 dias (`GET /api/transactions/upcoming`). Reagendados ao abrir o app e depois de cada mudança; cancelados ao sair da conta. |
+| RN-40 | **Exportação.** `GET /api/export/transactions.csv` devolve todos os lançamentos e transferências em CSV para o Excel em português (UTF-8 com BOM, `;` e vírgula decimal; despesas negativas). Textos que começam com `=`, `+` ou `@` ganham um apóstrofo para não virarem fórmula. |
 
 ### Insights com IA
 
@@ -416,6 +452,13 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | Não havia transferência entre contas | Entidade `Transfer`, que entra nos saldos e fica fora de receitas e despesas (RN-28). | `Transferencia_move_saldo_sem_contar_como_receita_ou_despesa`, `Transferencia_recusa_mesma_conta_e_conta_de_outro_usuario` |
 | Não havia como excluir a conta (exigido pela LGPD e pela Google Play) | Exclusão com senha no app e na API, que também apaga o histórico do WhatsApp no agente (RN-30). | `Excluir_conta_apaga_todos_os_dados_e_avisa_o_agente_mas_nao_toca_em_outros_usuarios`, `Excluir_conta_exige_a_senha`, `Desconectar_o_whatsapp_pede_ao_agente_para_apagar_o_historico`, `test_conta_excluida_ou_desvinculada_apaga_o_historico`, `test_forget_exige_a_chave_do_agente`, `test_postgres_forget_apaga_as_mensagens_guardadas_do_numero` |
 | Senha mínima de 6 caracteres e token de 30 dias sem como revogar | Senha de 8 caracteres, token de 14 dias renovado ao abrir o app e "Sair de todos os aparelhos"; token de conta excluída deixa de valer (RN-32). | `Cadastro_exige_senha_de_8_caracteres`, `Renovar_devolve_um_token_novo_que_funciona`, `Sair_de_todos_os_aparelhos_derruba_todas_as_sessoes_do_usuario_e_so_dele`, `Token_de_conta_excluida_deixa_de_valer` |
+| Contas fixas e compras parceladas tinham de ser digitadas todo mês | Repetição mensal e parcelas na criação, com edição e exclusão "daqui pra frente" (RN-33). | `Parcelado_divide_o_total_e_poe_os_centavos_na_primeira`, `Fixo_repete_o_valor_e_excluir_daqui_pra_frente_mantem_os_anteriores`, `Repeticao_invalida_e_recusada` |
+| Não dava para achar um lançamento antigo | Busca em todos os meses (RN-34). | `Busca_acha_em_qualquer_mes_por_texto_e_categoria_e_nao_mostra_de_outro_usuario` |
+| Cartão de crédito era uma conta comum, sem fatura | Cartão com fechamento, vencimento, limite e fatura (RN-35). | `Periodo_da_fatura_respeita_fechamento_vencimento_e_meses_curtos`, `Cartao_mostra_fatura_aberta_e_pagamento_por_transferencia` |
+| Quem esquecia a senha perdia a conta | Código por e-mail (RN-38). | `Esqueci_a_senha_troca_a_senha_e_derruba_as_sessoes`, `Codigo_de_senha_vence_e_bloqueia_depois_de_5_erros`, `Sem_email_configurado_a_recuperacao_avisa_que_nao_esta_disponivel` |
+| Sem exportação dos dados (portabilidade, LGPD) | CSV de todos os lançamentos (RN-40). | `Exporta_csv_para_excel_sem_formulas_e_so_do_usuario` |
+| Erros do app só apareciam quando alguém reclamava | O app envia exceções não tratadas para o log da API (`POST /api/client-errors`), e um workflow do GitHub confere o site a cada 15 minutos. | `Erro_do_app_e_aceito_sem_login` |
+| Backup só dentro da própria VPS | Serviço `offsite` (restic) copia os backups criptografados para fora, quando configurado. | — (infraestrutura) |
 | Telefone completo nos logs do agente | Número mascarado nos logs. | `test_mask_phone_mostra_so_o_inicio_e_o_final_do_numero` |
 | Descrições iam para o DeepSeek sem o usuário saber | Aviso na tela de IA dizendo o que é enviado e o que não é (RN-16). | — (texto no app) |
 | Mensagem perdida se a instância do agente caísse no meio | Conclusão marcada só depois da resposta; mensagens abandonadas são retomadas por outra instância (RN-29, AG-10). | `test_postgres_mensagem_abandonada_e_retomada_por_outra_instancia`, `test_postgres_desiste_depois_do_limite_de_tentativas`, `test_mensagem_retomada_avisa_o_modelo_para_nao_registrar_de_novo` |

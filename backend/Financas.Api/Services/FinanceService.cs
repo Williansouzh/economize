@@ -72,6 +72,14 @@ public class FinanceService(AppDbContext db, AppClock clock)
             })
             .ToDictionaryAsync(x => x.AccountId);
 
+        // Cartões: total da fatura aberta hoje (RN-35).
+        var openInvoices = new Dictionary<Guid, decimal>();
+        foreach (var card in accounts.Where(IsCard))
+        {
+            var (start, closing, _) = InvoicePeriod(OpenInvoiceMonth(today, card.ClosingDay!.Value), card.ClosingDay!.Value, card.DueDay!.Value);
+            openInvoices[card.Id] = await InvoiceTotalAsync(userId, card.Id, start, closing);
+        }
+
         return accounts.Select(a =>
         {
             var s = sums.GetValueOrDefault(a.Id);
@@ -80,9 +88,69 @@ public class FinanceService(AppDbContext db, AppClock clock)
             var current = (s?.Current ?? 0) - (o?.Current ?? 0) + (i?.Current ?? 0);
             var forecast = (s?.Forecast ?? 0) - (o?.Forecast ?? 0) + (i?.Forecast ?? 0);
             return new AccountDto(a.Id, a.Name, a.InitialBalance,
-                a.InitialBalance + current, a.InitialBalance + forecast, a.Color, a.Icon);
+                a.InitialBalance + current, a.InitialBalance + forecast, a.Color, a.Icon,
+                a.Kind, a.CreditLimit, a.ClosingDay, a.DueDay,
+                openInvoices.TryGetValue(a.Id, out var inv) ? inv : null);
         }).OrderBy(a => a.Name).ToList();
     }
+
+    // ---------- Cartão de crédito (RN-35) ----------
+
+    public static bool IsCard(Account a) => a.Kind == AccountKind.CreditCard && a.ClosingDay is not null && a.DueDay is not null;
+
+    /// <summary>Dia <paramref name="day"/> do mês, limitado ao último dia (fechamento no dia 31 em fevereiro cai no 28/29).</summary>
+    public static DateOnly DayOfMonth(DateOnly monthStart, int day) =>
+        new(monthStart.Year, monthStart.Month, Math.Min(day, DateTime.DaysInMonth(monthStart.Year, monthStart.Month)));
+
+    /// <summary>
+    /// Fatura que fecha no mês <paramref name="monthStart"/>: compras de <c>Start</c> (fechamento anterior,
+    /// inclusive) até a véspera de <c>Closing</c>. Compra feita no dia do fechamento já vai para a próxima.
+    /// O vencimento cai no mesmo mês se o dia dele for depois do fechamento; senão, no mês seguinte.
+    /// </summary>
+    public static (DateOnly Start, DateOnly Closing, DateOnly Due) InvoicePeriod(DateOnly monthStart, int closingDay, int dueDay)
+    {
+        var start = DayOfMonth(monthStart.AddMonths(-1), closingDay);
+        var closing = DayOfMonth(monthStart, closingDay);
+        var due = DayOfMonth(dueDay > closingDay ? monthStart : monthStart.AddMonths(1), dueDay);
+        return (start, closing, due);
+    }
+
+    /// <summary>Mês (primeiro dia) da fatura em que entra uma compra feita em <paramref name="date"/>.</summary>
+    public static DateOnly OpenInvoiceMonth(DateOnly date, int closingDay)
+    {
+        var month = new DateOnly(date.Year, date.Month, 1);
+        return date < DayOfMonth(month, closingDay) ? month : month.AddMonths(1);
+    }
+
+    private async Task<decimal> InvoiceTotalAsync(Guid userId, Guid accountId, DateOnly start, DateOnly closing) =>
+        await db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && t.AccountId == accountId && t.Date >= start && t.Date < closing)
+            .SumAsync(t => t.Type == TransactionType.Expense ? t.Amount : -t.Amount);
+
+    /// <summary>Fatura do cartão que fecha em <paramref name="month"/> (padrão: a aberta hoje).</summary>
+    public async Task<InvoiceDto?> GetInvoiceAsync(Guid userId, Guid accountId, string? month)
+    {
+        var card = await db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
+        if (card is null || !IsCard(card)) return null;
+        var monthStart = month is null ? OpenInvoiceMonth(clock.Today, card.ClosingDay!.Value) : ParseMonth(month).Start;
+        var (start, closing, due) = InvoicePeriod(monthStart, card.ClosingDay!.Value, card.DueDay!.Value);
+        var nextClosing = DayOfMonth(monthStart.AddMonths(1), card.ClosingDay!.Value);
+
+        var items = await db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
+            .Where(t => t.UserId == userId && t.AccountId == accountId && t.Date >= start && t.Date < closing)
+            .OrderByDescending(t => t.Date).ToListAsync();
+        var paid = await db.Transfers.AsNoTracking()
+            .Where(t => t.UserId == userId && t.ToAccountId == accountId && t.Date >= closing && t.Date < nextClosing)
+            .SumAsync(t => t.Amount);
+        var total = items.Sum(t => t.Type == TransactionType.Expense ? t.Amount : -t.Amount);
+
+        return new InvoiceDto(card.Id, card.Name, monthStart.ToString("yyyy-MM"), start, closing, due,
+            total, paid, clock.Today < closing, items.Select(ToDto).ToList());
+    }
+
+    public static TransactionDto ToDto(Transaction t) => new(
+        t.Id, t.AccountId, t.Account!.Name, t.CategoryId, t.Category!.Name, t.Category.Icon, t.Category.Color,
+        t.Description, t.Amount, t.Type, t.Date, t.IsPaid, t.SeriesId, t.InstallmentNumber, t.InstallmentCount);
 
     public Task<List<Transfer>> GetTransfersAsync(Guid userId, DateOnly start, DateOnly end) =>
         db.Transfers.AsNoTracking()

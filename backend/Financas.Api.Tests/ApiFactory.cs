@@ -38,6 +38,10 @@ public class ApiFactory : WebApplicationFactory<Program>
     /// <summary>Corpo de cada chamada da API ao agente (POST /internal/forget). Só com Agent:Url definida.</summary>
     public List<string> AgentCalls { get; } = [];
 
+    /// <summary>E-mails "enviados" (RN-38). Com <see cref="EmailConfigured"/> falso, simula a API sem SMTP.</summary>
+    public List<(string To, string Subject, string Body)> Emails { get; } = [];
+    public bool EmailConfigured { get; init; } = true;
+
     /// <summary>Relógio controlado pelos testes. Padrão: 17/10/2026 15:00 UTC (12:00 em São Paulo).</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 17, 15, 0, 0, TimeSpan.Zero));
 
@@ -52,6 +56,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         {
             s.AddSingleton<TimeProvider>(Clock);
             s.AddHttpClient<AgentClient>().ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(AgentCalls));
+            s.AddSingleton<IEmailSender>(new FakeEmailSender(Emails, EmailConfigured));
         });
     }
 
@@ -84,6 +89,16 @@ public class ApiFactory : WebApplicationFactory<Program>
     }
 
     public record AuthBody(string Token, string Name, string Email);
+
+    private class FakeEmailSender(List<(string, string, string)> sent, bool configured) : IEmailSender
+    {
+        public bool IsConfigured => configured;
+        public Task SendAsync(string to, string subject, string body)
+        {
+            lock (sent) sent.Add((to, subject, body));
+            return Task.CompletedTask;
+        }
+    }
 
     /// <summary>Faz o papel do agente: guarda o que recebeu e responde 200.</summary>
     private class RecordingHandler(List<string> calls) : HttpMessageHandler

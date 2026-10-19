@@ -60,6 +60,11 @@ builder.Services.AddSingleton<AppClock>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<LinkAttemptLimiter>();
 builder.Services.AddScoped<TokenService>();
+// E-mail (RN-38): SMTP se "Email:SmtpHost" estiver configurado; em desenvolvimento sem SMTP, só no log.
+if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(builder.Configuration["Email:SmtpHost"]))
+    builder.Services.AddSingleton<IEmailSender, LogEmailSender>();
+else
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
 builder.Services.AddHttpClient<AgentClient>(c => c.Timeout = TimeSpan.FromSeconds(10));
@@ -96,6 +101,7 @@ app.MapAuthEndpoints();
 app.MapFinanceEndpoints();
 app.MapInsightsEndpoints();
 app.MapWhatsAppEndpoints();
+app.MapPlanningEndpoints();
 
 app.Run();
 

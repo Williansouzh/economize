@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
+    public DbSet<Goal> Goals => Set<Goal>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -26,12 +27,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transfer>().HasOne(t => t.FromAccount).WithMany().HasForeignKey(t => t.FromAccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transfer>().HasOne(t => t.ToAccount).WithMany().HasForeignKey(t => t.ToAccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transfer>().HasIndex(t => new { t.UserId, t.Date });
+        b.Entity<Transaction>().HasIndex(t => t.SeriesId);
+        b.Entity<Goal>().HasIndex(g => g.UserId);
 
         // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.
         b.Entity<Transaction>().Property(t => t.Amount).HasPrecision(14, 2);
         b.Entity<Account>().Property(a => a.InitialBalance).HasPrecision(14, 2);
         b.Entity<Budget>().Property(x => x.Limit).HasPrecision(14, 2);
         b.Entity<Transfer>().Property(t => t.Amount).HasPrecision(14, 2);
+        b.Entity<Account>().Property(a => a.CreditLimit).HasPrecision(14, 2);
+        b.Entity<Goal>().Property(g => g.Target).HasPrecision(14, 2);
+        b.Entity<Goal>().Property(g => g.Saved).HasPrecision(14, 2);
+        b.Entity<Goal>().Property(g => g.Name).HasMaxLength(60);
+        b.Entity<Goal>().Property(g => g.Icon).HasMaxLength(40);
+        b.Entity<Goal>().Property(g => g.Color).HasMaxLength(9);
+        b.Entity<User>().Property(u => u.ResetCodeHash).HasMaxLength(64);
+        // Lançamentos que já existiam ganham "agora" como data de registro.
+        b.Entity<Transaction>().Property(t => t.CreatedAt).HasDefaultValueSql("now()");
 
         b.Entity<User>().Property(u => u.Email).HasMaxLength(254);
         b.Entity<User>().Property(u => u.WhatsAppPhone).HasMaxLength(20);

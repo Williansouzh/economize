@@ -81,6 +81,7 @@ public static class WhatsAppEndpoints
                 await db.Budgets.Where(x => x.UserId == uid).ExecuteDeleteAsync();
                 await db.Accounts.Where(x => x.UserId == uid).ExecuteDeleteAsync();
                 await db.Categories.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await db.Goals.Where(x => x.UserId == uid).ExecuteDeleteAsync();
                 if (u.WhatsAppPhone is not null)
                     await db.LinkAttempts.Where(x => x.Phone == u.WhatsAppPhone).ExecuteDeleteAsync();
                 await db.Users.Where(x => x.Id == uid).ExecuteDeleteAsync();

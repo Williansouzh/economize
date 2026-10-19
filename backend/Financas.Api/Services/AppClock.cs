@@ -10,6 +10,12 @@ public class AppClock(TimeProvider time, IConfiguration config)
 
     public DateOnly Today => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(time.GetUtcNow(), _zone).DateTime);
 
+    public DateTime UtcNow => time.GetUtcNow().UtcDateTime;
+
+    /// <summary>Dia, no fuso do usuário, de um instante em UTC.</summary>
+    public DateOnly LocalDate(DateTime utc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _zone));
+
     private static TimeZoneInfo FindZone(string id)
     {
         try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
