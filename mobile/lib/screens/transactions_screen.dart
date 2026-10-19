@@ -19,10 +19,7 @@ class TransactionsScreen extends StatelessWidget {
       const MonthSelector(),
       Expanded(
         child: MonthLoader<(List<Transaction>, List<Transfer>)>(
-          load: (s) async {
-            final r = await Future.wait([s.api.transactions(s.monthKey), s.api.transfers(s.monthKey)]);
-            return (r[0] as List<Transaction>, r[1] as List<Transfer>);
-          },
+          load: (s) => s.monthEntries(),
           builder: (context, data, _) {
             final (txs, transfers) = data;
             if (txs.isEmpty && transfers.isEmpty) {
@@ -84,31 +81,28 @@ class _MonthSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget item(String label, double v, Color color, IconData icon) => Expanded(
-          child: Row(children: [
-            IconBadge(icon, color, size: 34),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(label,
-                    style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(money(v), style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-                ),
-              ]),
+    final cs = Theme.of(context).colorScheme;
+    Widget item(String label, double v, Color color) => Expanded(
+          child: Column(children: [
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(money(v), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
             ),
           ]),
         );
+    Widget divider() => Container(width: 1, height: 32, color: cs.outlineVariant);
     final balance = income - expenses;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
         child: Row(children: [
-          item('Entradas', income, incomeColor, Icons.south_west),
-          item('Saídas', expenses, expenseColor, Icons.north_east),
-          item('Saldo', balance, balance >= 0 ? incomeColor : expenseColor, Icons.balance),
+          item('Entradas', income, incomeColor),
+          divider(),
+          item('Saídas', expenses, expenseColor),
+          divider(),
+          item('Saldo', balance, balance >= 0 ? incomeColor : expenseColor),
         ]),
       ),
     );
@@ -132,7 +126,7 @@ class _DayHeader extends StatelessWidget {
     };
     final style = Theme.of(context).textTheme.labelLarge?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         );
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
@@ -164,7 +158,7 @@ class _TransactionTile extends StatelessWidget {
             context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editing: t))),
         leading: IconBadge(categoryIcon(t.categoryIcon), hexColor(t.categoryColor)),
         title: Text(t.description.isEmpty ? t.categoryName : t.description,
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Row(children: [
           Icon(accountIcon(account?.icon ?? ''), size: 13, color: cs.onSurfaceVariant),
           const SizedBox(width: 4),
@@ -203,7 +197,7 @@ class _TransferTile extends StatelessWidget {
             context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editingTransfer: t))),
         leading: const IconBadge(Icons.swap_horiz, transferColor),
         title: Text(t.description.isEmpty ? 'Transferência' : t.description,
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text('${t.fromAccountName} → ${t.toAccountName}',
             maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
@@ -227,7 +221,7 @@ class _PendingBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
         ),
         child: const Text('pendente',
-            style: TextStyle(fontSize: 10, color: Color(0xFFB7791F), fontWeight: FontWeight.w600)),
+            style: TextStyle(fontSize: 10, color: Color(0xFFB7791F), fontWeight: FontWeight.w700)),
       );
 }
 
@@ -248,7 +242,7 @@ class _Deletable extends StatelessWidget {
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 24),
           child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('Excluir', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            Text('Excluir', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             SizedBox(width: 8),
             Icon(Icons.delete_outline, color: Colors.white),
           ]),

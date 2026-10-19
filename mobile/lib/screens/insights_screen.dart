@@ -227,7 +227,7 @@ class _InsightsView extends StatelessWidget {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text('Saúde financeira', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 const SizedBox(height: 2),
-                Text(scoreLabel, style: TextStyle(color: scoreColor, fontWeight: FontWeight.w600)),
+                Text(scoreLabel, style: TextStyle(color: scoreColor, fontWeight: FontWeight.w700)),
                 if (i.potentialSavings > 0) ...[
                   const SizedBox(height: 8),
                   Container(
@@ -237,7 +237,7 @@ class _InsightsView extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text('Pode economizar ${money(i.potentialSavings)}/mês',
-                        style: const TextStyle(color: incomeColor, fontWeight: FontWeight.w600, fontSize: 12)),
+                        style: const TextStyle(color: incomeColor, fontWeight: FontWeight.w700, fontSize: 12)),
                   ),
                 ],
               ]),

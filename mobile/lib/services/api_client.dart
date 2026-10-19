@@ -14,6 +14,9 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
+  /// Um cliente só para o app todo: reaproveita a conexão (e o TLS) entre as chamadas,
+  /// em vez de abrir uma nova a cada requisição.
+  final _http = http.Client();
   String? token;
   void Function()? onUnauthorized;
 
@@ -57,12 +60,12 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, [Map<String, String>? q]) =>
-      _send(http.get(_uri(path, q), headers: _headers));
+      _send(_http.get(_uri(path, q), headers: _headers));
   Future<dynamic> post(String path, Object body) =>
-      _send(http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
+      _send(_http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
   Future<dynamic> put(String path, Object body) =>
-      _send(http.put(_uri(path), headers: _headers, body: jsonEncode(body)));
-  Future<dynamic> delete(String path) => _send(http.delete(_uri(path), headers: _headers));
+      _send(_http.put(_uri(path), headers: _headers, body: jsonEncode(body)));
+  Future<dynamic> delete(String path) => _send(_http.delete(_uri(path), headers: _headers));
 
   // ---- Auth ----
   Future<Map<String, dynamic>> login(String email, String password) async =>
@@ -145,7 +148,7 @@ class ApiClient {
 
   /// No mês de origem exclui o orçamento; num mês herdado, para de repetir a partir de [month].
   Future<void> deleteBudget(String id, String month) =>
-      _send(http.delete(_uri('/budgets/$id', {'month': month}), headers: _headers));
+      _send(_http.delete(_uri('/budgets/$id', {'month': month}), headers: _headers));
 
   Future<List<Transfer>> transfers(String month) async =>
       (await get('/transfers', {'month': month}) as List).map((e) => Transfer.fromJson(e)).toList();
@@ -175,7 +178,7 @@ class ApiClient {
   // ---- Conta ----
   /// Exclui a conta e todos os dados. Pede a senha de novo (RN-30).
   Future<void> deleteAccount(String password) => _send(
-      http.delete(_uri('/me'), headers: _headers, body: jsonEncode({'password': password})));
+      _http.delete(_uri('/me'), headers: _headers, body: jsonEncode({'password': password})));
 
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];

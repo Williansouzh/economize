@@ -186,7 +186,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
               _Kind.income => 'Quanto você recebeu?',
               _Kind.expense => 'Quanto você gastou?',
               _Kind.transfer => 'Quanto você vai mover?',
-            }, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+            }, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
             TextField(
               controller: _amount,
               autofocus: !_isEditing,

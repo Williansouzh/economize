@@ -106,7 +106,7 @@ class BudgetsScreen extends StatelessWidget {
       const MonthSelector(),
       Expanded(
         child: MonthLoader<Dashboard>(
-          load: (s) => s.api.dashboard(s.monthKey),
+          load: (s) => s.dashboard(),
           builder: (context, d, _) => ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
             if (d.budgets.isEmpty)
               const EmptyState(
@@ -195,7 +195,7 @@ class _BudgetsSummary extends StatelessWidget {
                     : over == 1
                         ? '1 categoria estourou o limite'
                         : '$over categorias estouraram o limite',
-                style: TextStyle(color: over == 0 ? incomeColor : expenseColor, fontWeight: FontWeight.w600),
+                style: TextStyle(color: over == 0 ? incomeColor : expenseColor, fontWeight: FontWeight.w700),
               ),
             ]),
           ),

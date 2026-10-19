@@ -9,8 +9,8 @@ import '../widgets/playful.dart';
 /// Abertura do app: o cofrinho dá uma dica de finanças enquanto o app carrega.
 /// O fundo verde continua a splash nativa do Android, sem piscar branco.
 class SplashScreen extends StatefulWidget {
-  /// Tempo mínimo na tela, para dar tempo de ler a dica.
-  static const minDuration = Duration(milliseconds: 3200);
+  /// Tempo mínimo na tela: dá para ler a dica, e os dados do Início já vêm carregando por trás.
+  static const minDuration = Duration(milliseconds: 1600);
 
   const SplashScreen({super.key});
   @override
@@ -55,7 +55,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                               fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2, color: brandDark)),
                     ]),
                     const SizedBox(height: 8),
-                    Text(_tip, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, height: 1.4)),
+                    Text(_tip, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, height: 1.4)),
                   ]),
                 ),
               ),

@@ -230,7 +230,7 @@ class _SetupScreenState extends State<SetupScreen> {
         for (final b in _banks)
           FilterChip(
             avatar: CircleAvatar(backgroundColor: hexColor(b.color), radius: 9),
-            label: Text(b.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            label: Text(b.name, style: const TextStyle(fontWeight: FontWeight.w700)),
             selected: _selectedBanks.contains(b.name),
             onSelected: (on) => setState(() {
               if (on) {
@@ -245,7 +245,7 @@ class _SetupScreenState extends State<SetupScreen> {
       if (_selectedBanks.isNotEmpty) ...[
         const SizedBox(height: 20),
         Text('Quanto tem em cada um? (pode deixar em branco)',
-            style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
+            style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         for (final b in _banks.where((b) => _selectedBanks.contains(b.name)))
           Padding(
@@ -342,7 +342,7 @@ class _DoneSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget row(IconData icon, String text) => ListTile(
           leading: IconBadge(icon, incomeColor, size: 40),
-          title: Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
+          title: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
         );
     return Card(
       child: Column(children: [

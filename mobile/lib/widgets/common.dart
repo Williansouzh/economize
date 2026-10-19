@@ -26,7 +26,7 @@ class MonthSelector extends StatelessWidget {
               Icon(Icons.calendar_month, size: 18, color: cs.primary),
               const SizedBox(width: 8),
               Text(monthLabel(state.month),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             ]),
           ),
           IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => state.changeMonth(1)),
@@ -105,7 +105,7 @@ class EmptyState extends StatelessWidget {
         const SizedBox(height: 16),
         Text(title,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
         if (message != null) ...[
           const SizedBox(height: 6),
           Text(message!, textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),

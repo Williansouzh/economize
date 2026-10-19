@@ -55,7 +55,7 @@ class _CategoryList extends StatelessWidget {
             if (i > 0) const Divider(height: 1, indent: 72),
             ListTile(
               leading: IconBadge(categoryIcon(c.icon), hexColor(c.color)),
-              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showCategorySheet(context, editing: c),
             ),

@@ -338,6 +338,10 @@
           </ol>
           <p>O aviso aparece porque o app ainda não está na Google Play. Para atualizar, baixe o arquivo de novo e instale por cima: seus dados continuam na sua conta.</p>
         </details>
+        <details id="nao-instala">
+          <summary>Apareceu "App não instalado" ou "incompatível"?</summary>
+          <p>O download principal é otimizado para os celulares atuais (processador de 64 bits) e por isso é bem mais leve. Em aparelhos mais antigos ou de entrada, baixe a <a class="js-universal" href="/download/economizze-universal.apk" download style="color:var(--brand)">versão compatível com todos os celulares</a>, que é maior.</p>
+        </details>
         <details>
           <summary>Tem para iPhone?</summary>
           <p>Ainda não há app para iPhone, mas você pode usar o Economizze pelo navegador, em <a href="/app/" style="color:var(--brand)">economizze.tech/app</a>, com a mesma conta.</p>
@@ -394,10 +398,15 @@
     .then(r => r.ok ? r.json() : null)
     .then(v => {
       if (!v) return;
-      const mb = (v.size / 1048576).toFixed(0);
+      const mb = bytes => Math.round(bytes / 1048576);
       document.querySelectorAll('.js-meta').forEach(el => {
-        el.textContent = `Versão ${v.version} · ${mb} MB · Android ${v.minAndroid}+`;
+        el.textContent = `Versão ${v.version} · ${mb(v.size)} MB · Android ${v.minAndroid}+`;
       });
+      if (v.universalSize) {
+        document.querySelectorAll('.js-universal').forEach(el => {
+          el.textContent += ` (${mb(v.universalSize)} MB)`;
+        });
+      }
     })
     .catch(() => {});
 </script>

@@ -31,6 +31,38 @@ class AppState extends ChangeNotifier {
   /// Incrementado sempre que algo muda, para as telas recarregarem.
   int revision = 0;
 
+  /// Respostas por mês, compartilhadas entre as abas (Início e Orçamentos usam o mesmo
+  /// dashboard) e reaproveitadas ao voltar para um mês já visto. Limpo quando algo muda.
+  final _cache = <String, Future<Object>>{};
+
+  Future<T> _cached<T extends Object>(String key, Future<T> Function() load) {
+    final hit = _cache[key];
+    if (hit != null) return hit.then((v) => v as T);
+    final f = load();
+    _cache[key] = f;
+    // Erro não fica guardado: a próxima tentativa chama a API de novo.
+    f.then<void>((_) {}, onError: (Object _) {
+      if (identical(_cache[key], f)) _cache.remove(key);
+    });
+    return f;
+  }
+
+  Future<Dashboard> dashboard() {
+    final m = monthKey;
+    return _cached('dashboard:$m', () => api.dashboard(m));
+  }
+
+  Future<(List<Transaction>, List<Transfer>)> monthEntries() {
+    final m = monthKey;
+    return _cached('entries:$m', () async {
+      final r = await Future.wait([api.transactions(m), api.transfers(m)]);
+      return (r[0] as List<Transaction>, r[1] as List<Transfer>);
+    });
+  }
+
+  /// Puxar para atualizar: descarta o que estava guardado.
+  void clearCache() => _cache.clear();
+
   AppState() {
     api.onUnauthorized = logout;
   }
@@ -43,6 +75,8 @@ class AppState extends ChangeNotifier {
     initialized = true;
     notifyListeners();
     if (loggedIn) {
+      // Começa a buscar o Início enquanto a abertura ainda está na tela.
+      dashboard().ignore();
       loadReferenceData();
       _refreshToken();
     }
@@ -87,6 +121,7 @@ class AppState extends ChangeNotifier {
     userName = res['name'];
     await _storage.write(key: 'token', value: api.token);
     await _storage.write(key: 'name', value: userName);
+    _cache.clear();
     await loadReferenceData();
     notifyListeners();
   }
@@ -94,6 +129,7 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     api.token = null;
     userName = null;
+    _cache.clear();
     needsSetup = false;
     // Só os dados da sessão: "já viu a apresentação" continua valendo neste aparelho.
     for (final key in ['token', 'name', 'setup_pending']) {
@@ -124,6 +160,7 @@ class AppState extends ChangeNotifier {
   }
 
   void dataChanged() {
+    _cache.clear();
     revision++;
     loadReferenceData();
     notifyListeners();

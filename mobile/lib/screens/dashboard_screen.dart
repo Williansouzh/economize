@@ -20,7 +20,7 @@ class DashboardScreen extends StatelessWidget {
       const MonthSelector(),
       Expanded(
         child: MonthLoader<Dashboard>(
-          load: (s) => s.api.dashboard(s.monthKey),
+          load: (s) => s.dashboard(),
           builder: (context, d, _) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
             children: [
@@ -102,7 +102,7 @@ class _BalanceCard extends StatelessWidget {
           ),
           child: Text(
             'Previsto em ${DateFormat("d 'de' MMM", 'pt_BR').format(monthEnd)}: ${money(d.forecastBalance)}',
-            style: const TextStyle(color: white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: white, fontSize: 12, fontWeight: FontWeight.w700),
           ),
         ),
         const SizedBox(height: 20),
@@ -194,7 +194,7 @@ class _MetricsGrid extends StatelessWidget {
         color: const Color(0xFF8B5CF6),
         label: 'Pendentes',
         value: money(d.pendingExpenses),
-        hint: 'a pagar · ${money(d.pendingIncome)} a receber',
+        hint: d.pendingIncome > 0 ? 'a pagar · ${money(d.pendingIncome)} a receber' : 'a pagar neste mês',
       ),
     ];
 
@@ -225,10 +225,17 @@ class _MetricTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          IconBadge(icon, color, size: 36),
-          const SizedBox(height: 12),
-          Text(label, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 2),
+          Row(children: [
+            IconBadge(icon, color, size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
+            ),
+          ]),
+          const SizedBox(height: 8),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -349,7 +356,7 @@ class _NewAccountCard extends StatelessWidget {
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Icons.add_circle_outline, color: cs.primary, size: 30),
           const SizedBox(height: 6),
-          Text('Nova conta', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600)),
+          Text('Nova conta', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
         ]),
       ),
     );
@@ -418,7 +425,7 @@ class _ExpensesChartState extends State<_ExpensesChart> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Expanded(child: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600))),
+                Expanded(child: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700))),
                 Text(money(c.total), style: const TextStyle(fontWeight: FontWeight.w700)),
               ]),
               const SizedBox(height: 6),
@@ -476,16 +483,20 @@ class BudgetProgress extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Flexible(
-                    child: Text(b.categoryName, style: const TextStyle(fontWeight: FontWeight.w600))),
-                if (b.recurring) ...[
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Repete todo mês',
-                    child: Icon(Icons.repeat, size: 14, color: cs.onSurfaceVariant),
-                  ),
-                ],
-                const Spacer(),
+                Expanded(
+                  child: Row(children: [
+                    Flexible(
+                        child: Text(b.categoryName,
+                            overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700))),
+                    if (b.recurring) ...[
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: 'Repete todo mês',
+                        child: Icon(Icons.repeat, size: 14, color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ]),
+                ),
                 Text('${(b.progress * 100).round()}%',
                     style: TextStyle(fontWeight: FontWeight.w700, color: color)),
               ]),

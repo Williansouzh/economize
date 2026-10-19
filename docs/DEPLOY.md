@@ -158,14 +158,17 @@ flutter build appbundle --release --dart-define=API_URL=https://SEU-DOMINIO
 #   → build/app/outputs/bundle/release/app-release.aab
 ```
 
-**Botão "Baixar para Android" da landing page:** depois do build do APK, rode na sua máquina
+**Botão "Baixar para Android" da landing page:** a página oferece um APK só para arm64 (~20 MB, quase
+todo celular atual) e um universal (~55 MB) para aparelhos de 32 bits. Os comandos para gerar os dois
+estão no topo de [`deploy/publish-apk.sh`](../deploy/publish-apk.sh); depois rode na sua máquina
 
 ```bash
-deploy/publish-apk.sh            # envia o APK para ~/economize/downloads no servidor
+deploy/publish-apk.sh            # envia os APKs para ~/economize/downloads no servidor
 ```
 
-O script troca o arquivo de uma vez (ninguém baixa um APK pela metade) e grava `version.json`, que a
-landing page usa para mostrar versão e tamanho. O APK não vai para o git; a pasta `downloads/` é montada
+Não use `--split-per-abi`: ele muda o `versionCode` e depois bloqueia as atualizações. O script troca os
+arquivos de uma vez (ninguém baixa um APK pela metade) e grava `version.json`, que a landing page usa
+para mostrar versão e tamanho. O APK não vai para o git; a pasta `downloads/` é montada
 no Caddy. Não precisa reiniciar nada.
 
 A cada nova versão, aumente `version:` no `mobile/pubspec.yaml` (ex.: `1.0.1+2`; o número depois do `+`
