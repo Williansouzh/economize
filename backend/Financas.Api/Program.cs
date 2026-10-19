@@ -23,15 +23,34 @@ builder.Services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString));
 var jwt = builder.Configuration.GetSection("Jwt");
 JwtKeyGuard.Validate(jwt["Key"], builder.Environment);
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(o => o.TokenValidationParameters = new TokenValidationParameters
+    .AddJwtBearer(o =>
     {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwt["Issuer"],
-        ValidAudience = jwt["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!)),
+        o.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwt["Issuer"],
+            ValidAudience = jwt["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"]!)),
+        };
+        // Recusa o token de conta excluída ou de sessão encerrada em "Sair de todos os aparelhos" (RN-32).
+        o.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async ctx =>
+            {
+                var principal = ctx.Principal!;
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                var userId = principal.UserId();
+                var current = await db.Users.Where(u => u.Id == userId)
+                    .Select(u => (int?)u.TokenVersion).FirstOrDefaultAsync();
+                // Tokens emitidos antes da RN-32 não têm a versão e valem como 0.
+                var version = principal.FindFirst(TokenService.VersionClaim)?.Value ?? "0";
+                if (current is null || version != current.ToString())
+                    ctx.Fail("Sessão encerrada.");
+            },
+        };
     });
 builder.Services.AddAuthorization();
 builder.Services.AddHttpProtection(builder.Configuration, builder.Environment);

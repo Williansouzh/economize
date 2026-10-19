@@ -19,7 +19,7 @@ public class ReplicasTests
 
         // Usuário criado na réplica A faz login pela B.
         await a.CreateUserClientAsync("replica@teste.com");
-        var login = await b.CreateClient().PostAsJsonAsync("/api/auth/login", new { email = "replica@teste.com", password = "123456" });
+        var login = await b.CreateClient().PostAsJsonAsync("/api/auth/login", new { email = "replica@teste.com", password = ApiFactory.Password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
 
         // Falhas de vinculação somam entre réplicas: 3 na A + 2 na B = bloqueado nas duas.

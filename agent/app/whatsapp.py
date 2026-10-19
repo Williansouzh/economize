@@ -36,6 +36,13 @@ def parse_webhook(payload: dict) -> list[IncomingMessage]:
     return messages
 
 
+def mask_phone(phone: str) -> str:
+    """Número para logs: mostra só o DDI/DDD e os 4 últimos dígitos (ex.: 5511*****4321)."""
+    if len(phone) <= 8:
+        return "*" * len(phone)
+    return phone[:4] + "*" * (len(phone) - 8) + phone[-4:]
+
+
 def verify_signature(app_secret: str, body: bytes, header: str | None) -> bool:
     if not app_secret:
         return True  # validação desligada (apenas para desenvolvimento)

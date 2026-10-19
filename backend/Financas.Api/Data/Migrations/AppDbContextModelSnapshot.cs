@@ -244,6 +244,9 @@ namespace Financas.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("TokenVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("WhatsAppLinkCode")
                         .HasMaxLength(6)
                         .HasColumnType("character varying(6)");

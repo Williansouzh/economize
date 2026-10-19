@@ -91,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           obscureText: !_showPassword,
                           decoration: InputDecoration(
                             labelText: 'Senha',
+                            helperText: _register ? 'Pelo menos 8 caracteres' : null,
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),

@@ -9,6 +9,8 @@ public class User
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Vai no token; aumentar invalida todas as sessões abertas (RN-32).</summary>
+    public int TokenVersion { get; set; }
 
     /// <summary>Número do WhatsApp vinculado (formato wa_id, ex.: 5511999999999).</summary>
     public string? WhatsAppPhone { get; set; }

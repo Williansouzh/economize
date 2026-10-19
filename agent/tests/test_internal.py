@@ -3,6 +3,7 @@
 import httpx
 
 from app import main
+from app.whatsapp import mask_phone
 
 
 class SpyHandler:
@@ -37,3 +38,8 @@ async def test_forget_recusa_tudo_sem_chave_configurada(monkeypatch):
     main.app.state.handler = spy = SpyHandler()
     assert (await call("")).status_code == 401
     assert spy.forgotten == []
+
+
+def test_mask_phone_mostra_so_o_inicio_e_o_final_do_numero():
+    assert mask_phone("5511987654321") == "5511*****4321"
+    assert mask_phone("1234") == "****"

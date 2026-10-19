@@ -158,11 +158,12 @@ isso está indicado.
 
 | ID | Regra |
 |---|---|
-| RN-01 | O e-mail é único e é gravado sem espaços e em minúsculas. O cadastro exige nome, e-mail com "@" e senha de pelo menos 6 caracteres. A senha é guardada como hash BCrypt. |
+| RN-01 | O e-mail é único e é gravado sem espaços e em minúsculas. O cadastro exige nome, e-mail com "@" e senha de pelo menos 8 caracteres (RN-32). A senha é guardada como hash BCrypt. |
 | RN-02 | Ao se cadastrar, o usuário ganha a conta "Carteira" com saldo inicial zero e 13 categorias padrão: 9 de despesa (Alimentação, Moradia, Transporte, Saúde, Educação, Lazer, Compras, Assinaturas, Outros) e 4 de receita (Salário, Freelance, Investimentos, Outras receitas). |
-| RN-03 | A sessão dura 30 dias (JWT). Qualquer resposta 401 desloga o app e volta para a tela de login. |
+| RN-03 | A sessão dura 14 dias (JWT, `Jwt:ExpirationDays`) e é renovada sempre que o app abre (RN-32). Qualquer resposta 401 desloga o app e volta para a tela de login. |
 | RN-04 | Um usuário só vê e altera os próprios dados. Ids de outro usuário se comportam como inexistentes (404) ou inválidos (400). |
 | RN-30 | **Exclusão da conta.** O usuário exclui a conta pelo app (menu → "Excluir minha conta"), confirmando a senha (`DELETE /api/me`). Numa transação, a API apaga lançamentos, transferências, orçamentos, contas, categorias, tentativas de vinculação do número e o usuário; depois pede ao agente (`POST /internal/forget`, rede interna, `X-Agent-Key`) para apagar o histórico de conversa e as mensagens guardadas do número. Desconectar o WhatsApp também apaga o histórico. Se o aviso ao agente falhar, a exclusão continua e o agente apaga o histórico na próxima mensagem do número, ao ver que ele não está mais vinculado; vincular um número também começa uma conversa nova. Cópias de segurança mantêm os dados por até 14 dias. Política pública: `mobile/web/privacidade.html` e `excluir-conta.html`. |
+| RN-32 | **Sessões.** O token leva a versão de sessão do usuário (`TokenVersion`), conferida em toda requisição: token de conta excluída ou de versão antiga recebe 401. "Sair de todos os aparelhos" (menu do app, `DELETE /api/me/sessions`) aumenta a versão e desconecta todos os aparelhos, inclusive o atual. Ao abrir, o app troca o token por um novo (`POST /api/me/token`), então só precisa entrar de novo quem ficou 14 dias sem usar. Senhas novas têm no mínimo 8 caracteres; contas criadas com a regra antiga (6) continuam entrando. Tokens emitidos antes da RN-32 valem como versão 0. |
 | RN-26 | **Limite de requisições.** Login e cadastro: 10 por minuto por IP. Demais rotas: 300 por minuto por usuário logado (ou por IP, sem login). Acima disso, a API responde 429 com o cabeçalho `Retry-After`. As rotas `/api/agent/*` ficam fora do limite global porque concentram o tráfego de todos os usuários do WhatsApp e já são protegidas pela chave do agente e pela RN-24. Os limites são configuráveis em `RateLimit`. |
 
 ### Contas
@@ -360,7 +361,8 @@ flowchart LR
 
 | Fronteira | Proteção |
 |---|---|
-| App → API | JWT assinado (HMAC-SHA256), validade de 30 dias, guardado no armazenamento seguro do aparelho. |
+| App → API | JWT assinado (HMAC-SHA256), validade de 14 dias renovada a cada abertura do app, guardado no armazenamento seguro do aparelho. Pode ser revogado com "Sair de todos os aparelhos" (RN-32). |
+| Logs | A API não grava parâmetros de SQL. O agente mostra só o início e o final do telefone (`5511*****4321`). Os logs dos contêineres têm tamanho limitado. |
 | Chave JWT | Fora do ambiente Development, a API **não sobe** sem uma chave própria de pelo menos 32 caracteres, nem com a chave de desenvolvimento. A chave de dev fica só em `appsettings.Development.json`. |
 | Meta → Agente | Cabeçalho `X-Hub-Signature-256` conferido com o App Secret. Sem o segredo configurado, a checagem fica desligada (só para desenvolvimento). |
 | Agente → API | Chave `X-Agent-Key` comparada em tempo constante. Sem chave configurada, `/api/agent/*` responde 503. O agente troca o telefone por um JWT do dono e usa as rotas comuns. |
@@ -413,6 +415,8 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | Orçamentos não se repetiam de um mês para o outro | Opção "repetir todo mês", com herança e "parar de repetir" (RN-27). | `Orcamento_recorrente_vale_nos_meses_seguintes_ate_ser_substituido_ou_parado`, `Excluir_no_mes_de_origem_apaga_o_orcamento_recorrente` |
 | Não havia transferência entre contas | Entidade `Transfer`, que entra nos saldos e fica fora de receitas e despesas (RN-28). | `Transferencia_move_saldo_sem_contar_como_receita_ou_despesa`, `Transferencia_recusa_mesma_conta_e_conta_de_outro_usuario` |
 | Não havia como excluir a conta (exigido pela LGPD e pela Google Play) | Exclusão com senha no app e na API, que também apaga o histórico do WhatsApp no agente (RN-30). | `Excluir_conta_apaga_todos_os_dados_e_avisa_o_agente_mas_nao_toca_em_outros_usuarios`, `Excluir_conta_exige_a_senha`, `Desconectar_o_whatsapp_pede_ao_agente_para_apagar_o_historico`, `test_conta_excluida_ou_desvinculada_apaga_o_historico`, `test_forget_exige_a_chave_do_agente`, `test_postgres_forget_apaga_as_mensagens_guardadas_do_numero` |
+| Senha mínima de 6 caracteres e token de 30 dias sem como revogar | Senha de 8 caracteres, token de 14 dias renovado ao abrir o app e "Sair de todos os aparelhos"; token de conta excluída deixa de valer (RN-32). | `Cadastro_exige_senha_de_8_caracteres`, `Renovar_devolve_um_token_novo_que_funciona`, `Sair_de_todos_os_aparelhos_derruba_todas_as_sessoes_do_usuario_e_so_dele`, `Token_de_conta_excluida_deixa_de_valer` |
+| Telefone completo nos logs do agente | Número mascarado nos logs. | `test_mask_phone_mostra_so_o_inicio_e_o_final_do_numero` |
 | Descrições iam para o DeepSeek sem o usuário saber | Aviso na tela de IA dizendo o que é enviado e o que não é (RN-16). | — (texto no app) |
 | Mensagem perdida se a instância do agente caísse no meio | Conclusão marcada só depois da resposta; mensagens abandonadas são retomadas por outra instância (RN-29, AG-10). | `test_postgres_mensagem_abandonada_e_retomada_por_outra_instancia`, `test_postgres_desiste_depois_do_limite_de_tentativas`, `test_mensagem_retomada_avisa_o_modelo_para_nao_registrar_de_novo` |
 

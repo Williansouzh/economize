@@ -26,7 +26,23 @@ public static class WhatsAppEndpoints
             return u is null ? Results.NotFound() : Results.Ok(new MeDto(u.Name, u.Email, u.WhatsAppPhone));
         });
 
-        me.MapPost("/whatsapp-code", async (ClaimsPrincipal user, AppDbContext db) =>
+        // RN-32: o app troca o token por um novo ao abrir, para quem usa não precisar entrar de novo.
+        me.MapPost("/token", async (ClaimsPrincipal user, AppDbContext db, TokenService tokens) =>
+        {
+            var u = await db.Users.FindAsync(user.UserId());
+            return u is null ? Results.NotFound() : Results.Ok(new AuthResponse(tokens.Create(u), u.Name, u.Email));
+        });
+
+        // RN-32: "Sair de todos os aparelhos" invalida todos os tokens já emitidos, inclusive o atual.
+        me.MapDelete("/sessions", async (ClaimsPrincipal user, AppDbContext db) =>
+        {
+            var uid = user.UserId();
+            await db.Users.Where(u => u.Id == uid)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1));
+            return Results.NoContent();
+        });
+
+        me.MapPost("/whatsapp-code",async (ClaimsPrincipal user, AppDbContext db) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
             if (u is null) return Results.NotFound();

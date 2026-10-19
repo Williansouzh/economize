@@ -22,7 +22,7 @@ from .finance_api import FinanceApi
 from .graph import Deps, build_graph
 from .media import MediaProcessor
 from .service import MessageHandler
-from .whatsapp import IncomingMessage, WhatsAppClient, parse_webhook, verify_signature
+from .whatsapp import IncomingMessage, WhatsAppClient, mask_phone, parse_webhook, verify_signature
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("agent")
@@ -109,17 +109,17 @@ async def forget(body: ForgetRequest, request: Request, x_agent_key: str = Heade
     if not expected or not hmac.compare_digest(expected.encode(), x_agent_key.encode()):
         raise HTTPException(status_code=401)
     await request.app.state.handler.forget(body.phone)
-    log.info("Histórico de %s apagado a pedido da API", body.phone)
+    log.info("Histórico de %s apagado a pedido da API", mask_phone(body.phone))
 
 
 async def process(app: FastAPI, msg: IncomingMessage):
-    log.info("Mensagem %s de %s (%s)%s", msg.id, msg.phone, msg.type, " [retomada]" if msg.recovered else "")
+    log.info("Mensagem %s de %s (%s)%s", msg.id, mask_phone(msg.phone), msg.type, " [retomada]" if msg.recovered else "")
     reply = await app.state.handler.handle(msg)
     if reply:
         try:
             await app.state.whatsapp.send_text(msg.phone, reply)
         except Exception:
-            log.exception("Falha ao enviar resposta para %s", msg.phone)
+            log.exception("Falha ao enviar resposta para %s", mask_phone(msg.phone))
     # Só depois de responder: se a instância cair antes disso, outra retoma a mensagem.
     await app.state.coordinator.done(msg.id)
 
@@ -136,7 +136,7 @@ async def recover_stale(app: FastAPI, interval: float = 60):
             continue
         for payload in payloads:
             msg = IncomingMessage(**{**payload, "recovered": True})
-            log.warning("Retomando mensagem %s de %s", msg.id, msg.phone)
+            log.warning("Retomando mensagem %s de %s", msg.id, mask_phone(msg.phone))
             task = asyncio.create_task(process(app, msg))
             _running.add(task)  # sem referência, a tarefa pode ser coletada no meio
             task.add_done_callback(_running.discard)

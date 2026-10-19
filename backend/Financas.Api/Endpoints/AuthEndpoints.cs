@@ -8,6 +8,8 @@ namespace Financas.Api.Endpoints;
 
 public static class AuthEndpoints
 {
+    public const int MinPasswordLength = 8;
+
     public static void MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
         var g = app.MapGroup("/api/auth").WithTags("Auth").RequireRateLimiting(HttpProtection.AuthPolicy);
@@ -15,8 +17,11 @@ public static class AuthEndpoints
         g.MapPost("/register", async (RegisterRequest req, AppDbContext db, TokenService tokens) =>
         {
             var email = req.Email.Trim().ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(req.Name) || !email.Contains('@') || req.Password.Length < 6)
-                return Results.BadRequest(new { error = "Nome, e-mail válido e senha (mín. 6 caracteres) são obrigatórios." });
+            if (string.IsNullOrWhiteSpace(req.Name) || !email.Contains('@'))
+                return Results.BadRequest(new { error = "Informe o nome e um e-mail válido." });
+            // RN-32: contas antigas com senha menor continuam entrando; a regra vale para senhas novas.
+            if (req.Password.Length < MinPasswordLength)
+                return Results.BadRequest(new { error = $"A senha precisa ter pelo menos {MinPasswordLength} caracteres." });
             if (await db.Users.AnyAsync(u => u.Email == email))
                 return Results.Conflict(new { error = "E-mail já cadastrado." });
 

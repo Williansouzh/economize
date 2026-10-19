@@ -18,6 +18,7 @@ namespace Financas.Api.Tests;
 public class ApiFactory : WebApplicationFactory<Program>
 {
     public const string AgentKey = "chave-do-agente-para-testes";
+    public const string Password = "senha-de-teste";
 
     public static readonly string Server = System.Environment.GetEnvironmentVariable("TEST_DATABASE_URL")
         ?? "Host=localhost;Port=5432;Username=postgres;Password=postgres";
@@ -57,7 +58,7 @@ public class ApiFactory : WebApplicationFactory<Program>
     public async Task<HttpClient> CreateUserClientAsync(string email = "user@teste.com")
     {
         var client = CreateClient();
-        var res = await client.PostAsJsonAsync("/api/auth/register", new { name = "Usuário Teste", email, password = "123456" });
+        var res = await client.PostAsJsonAsync("/api/auth/register", new { name = "Usuário Teste", email, password = Password });
         res.EnsureSuccessStatusCode();
         var auth = await res.Content.ReadFromJsonAsync<AuthBody>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.Token);

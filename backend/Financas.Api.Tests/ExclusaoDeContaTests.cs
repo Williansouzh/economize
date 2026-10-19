@@ -41,7 +41,7 @@ public class ExclusaoDeContaTests
         Assert.Equal(HttpStatusCode.OK,
             (await factory.CreateAgentClient().PostAsJsonAsync("/api/agent/link", new { phone = "5511999990000", code = code!.Code })).StatusCode);
 
-        var res = await client.SendAsync(Delete("123456"));
+        var res = await client.SendAsync(Delete(ApiFactory.Password));
 
         Assert.Equal(HttpStatusCode.NoContent, res.StatusCode);
         using (var scope = factory.Services.CreateScope())
@@ -58,7 +58,7 @@ public class ExclusaoDeContaTests
         Assert.Equal(HttpStatusCode.OK, (await other.GetAsync("/api/dashboard")).StatusCode);
 
         // A conta deixa de existir: login falha e o e-mail pode ser usado de novo.
-        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new { email = "sai@teste.com", password = "123456" });
+        var login = await factory.CreateClient().PostAsJsonAsync("/api/auth/login", new { email = "sai@teste.com", password = ApiFactory.Password });
         Assert.Equal(HttpStatusCode.Unauthorized, login.StatusCode);
         await factory.CreateUserClientAsync("sai@teste.com");
     }

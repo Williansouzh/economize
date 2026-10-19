@@ -83,7 +83,7 @@ public class PontosDeAtencaoTests
             Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
         }
 
-        var blocked = await client.PostAsJsonAsync("/api/auth/login", new { email = "alvo@teste.com", password = "123456" });
+        var blocked = await client.PostAsJsonAsync("/api/auth/login", new { email = "alvo@teste.com", password = ApiFactory.Password });
         Assert.Equal(HttpStatusCode.TooManyRequests, blocked.StatusCode);
         Assert.StartsWith("Muitas requisições", (await blocked.Content.ReadFromJsonAsync<ErrorBody>())!.Error);
         Assert.True(blocked.Headers.Contains("Retry-After"));

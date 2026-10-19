@@ -70,6 +70,12 @@ class ApiClient {
   Future<Map<String, dynamic>> register(String name, String email, String password) async =>
       await post('/auth/register', {'name': name, 'email': email, 'password': password});
 
+  /// Troca o token atual por um novo, com prazo renovado (RN-32).
+  Future<Map<String, dynamic>> refreshToken() async => await post('/me/token', {});
+
+  /// Encerra a sessão em todos os aparelhos, inclusive neste (RN-32).
+  Future<void> logoutEverywhere() => delete('/me/sessions');
+
   // ---- Dados ----
   Future<Dashboard> dashboard(String month) async =>
       Dashboard.fromJson(await get('/dashboard', {'month': month}));

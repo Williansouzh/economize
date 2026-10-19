@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../state/app_state.dart';
+import '../widgets/common.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_screen.dart';
@@ -28,6 +29,30 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _greeting {
     final h = DateTime.now().hour;
     return h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
+  }
+
+  Future<void> _logoutEverywhere() async {
+    final state = context.read<AppState>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.devices_outlined),
+        title: const Text('Sair de todos os aparelhos?'),
+        content: const Text(
+            'Sua conta será desconectada em todos os celulares e navegadores, inclusive neste. '
+            'Use se perdeu um aparelho ou entrou em um computador de outra pessoa.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sair de todos')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await state.logoutEverywhere();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
   }
 
   @override
@@ -55,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
               position: PopupMenuPosition.under,
               onSelected: (v) => switch (v) {
                 'logout' => state.logout(),
+                'logout_all' => _logoutEverywhere(),
                 'whatsapp' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
                 'categories' => Navigator.push(
@@ -82,6 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 const PopupMenuItem(
                   value: 'logout',
                   child: ListTile(leading: Icon(Icons.logout), title: Text('Sair')),
+                ),
+                const PopupMenuItem(
+                  value: 'logout_all',
+                  child: ListTile(leading: Icon(Icons.devices_outlined), title: Text('Sair de todos os aparelhos')),
                 ),
                 const PopupMenuDivider(),
                 const PopupMenuItem(

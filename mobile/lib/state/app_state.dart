@@ -42,7 +42,22 @@ class AppState extends ChangeNotifier {
     needsSetup = loggedIn && await _storage.read(key: 'setup_pending') == '1';
     initialized = true;
     notifyListeners();
-    if (loggedIn) loadReferenceData();
+    if (loggedIn) {
+      loadReferenceData();
+      _refreshToken();
+    }
+  }
+
+  /// O token vale poucos dias; renovar a cada abertura mantém conectado quem usa o app.
+  /// Se a sessão foi encerrada em outro aparelho, a API responde 401 e o [logout] acontece sozinho.
+  Future<void> _refreshToken() async {
+    try {
+      final res = await api.refreshToken();
+      api.token = res['token'];
+      await _storage.write(key: 'token', value: api.token);
+    } on ApiException {
+      // Sem internet: segue com o token atual.
+    }
   }
 
   Future<void> login(String email, String password) => _auth(api.login(email, password));
@@ -85,6 +100,11 @@ class AppState extends ChangeNotifier {
       await _storage.delete(key: key);
     }
     notifyListeners();
+  }
+
+  Future<void> logoutEverywhere() async {
+    await api.logoutEverywhere();
+    await logout();
   }
 
   Future<void> loadReferenceData() async {
