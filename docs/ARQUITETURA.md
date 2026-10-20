@@ -236,6 +236,7 @@ isso está indicado.
 | RN-37 | **Sequência e conquistas.** A sequência conta dias seguidos (no fuso do usuário) em que algum lançamento foi *registrado*, pela data de registro e não pela data do lançamento. Ela termina hoje ou, se hoje ainda não houve registro, ontem, para não zerar de manhã. As conquistas são calculadas na hora (`GET /api/me/progress`), sem tabela própria: primeiro lançamento, 50 lançamentos, 7 e 30 dias seguidos, primeiro orçamento, mês passado dentro de todos os orçamentos, 20% de economia no mês passado, primeira meta, meta batida e cartão cadastrado. |
 | RN-39 | **Lembretes.** Só no app Android, agendados no próprio aparelho (`flutter_local_notifications`, sem alarme exato): um diário no horário escolhido e um às 9h da véspera de cada despesa pendente dos próximos 30 dias (`GET /api/transactions/upcoming`). Reagendados ao abrir o app e depois de cada mudança; cancelados ao sair da conta. |
 | RN-40 | **Exportação.** `GET /api/export/transactions.csv` devolve todos os lançamentos e transferências em CSV para o Excel em português (UTF-8 com BOM, `;` e vírgula decimal; despesas negativas). Textos que começam com `=`, `+` ou `@` ganham um apóstrofo para não virarem fórmula. |
+| RN-41 | **Começar do zero.** Menu → "Começar do zero", confirmando a senha (`POST /api/me/reset`). Numa transação, apaga lançamentos, transferências, orçamentos, metas, contas e categorias e recria a conta como no cadastro (Carteira e categorias padrão). Cadastro, senha, sessões e WhatsApp continuam; o histórico de conversa com o agente é apagado (`/internal/forget`). O app volta para a configuração inicial. |
 
 ### Insights com IA
 
@@ -457,6 +458,7 @@ Comportamentos atuais que podem surpreender ou que precisam mudar antes de uso e
 | Cartão de crédito era uma conta comum, sem fatura | Cartão com fechamento, vencimento, limite e fatura (RN-35). | `Periodo_da_fatura_respeita_fechamento_vencimento_e_meses_curtos`, `Cartao_mostra_fatura_aberta_e_pagamento_por_transferencia` |
 | Quem esquecia a senha perdia a conta | Código por e-mail (RN-38). | `Esqueci_a_senha_troca_a_senha_e_derruba_as_sessoes`, `Codigo_de_senha_vence_e_bloqueia_depois_de_5_erros`, `Sem_email_configurado_a_recuperacao_avisa_que_nao_esta_disponivel` |
 | Sem exportação dos dados (portabilidade, LGPD) | CSV de todos os lançamentos (RN-40). | `Exporta_csv_para_excel_sem_formulas_e_so_do_usuario` |
+| Não havia como zerar os dados sem excluir a conta | "Começar do zero" com senha (RN-41). | `Comecar_do_zero_apaga_os_dados_mas_mantem_o_cadastro_e_o_whatsapp` |
 | Erros do app só apareciam quando alguém reclamava | O app envia exceções não tratadas para o log da API (`POST /api/client-errors`), e um workflow do GitHub confere o site a cada 15 minutos. | `Erro_do_app_e_aceito_sem_login` |
 | Backup só dentro da própria VPS | Serviço `offsite` (restic) copia os backups criptografados para fora, quando configurado. | — (infraestrutura) |
 | Telefone completo nos logs do agente | Número mascarado nos logs. | `test_mask_phone_mostra_so_o_inicio_e_o_final_do_numero` |

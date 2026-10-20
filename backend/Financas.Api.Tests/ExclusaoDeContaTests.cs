@@ -76,6 +76,55 @@ public class ExclusaoDeContaTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/me")).StatusCode);
     }
 
+    private static HttpRequestMessage Reset(string password) =>
+        new(HttpMethod.Post, "/api/me/reset") { Content = JsonContent.Create(new { password }) };
+
+    [Fact]
+    public async Task Comecar_do_zero_apaga_os_dados_mas_mantem_o_cadastro_e_o_whatsapp()
+    {
+        using var factory = FactoryWithAgent();
+        var client = await factory.CreateUserClientAsync("zera@teste.com");
+        var other = await factory.CreateUserClientAsync("fica@teste.com");
+
+        var cats = (await client.GetFromJsonAsync<List<Category>>("/api/categories"))!;
+        var comida = cats.Single(c => c.Name == "Alimentação");
+        await client.PostAsJsonAsync("/api/categories", new { name = "Pet", type = "Expense", icon = "pets", color = "#000000" });
+        await client.PostAsJsonAsync("/api/accounts", new { name = "Nubank", initialBalance = 500m });
+        var accs = (await client.GetFromJsonAsync<List<Account>>("/api/accounts"))!;
+        await client.PostAsJsonAsync("/api/transactions", new
+        {
+            accountId = accs[0].Id, categoryId = comida.Id, description = "almoço", amount = 30m, type = "Expense", date = "2026-10-10",
+        });
+        await client.PostAsJsonAsync("/api/transfers", new { fromAccountId = accs[0].Id, toAccountId = accs[1].Id, amount = 5m, date = "2026-10-10" });
+        await client.PostAsJsonAsync("/api/budgets", new { categoryId = comida.Id, month = "2026-10", limit = 100m, recurring = true });
+        await client.PostAsJsonAsync("/api/goals", new { name = "Viagem", target = 1000m });
+        var code = await (await client.PostAsync("/api/me/whatsapp-code", null)).Content.ReadFromJsonAsync<LinkCode>();
+        await factory.CreateAgentClient().PostAsJsonAsync("/api/agent/link", new { phone = "5511977770000", code = code!.Code });
+        await other.PostAsJsonAsync("/api/goals", new { name = "Carro", target = 1000m });
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.SendAsync(Reset("senha-errada"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(Reset(ApiFactory.Password))).StatusCode);
+
+        // Volta como no cadastro: só a Carteira e as 13 categorias padrão.
+        var newAccs = (await client.GetFromJsonAsync<List<Account>>("/api/accounts"))!;
+        Assert.Equal("Carteira", Assert.Single(newAccs).Name);
+        Assert.Equal(13, (await client.GetFromJsonAsync<List<Category>>("/api/categories"))!.Count);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var me = await db.Users.SingleAsync(u => u.Email == "zera@teste.com");
+            Assert.Equal("5511977770000", me.WhatsAppPhone);
+            Assert.Equal(0, await db.Transactions.CountAsync());
+            Assert.Equal(0, await db.Transfers.CountAsync());
+            Assert.Equal(0, await db.Budgets.CountAsync());
+            Assert.Equal(0, await db.Goals.CountAsync(g => g.UserId == me.Id));
+            Assert.Equal(1, await db.Goals.CountAsync());
+        }
+        // O histórico da conversa vai junto; a sessão continua valendo.
+        Assert.Contains(factory.AgentCalls, c => c.StartsWith("/internal/forget") && c.Contains("5511977770000"));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/dashboard")).StatusCode);
+    }
+
     [Fact]
     public async Task Desconectar_o_whatsapp_pede_ao_agente_para_apagar_o_historico()
     {

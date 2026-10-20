@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Financas.Api.Data;
 using Financas.Api.Dtos;
+using Financas.Api.Models;
 using Financas.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -75,18 +76,35 @@ public static class WhatsAppEndpoints
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {
-                // Ordem das chaves estrangeiras: lançamentos antes das categorias (exclusão restrita).
-                await db.Transactions.Where(x => x.UserId == uid).ExecuteDeleteAsync();
-                await db.Transfers.Where(x => x.UserId == uid).ExecuteDeleteAsync();
-                await db.Budgets.Where(x => x.UserId == uid).ExecuteDeleteAsync();
-                await db.Accounts.Where(x => x.UserId == uid).ExecuteDeleteAsync();
-                await db.Categories.Where(x => x.UserId == uid).ExecuteDeleteAsync();
-                await db.Goals.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+                await DeleteFinancialDataAsync(db, uid);
                 if (u.WhatsAppPhone is not null)
                     await db.LinkAttempts.Where(x => x.Phone == u.WhatsAppPhone).ExecuteDeleteAsync();
                 await db.Users.Where(x => x.Id == uid).ExecuteDeleteAsync();
                 await tx.CommitAsync();
             }
+            if (u.WhatsAppPhone is not null) await agentClient.ForgetAsync(u.WhatsAppPhone);
+            return Results.NoContent();
+        });
+
+        // RN-41: "começar do zero". Apaga os dados financeiros, mas mantém o cadastro e o WhatsApp;
+        // a conta volta como no cadastro (categorias padrão e a Carteira). Também pede a senha.
+        me.MapPost("/reset", async ([FromBody] DeleteAccountRequest req, ClaimsPrincipal user, AppDbContext db, AgentClient agentClient) =>
+        {
+            var uid = user.UserId();
+            var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == uid);
+            if (u is null) return Results.NotFound();
+            if (!BCrypt.Net.BCrypt.Verify(req.Password ?? "", u.PasswordHash))
+                return Results.BadRequest(new { error = "Senha incorreta." });
+
+            await using (var tx = await db.Database.BeginTransactionAsync())
+            {
+                await DeleteFinancialDataAsync(db, uid);
+                db.Categories.AddRange(AppDbContext.DefaultCategories(uid));
+                db.Accounts.Add(new Account { UserId = uid, Name = "Carteira", Color = "#4CAF50" });
+                await db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            // O histórico da conversa citaria lançamentos que não existem mais.
             if (u.WhatsAppPhone is not null) await agentClient.ForgetAsync(u.WhatsAppPhone);
             return Results.NoContent();
         });
@@ -138,5 +156,16 @@ public static class WhatsAppEndpoints
                 ? Results.NotFound(new { error = "Número não vinculado." })
                 : Results.Ok(new AuthResponse(tokens.Create(u), u.Name, u.Email));
         });
+    }
+
+    // Ordem das chaves estrangeiras: lançamentos antes das categorias (exclusão restrita).
+    private static async Task DeleteFinancialDataAsync(AppDbContext db, Guid uid)
+    {
+        await db.Transactions.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+        await db.Transfers.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+        await db.Budgets.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+        await db.Accounts.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+        await db.Categories.Where(x => x.UserId == uid).ExecuteDeleteAsync();
+        await db.Goals.Where(x => x.UserId == uid).ExecuteDeleteAsync();
     }
 }

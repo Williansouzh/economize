@@ -274,6 +274,10 @@ class ApiClient {
   Future<void> deleteAccount(String password) => _send(
       _http.delete(_uri('/me'), headers: _headers, body: jsonEncode({'password': password})));
 
+  /// Apaga os dados financeiros e mantém o cadastro (RN-41). Também pede a senha.
+  Future<void> resetData(String password) => _send(
+      _http.post(_uri('/me/reset'), headers: _headers, body: jsonEncode({'password': password})));
+
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];
   Future<String> whatsAppLinkCode() async => (await post('/me/whatsapp-code', {}))['code'];

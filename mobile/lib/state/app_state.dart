@@ -175,6 +175,19 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// "Começar do zero": a conta continua, os dados somem e o app volta para a configuração inicial.
+  Future<void> resetData(String password) async {
+    await api.resetData(password);
+    _lastCategory.clear();
+    _lastAccount = null;
+    for (final key in ['last_category_income', 'last_category_expense', 'last_account']) {
+      await _storage.delete(key: key);
+    }
+    needsSetup = true;
+    await _storage.write(key: 'setup_pending', value: '1');
+    dataChanged();
+  }
+
   Future<void> logoutEverywhere() async {
     await api.logoutEverywhere();
     await logout();

@@ -119,6 +119,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
                 'export' => _export(),
                 'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
+                'reset' => Navigator.push(
+                    context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen(resetOnly: true))),
                 'delete' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen())),
                 _ => null,
@@ -160,6 +162,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: ListTile(leading: Icon(Icons.devices_outlined), title: Text('Sair de todos os aparelhos')),
                 ),
                 const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'reset',
+                  child: ListTile(leading: Icon(Icons.restart_alt), title: Text('Começar do zero')),
+                ),
                 const PopupMenuItem(
                   value: 'delete',
                   child: ListTile(
