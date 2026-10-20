@@ -33,8 +33,20 @@ class DetectedNotification {
 /// Lê a notificação do banco e guarda as de compra, Pix e transferência para o usuário revisar.
 /// Tudo fica no celular até ele confirmar; o texto das notificações não vai para o servidor.
 class BankNotifications {
-  static bool get supported => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   static const _channel = MethodChannel('economizze/bank_notifications');
+
+  /// O APK tem o serviço de leitura. O do site sai sem ele (build com sideload=true): o Play Protect
+  /// bloqueia a instalação fora da loja de apps que pedem acesso a notificações.
+  static bool supported = false;
+
+  static Future<void> detect() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      supported = await _channel.invokeMethod<bool>('available') ?? false;
+    } catch (_) {
+      supported = false;
+    }
+  }
 
   /// O usuário liberou o "acesso a notificações" para o Economizze nas configurações do Android.
   Future<bool> isEnabled() async => supported && (await _channel.invokeMethod<bool>('isEnabled') ?? false);

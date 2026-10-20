@@ -125,6 +125,7 @@ class AppState extends ChangeNotifier {
       if (id != null) _lastCategory[t] = id;
     }
     _lastAccount = await _storage.read(key: 'last_account');
+    await BankNotifications.detect();
     initialized = true;
     notifyListeners();
     if (loggedIn) {

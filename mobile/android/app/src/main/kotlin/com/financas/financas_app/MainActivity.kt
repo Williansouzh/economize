@@ -3,6 +3,7 @@ package com.financas.financas_app
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -19,6 +20,12 @@ class MainActivity : FlutterActivity() {
             setMethodCallHandler { call, result ->
                 val prefs = getSharedPreferences(BankNotificationListener.PREFS, Context.MODE_PRIVATE)
                 when (call.method) {
+                    // O APK do site sai sem o serviço (src/sideload/AndroidManifest.xml).
+                    "available" -> result.success(
+                        packageManager.queryIntentServices(
+                            Intent(NotificationListenerService.SERVICE_INTERFACE).setPackage(packageName), 0,
+                        ).isNotEmpty(),
+                    )
                     "isEnabled" -> result.success(NotificationManagerCompat.getEnabledListenerPackages(this@MainActivity).contains(packageName))
                     "openSettings" -> {
                         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))

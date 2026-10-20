@@ -1,0 +1,8 @@
+<!-- APK do download do site (build com sideload=true): sem a leitura das notificações do
+     banco. Instalado fora da Google Play, um app com acesso a notificações é bloqueado pelo Play Protect. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <service android:name="com.financas.financas_app.BankNotificationListener" tools:node="remove" />
+    </application>
+</manifest>

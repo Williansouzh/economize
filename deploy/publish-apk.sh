@@ -5,11 +5,14 @@
 # Os APKs não vão para o git: ficam em ~/economize/downloads no servidor, montado no Caddy.
 #
 # Gere os dois na sua máquina (em mobile/) e depois rode este script da raiz do repositório:
-#   flutter build apk --release --dart-define=API_URL=https://economizze.tech
+#   flutter build apk --release --android-project-arg=sideload=true --dart-define=API_URL=https://economizze.tech
 #   cp build/app/outputs/flutter-apk/app-release.apk build/economizze-universal.apk
 #   flutter build apk --release --target-platform android-arm64 --android-project-arg=onlyAbi=arm64-v8a \
-#     --dart-define=API_URL=https://economizze.tech
+#     --android-project-arg=sideload=true --dart-define=API_URL=https://economizze.tech
 #   cp build/app/outputs/flutter-apk/app-release.apk build/economizze-arm64.apk
+#
+# sideload=true tira a leitura das notificações do banco: com ela, o Play Protect bloqueia a instalação
+# fora da Google Play ("App blocked to protect your device"). O script confere isso antes de enviar.
 #
 # Não use --split-per-abi: ele muda o versionCode (ex.: 2004 em vez de 4) e depois impede atualizar
 # pela versão universal ou pela Google Play.
@@ -26,6 +29,12 @@ MIN_ANDROID="7"  # minSdk 24 (padrão do Flutter)
 
 for f in "$ARM64" "$UNIVERSAL"; do
   [ -f "$f" ] || { echo "APK não encontrado: $f (veja os comandos no topo do script)" >&2; exit 1; }
+done
+# Não publica APK com o serviço de notificações: o Play Protect impediria a instalação.
+for f in "$ARM64" "$UNIVERSAL"; do
+  if unzip -p "$f" AndroidManifest.xml | tr -d '\0' | grep -aq BankNotificationListener; then
+    echo "$f tem a leitura de notificações; gere com --android-project-arg=sideload=true" >&2; exit 1
+  fi
 done
 VERSION=$(sed -n 's/^version: *\([^+]*\).*/\1/p' mobile/pubspec.yaml)
 size() { wc -c < "$1" | tr -d ' '; }

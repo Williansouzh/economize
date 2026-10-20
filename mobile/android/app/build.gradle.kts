@@ -53,6 +53,12 @@ android {
         }
     }
 
+    // APK do download do site: --android-project-arg=sideload=true tira a leitura das notificações do
+    // banco (RN-43), que faz o Play Protect bloquear a instalação fora da loja. Fica só na Google Play.
+    if (project.findProperty("sideload") == "true") {
+        sourceSets["release"].manifest.srcFile("src/sideload/AndroidManifest.xml")
+    }
+
     signingConfigs {
         if (keystoreProperties.isNotEmpty()) {
             create("release") {
