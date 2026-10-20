@@ -42,6 +42,11 @@ public class ApiFactory : WebApplicationFactory<Program>
     public List<(string To, string Subject, string Body)> Emails { get; } = [];
     public bool EmailConfigured { get; init; } = true;
 
+    /// <summary>Resposta fixa do DeepSeek (conteúdo da mensagem). Nulo: IA não configurada.</summary>
+    public string? DeepSeekReply { get; init; }
+    /// <summary>Corpo de cada chamada ao DeepSeek.</summary>
+    public List<string> DeepSeekCalls { get; } = [];
+
     /// <summary>Relógio controlado pelos testes. Padrão: 17/10/2026 15:00 UTC (12:00 em São Paulo).</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 17, 15, 0, 0, TimeSpan.Zero));
 
@@ -51,12 +56,15 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("ConnectionStrings:Default", ConnectionString);
         builder.UseSetting("Agent:ApiKey", AgentKey);
         if (JwtKey is not null) builder.UseSetting("Jwt:Key", JwtKey);
+        if (DeepSeekReply is not null) builder.UseSetting("DeepSeek:ApiKey", "chave-falsa");
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         builder.ConfigureTestServices(s =>
         {
             s.AddSingleton<TimeProvider>(Clock);
             s.AddHttpClient<AgentClient>().ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(AgentCalls));
             s.AddSingleton<IEmailSender>(new FakeEmailSender(Emails, EmailConfigured));
+            if (DeepSeekReply is not null)
+                s.AddHttpClient<DeepSeekClient>().ConfigurePrimaryHttpMessageHandler(() => new FakeDeepSeek(DeepSeekCalls, DeepSeekReply));
         });
     }
 
@@ -97,6 +105,20 @@ public class ApiFactory : WebApplicationFactory<Program>
         {
             lock (sent) sent.Add((to, subject, body));
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Faz o papel do DeepSeek: responde sempre o mesmo conteúdo.</summary>
+    private class FakeDeepSeek(List<string> calls, string reply) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = await request.Content!.ReadAsStringAsync(ct);
+            lock (calls) calls.Add(body);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = JsonContent.Create(new { choices = new[] { new { message = new { role = "assistant", content = reply } } } }),
+            };
         }
     }
 

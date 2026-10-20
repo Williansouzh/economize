@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'bank_notifications_screen.dart';
 import '../widgets/month_loader.dart';
 import 'account_sheet.dart';
 import 'invoice_screen.dart';
@@ -26,6 +27,7 @@ class DashboardScreen extends StatelessWidget {
             builder: (context, d, _) => ListView(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
               children: [
+                const DetectedBanner(),
                 _BalanceCard(d),
                 const SizedBox(height: 16),
                 _MetricsGrid(d),

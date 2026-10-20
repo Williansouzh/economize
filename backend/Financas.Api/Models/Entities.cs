@@ -76,6 +76,9 @@ public class Transaction
     public int? InstallmentCount { get; set; }
     /// <summary>Quando foi registrado (não a data do lançamento): base da sequência de dias (RN-37).</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Origem de um lançamento importado do extrato ou da notificação do banco (RN-42/43),
+    /// para não importar a mesma linha duas vezes. Nulo nos lançados à mão.</summary>
+    public string? ExternalId { get; set; }
 }
 
 /// <summary>Meta de economia, como "R$ 5 mil para a viagem até dezembro" (RN-36). O valor guardado

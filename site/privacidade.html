@@ -52,7 +52,7 @@
   <header>
     <a class="brand" href="/">Economizze</a>
     <h1>Política de Privacidade</h1>
-    <p class="updated">Última atualização: 19 de outubro de 2026 (revisão 2)</p>
+    <p class="updated">Última atualização: 20 de outubro de 2026</p>
   </header>
 
   <section>
@@ -101,7 +101,27 @@
     </ul>
     <p>
       O app <strong>não</strong> se conecta ao seu banco e não pede dados bancários, de cartão ou senhas de
-      banco. Tudo o que está no Economizze foi digitado por você ou enviado por você ao assistente.
+      banco. Tudo o que está no Economizze foi digitado, importado ou confirmado por você, ou enviado por você
+      ao assistente.
+    </p>
+
+    <h3>Extratos importados (opcional)</h3>
+    <p>
+      Se você importar um extrato ou fatura (arquivo OFX, CSV ou PDF exportado do seu banco), o arquivo é lido
+      no nosso servidor só para mostrar os lançamentos encontrados e <strong>não é guardado</strong>. Ficam
+      guardados apenas os lançamentos que você confirmar, com um identificador da linha do extrato, para não
+      importar a mesma linha duas vezes. Para sugerir categorias, comparamos a descrição com os seus lançamentos
+      anteriores.
+    </p>
+
+    <h3>Gastos detectados nas notificações do banco (opcional, só Android)</h3>
+    <p>
+      Se você permitir o acesso às notificações, o app lê os avisos dos apps de banco listados na tela "Gastos
+      do banco" (como "Compra aprovada de R$ 42,90 em PADARIA") para deixar o lançamento pronto. Avisos de
+      outros apps são ignorados na hora, sem serem guardados. Os avisos dos bancos ficam <strong>só no seu
+      celular</strong>, por até 45 dias ou até você revisar; o texto deles não é enviado ao nosso servidor nem
+      à IA. Só o lançamento que você confirmar (data, valor e descrição) vai para a sua conta. Você desliga o
+      acesso quando quiser nas configurações do Android, e sair da conta apaga os avisos guardados.
     </p>
 
     <h3>Assistente no WhatsApp (opcional)</h3>
@@ -173,6 +193,8 @@
         despesas do mês e do mês anterior, gastos por categoria, orçamentos e as 10 maiores despesas do mês
         (data, descrição, categoria e valor), além da sua pergunta. <strong>Seu nome, seu e-mail e os nomes das
         suas contas não são enviados.</strong></li>
+      <li><strong>Importação de extrato em PDF:</strong> o texto extraído do PDF, para identificar os
+        lançamentos. Arquivos OFX e CSV não são enviados à IA, e os avisos do banco no celular também não.</li>
       <li><strong>Assistente no WhatsApp:</strong> o texto das suas mensagens (incluindo o texto transcrito de
         áudios e o extraído de imagens e PDFs), o histórico recente da conversa, seu nome e os nomes das suas
         contas e categorias, para que o assistente registre cada lançamento no lugar certo.</li>
@@ -180,7 +202,7 @@
     <div class="note">
       Como a DeepSeek fica na China, esse envio é uma <strong>transferência internacional de dados</strong>
       (LGPD, art. 33). Ela acontece apenas quando você usa esses recursos. Se não quiser que seus dados vão
-      para a DeepSeek, basta não usar os insights, o "Pergunte à IA" e o assistente do WhatsApp: o resto do
+      para a DeepSeek, basta não usar os insights, o "Pergunte à IA", a importação de PDF e o assistente do WhatsApp: o resto do
       app funciona normalmente sem eles.
     </div>
 

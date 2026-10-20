@@ -67,6 +67,7 @@ else
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
+builder.Services.AddScoped<ImportService>();
 builder.Services.AddHttpClient<AgentClient>(c => c.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddHttpClient<DeepSeekClient>(c =>
 {
@@ -102,6 +103,7 @@ app.MapFinanceEndpoints();
 app.MapInsightsEndpoints();
 app.MapWhatsAppEndpoints();
 app.MapPlanningEndpoints();
+app.MapImportEndpoints();
 
 app.Run();
 

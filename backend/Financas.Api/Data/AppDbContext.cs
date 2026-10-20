@@ -28,6 +28,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transfer>().HasOne(t => t.ToAccount).WithMany().HasForeignKey(t => t.ToAccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transfer>().HasIndex(t => new { t.UserId, t.Date });
         b.Entity<Transaction>().HasIndex(t => t.SeriesId);
+        b.Entity<Transaction>().HasIndex(t => new { t.AccountId, t.ExternalId });
+        b.Entity<Transaction>().Property(t => t.ExternalId).HasMaxLength(100);
         b.Entity<Goal>().HasIndex(g => g.UserId);
 
         // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.

@@ -219,3 +219,41 @@ class Progress {
         registeredToday = j['registeredToday'],
         achievements = (j['achievements'] as List).map((e) => Achievement.fromJson(e)).toList();
 }
+
+/// Linha de um extrato importado ou de um gasto detectado na notificação do banco (RN-42/43).
+/// [amount] com sinal: negativo é saída.
+class ImportLine {
+  final DateTime date;
+  final String description;
+  final double amount;
+  final String? externalId;
+  const ImportLine(this.date, this.description, this.amount, this.externalId);
+  ImportLine.fromJson(Map<String, dynamic> j)
+      : date = DateTime.parse(j['date']),
+        description = j['description'],
+        amount = _d(j['amount']),
+        externalId = j['externalId'];
+}
+
+/// Linha revisada antes de importar. [status]: "new", "imported" (já veio antes) ou "duplicate"
+/// (parece um lançamento que já existe). [transferLike]: pagamento de fatura, aplicação etc.
+class ImportItem {
+  final DateTime date;
+  final String description, status;
+  final double amount;
+  final String? externalId;
+  final bool transferLike;
+  TxType type;
+  String? categoryId;
+  bool selected;
+  ImportItem.fromJson(Map<String, dynamic> j)
+      : date = DateTime.parse(j['date']),
+        description = j['description'],
+        amount = _d(j['amount']),
+        type = _type(j['type']),
+        categoryId = j['categoryId'],
+        externalId = j['externalId'],
+        status = j['status'],
+        transferLike = j['transferLike'],
+        selected = j['status'] == 'new' && j['transferLike'] != true;
+}

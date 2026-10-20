@@ -224,6 +224,10 @@ namespace Financas.Api.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int?>("InstallmentCount")
                         .HasColumnType("integer");
 
@@ -244,11 +248,11 @@ namespace Financas.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
-
                     b.HasIndex("CategoryId");
 
                     b.HasIndex("SeriesId");
+
+                    b.HasIndex("AccountId", "ExternalId");
 
                     b.HasIndex("UserId", "Date");
 

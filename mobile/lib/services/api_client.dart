@@ -269,6 +269,41 @@ class ApiClient {
 
   Future<void> deleteTransfer(String id) => delete('/transfers/$id');
 
+  // ---- Importação (RN-42) e gastos detectados (RN-43) ----
+  Future<List<ImportLine>> importParse(String fileName, List<int> bytes) async {
+    final r = await post('/import/parse', {'fileName': fileName, 'content': base64Encode(bytes)});
+    return [for (final j in r['items']) ImportLine.fromJson(j)];
+  }
+
+  Future<List<ImportItem>> importPreview(String accountId, List<ImportLine> lines) async {
+    final r = await post('/import/preview', {
+      'accountId': accountId,
+      'items': [
+        for (final l in lines)
+          {'date': _day(l.date), 'description': l.description, 'amount': l.amount, 'externalId': l.externalId}
+      ],
+    }) as List;
+    return [for (final j in r) ImportItem.fromJson(j)];
+  }
+
+  Future<int> importCommit(String accountId, List<ImportItem> items) async {
+    final r = await post('/import/commit', {
+      'accountId': accountId,
+      'items': [
+        for (final i in items)
+          {
+            'date': _day(i.date),
+            'description': i.description,
+            'amount': i.amount,
+            'type': txTypeToJson(i.type),
+            'categoryId': i.categoryId,
+            'externalId': i.externalId,
+          }
+      ],
+    });
+    return r['created'];
+  }
+
   // ---- Conta ----
   /// Exclui a conta e todos os dados. Pede a senha de novo (RN-30).
   Future<void> deleteAccount(String password) => _send(

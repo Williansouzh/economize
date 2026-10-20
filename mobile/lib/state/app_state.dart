@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/bank_notifications.dart';
 import '../services/reminders.dart';
 
 /// Estado global: sessão do usuário, mês selecionado e dados de apoio (contas/categorias).
@@ -29,6 +30,28 @@ class AppState extends ChangeNotifier {
 
   List<Account> accounts = [];
   List<TxCategory> categories = [];
+
+  /// Compras e Pix lidos das notificações do banco, esperando revisão (RN-43, só Android).
+  final bankNotifications = BankNotifications();
+  List<DetectedNotification> detected = [];
+
+  Future<void> refreshDetected() async {
+    if (!BankNotifications.supported || !loggedIn) return;
+    try {
+      detected = await bankNotifications.pending();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Notificações do banco: $e');
+    }
+  }
+
+  /// Conta usada da última vez para os gastos de cada app de banco.
+  Future<String?> bankAccount(String package) async {
+    final id = await _storage.read(key: 'bank_account_$package');
+    return accounts.any((a) => a.id == id) ? id : null;
+  }
+
+  Future<void> rememberBankAccount(String package, String id) => _storage.write(key: 'bank_account_$package', value: id);
 
   /// Incrementado sempre que algo muda, para as telas recarregarem.
   int revision = 0;
@@ -110,6 +133,8 @@ class AppState extends ChangeNotifier {
       loadReferenceData();
       _refreshToken();
       reminders.syncSoon(api);
+      bankNotifications.setActive(true).ignore();
+      refreshDetected();
     }
   }
 
@@ -156,6 +181,7 @@ class AppState extends ChangeNotifier {
     await _storage.write(key: 'name', value: userName);
     _cache.clear();
     reminders.syncSoon(api);
+    bankNotifications.setActive(true).ignore();
     await loadReferenceData();
     notifyListeners();
   }
@@ -165,6 +191,9 @@ class AppState extends ChangeNotifier {
     userName = null;
     _cache.clear();
     reminders.cancelAll();
+    // Para de guardar notificações do banco e apaga a fila: nada de mostrar gastos de outra pessoa.
+    bankNotifications.setActive(false).ignore();
+    detected = [];
     needsSetup = false;
     // Só os dados da sessão: "já viu a apresentação" continua valendo neste aparelho.
     _lastCategory.clear();

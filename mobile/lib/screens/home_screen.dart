@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../services/bank_notifications.dart';
 import '../services/reminders.dart';
 import '../state/app_state.dart';
 import '../utils/save_file.dart';
 import '../widgets/common.dart';
 import 'achievements_screen.dart';
+import 'bank_notifications_screen.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_screen.dart';
 import 'delete_account_screen.dart';
+import 'import_screen.dart';
 import 'insights_screen.dart';
 import 'reminders_screen.dart';
 import 'search_screen.dart';
@@ -25,8 +29,34 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Toque no aviso "gasto detectado" com o app aberto (MainActivity.onNewIntent).
+    if (BankNotifications.supported) {
+      const MethodChannel('economizze/bank_notifications').setMethodCallHandler((call) async {
+        if (call.method == 'openDetected' && mounted) {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const BankNotificationsScreen()));
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Volta para o app: confere se o banco avisou alguma compra enquanto ele estava fechado.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed) context.read<AppState>().refreshDetected();
+  }
   // As abas só são montadas (e carregam dados) na primeira vez em que são abertas.
   final _visited = {0};
 
@@ -118,6 +148,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 'reminders' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
                 'export' => _export(),
+                'import' => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
+                'bank' => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankNotificationsScreen())),
                 'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
                 'reset' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen(resetOnly: true))),
@@ -140,6 +172,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   const PopupMenuItem(
                     value: 'reminders',
                     child: ListTile(leading: Icon(Icons.notifications_outlined), title: Text('Lembretes')),
+                  ),
+                const PopupMenuItem(
+                  value: 'import',
+                  child: ListTile(leading: Icon(Icons.upload_file_outlined), title: Text('Importar extrato')),
+                ),
+                if (BankNotifications.supported)
+                  const PopupMenuItem(
+                    value: 'bank',
+                    child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Gastos do banco')),
                   ),
                 const PopupMenuItem(
                   value: 'export',

@@ -83,3 +83,16 @@ public record DeleteAccountRequest(string Password);
 public record LinkCodeDto(string Code, DateTime ExpiresAt);
 public record AgentLinkRequest(string Phone, string Code);
 public record AgentTokenRequest(string Phone);
+
+// ---------- Importação (RN-42) e gastos detectados nas notificações (RN-43) ----------
+/// <summary>Arquivo do extrato em base64 (OFX, CSV ou PDF, até 5 MB).</summary>
+public record ImportParseRequest(string FileName, string Content);
+/// <summary>Linha lida do arquivo ou da notificação. Amount com sinal: negativo é saída.</summary>
+public record ImportLine(DateOnly Date, string Description, decimal Amount, string? ExternalId);
+public record ImportPreviewRequest(Guid AccountId, List<ImportLine> Items);
+/// <summary>Status: "new", "imported" (já veio antes, mesmo identificador) ou "duplicate" (parece um
+/// lançamento que já existe). TransferLike: pagamento de fatura, aplicação etc., que costumam ser transferências.</summary>
+public record ImportPreviewItem(DateOnly Date, string Description, decimal Amount, TransactionType Type, Guid? CategoryId,
+    string? ExternalId, string Status, bool TransferLike);
+public record ImportCommitItem(DateOnly Date, string? Description, decimal Amount, TransactionType Type, Guid CategoryId, string? ExternalId);
+public record ImportCommitRequest(Guid AccountId, List<ImportCommitItem> Items);
