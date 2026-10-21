@@ -56,7 +56,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Recuperar senha')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [
+      body: ListView(padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + MediaQuery.paddingOf(context).bottom), children: [
         Text(
           _sent
               ? 'Se existir uma conta com ${_email.text.trim()}, enviamos um código de 6 números. '

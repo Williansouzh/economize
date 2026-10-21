@@ -81,7 +81,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(_reset ? 'Começar do zero' : 'Excluir minha conta')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+      body: ListView(padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom), children: [
         Center(child: IconBadge(_reset ? Icons.restart_alt : Icons.delete_forever_outlined, expenseColor, size: 72)),
         const SizedBox(height: 16),
         Text('Isso apaga definitivamente:',

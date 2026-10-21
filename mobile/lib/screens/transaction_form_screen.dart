@@ -179,7 +179,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           (true, true) => 'Editar transferência',
         }),
       ),
-      body: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+      body: ListView(padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom), children: [
         SegmentedButton<_Kind>(
           style: SegmentedButton.styleFrom(
             selectedBackgroundColor: color.withValues(alpha: .15),

@@ -220,7 +220,7 @@ Future<void> showGoalSheet(BuildContext context, {Goal? editing}) => showModalBo
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  builder: (_) => _GoalSheet(editing: editing),
+  builder: (_) => SafeArea(top: false, child: _GoalSheet(editing: editing)),
 );
 
 class _GoalSheet extends StatefulWidget {

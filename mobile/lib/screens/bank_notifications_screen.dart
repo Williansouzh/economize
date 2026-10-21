@@ -88,7 +88,7 @@ class _BankNotificationsScreenState extends State<BankNotificationsScreen> with 
       body: _enabled == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
               children: [
                 if (!_enabled!) ...[
                   const Center(child: IconBadge(Icons.notifications_active_outlined, Color(0xFF00875A), size: 72)),

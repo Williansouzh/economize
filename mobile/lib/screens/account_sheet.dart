@@ -13,7 +13,8 @@ Future<bool?> showAccountSheet(BuildContext context, {Account? editing, bool car
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
-  builder: (_) => _AccountSheet(editing: editing, card: card),
+  // A barra de navegação do Android fica por cima da folha; SafeArea reserva o espaço dela.
+  builder: (_) => SafeArea(top: false, child: _AccountSheet(editing: editing, card: card)),
 );
 
 class _AccountSheet extends StatefulWidget {

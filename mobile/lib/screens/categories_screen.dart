@@ -72,7 +72,10 @@ Future<TxCategory?> showCategorySheet(BuildContext context, {TxCategory? editing
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => _CategorySheet(editing: editing, type: type ?? editing?.type ?? TxType.expense),
+      builder: (_) => SafeArea(
+        top: false,
+        child: _CategorySheet(editing: editing, type: type ?? editing?.type ?? TxType.expense),
+      ),
     );
 
 class _CategorySheet extends StatefulWidget {

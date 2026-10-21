@@ -78,7 +78,7 @@ class AchievementsScreen extends StatelessWidget {
           final p = snap.data;
           if (p == null) return const Center(child: CircularProgressIndicator());
           final unlocked = p.achievements.where((a) => a.unlocked).length;
-          return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+          return ListView(padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom), children: [
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(

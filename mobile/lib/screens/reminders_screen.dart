@@ -53,7 +53,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
       appBar: AppBar(title: const Text('Lembretes')),
       body: !_loaded
           ? const Center(child: CircularProgressIndicator())
-          : ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 24), children: [
+          : ListView(padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom), children: [
               Card(
                 child: Column(children: [
                   SwitchListTile(

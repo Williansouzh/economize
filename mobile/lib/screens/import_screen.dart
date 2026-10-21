@@ -86,7 +86,7 @@ class _ImportScreenState extends State<ImportScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Importar extrato')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
         children: [
           const Center(child: IconBadge(Icons.upload_file, Color(0xFF3E7BFA), size: 72)),
           const SizedBox(height: 16),
