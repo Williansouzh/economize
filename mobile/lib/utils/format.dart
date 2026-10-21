@@ -1,8 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 final _currency = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 String money(double v) => _currency.format(v);
+
+final _amount = NumberFormat('#,##0.00', 'pt_BR');
+
+/// Valor no formato dos campos de dinheiro: "1.234,56".
+String amountText(double v) => _amount.format(v);
+
+/// Campo de dinheiro no estilo dos apps de banco: só se digitam números e os dois últimos
+/// viram os centavos ("1250" → "12,50"). Com [signed], um "-" em qualquer ponto deixa o valor negativo.
+class MoneyInputFormatter extends TextInputFormatter {
+  final bool signed;
+  MoneyInputFormatter({this.signed = false});
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    var digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length > 13) digits = digits.substring(0, 13);
+    final sign = signed && newValue.text.contains('-') ? '-' : '';
+    final text = digits.isEmpty ? sign : '$sign${amountText(int.parse(digits) / 100)}';
+    return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+  }
+}
 
 String monthLabel(DateTime m) {
   final s = DateFormat('MMMM yyyy', 'pt_BR').format(m);

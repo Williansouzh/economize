@@ -38,7 +38,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
       : (_tx?.type == TxType.income ? _Kind.income : _Kind.expense);
   late final _description = TextEditingController(text: _tx?.description ?? _tr?.description);
   late final _amount = TextEditingController(
-      text: (_tx?.amount ?? _tr?.amount)?.toStringAsFixed(2).replaceAll('.', ','));
+      text: switch (_tx?.amount ?? _tr?.amount) { final v? => amountText(v), null => null });
   late DateTime _date = _tx?.date ?? _tr?.date ?? DateTime.now();
   late bool _isPaid = _tx?.isPaid ?? _tr?.isPaid ?? true;
   late String? _accountId = _tx?.accountId ?? _tr?.fromAccountId;
@@ -223,7 +223,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
               controller: _amount,
               onChanged: installmentsMode ? (_) => setState(() {}) : null,
               autofocus: !_isEditing,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: TextInputType.number,
+              inputFormatters: [MoneyInputFormatter()],
               style: TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: color),
               decoration: InputDecoration(
                 prefixText: 'R\$ ',

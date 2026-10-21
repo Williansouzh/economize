@@ -13,6 +13,21 @@ void main() {
     expect(parseAmount('abc'), isNull);
   });
 
+  test('campo de dinheiro põe a vírgula sozinho', () {
+    String type(String text, {bool signed = false}) => MoneyInputFormatter(signed: signed)
+        .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: text))
+        .text;
+    expect(type('5'), '0,05');
+    expect(type('1250'), '12,50');
+    expect(type('123456'), '1.234,56');
+    expect(type('12,5'), '1,25'); // apagar o último dígito anda a vírgula
+    expect(type(''), '');
+    expect(type('-1000'), '10,00');
+    expect(type('-1000', signed: true), '-10,00');
+    expect(parseAmount(type('123456')), 1234.56);
+    expect(amountText(50), '50,00');
+  });
+
   test('dinheiro e porcentagem no formato brasileiro', () {
     expect(money(1234.5).replaceAll(' ', ' '), 'R\$ 1.234,50');
     expect(percent(.5), '50%');

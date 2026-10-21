@@ -27,12 +27,12 @@ class _AccountSheet extends StatefulWidget {
 class _AccountSheetState extends State<_AccountSheet> {
   late final _name = TextEditingController(text: widget.editing?.name);
   late final _balance = TextEditingController(
-    text: (widget.editing?.initialBalance ?? 0).toStringAsFixed(2).replaceAll('.', ','),
+    text: amountText(widget.editing?.initialBalance ?? 0),
   );
   late String _icon = widget.editing?.icon ?? (widget.card ? 'credit_card' : 'account_balance');
   late String _color = widget.editing?.color ?? accountColors.first;
   late bool _isCard = widget.editing?.isCard ?? widget.card;
-  late final _limit = TextEditingController(text: widget.editing?.creditLimit?.toStringAsFixed(2).replaceAll('.', ','));
+  late final _limit = TextEditingController(text: widget.editing?.creditLimit == null ? null : amountText(widget.editing!.creditLimit!));
   late int _closingDay = widget.editing?.closingDay ?? 1;
   late int _dueDay = widget.editing?.dueDay ?? 10;
   bool _saving = false;
@@ -137,7 +137,8 @@ class _AccountSheetState extends State<_AccountSheet> {
             if (_isCard) ...[
               TextField(
                 controller: _limit,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
+                inputFormatters: [MoneyInputFormatter()],
                 decoration: const InputDecoration(labelText: 'Limite (opcional)', prefixText: 'R\$ '),
               ),
               const SizedBox(height: 12),
@@ -168,7 +169,8 @@ class _AccountSheetState extends State<_AccountSheet> {
             ] else
               TextField(
                 controller: _balance,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                keyboardType: const TextInputType.numberWithOptions(signed: true),
+                inputFormatters: [MoneyInputFormatter(signed: true)],
                 decoration: const InputDecoration(labelText: 'Saldo inicial', prefixText: 'R\$ '),
               ),
             const SizedBox(height: 20),

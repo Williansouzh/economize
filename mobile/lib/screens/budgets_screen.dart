@@ -18,7 +18,7 @@ class BudgetsScreen extends StatelessWidget {
     final state = context.read<AppState>();
     final expenseCats = state.categories.where((c) => c.type == TxType.expense).toList();
     String? categoryId = budget?.categoryId;
-    final limit = TextEditingController(text: budget?.limit.toStringAsFixed(2).replaceAll('.', ','));
+    final limit = TextEditingController(text: budget == null ? null : amountText(budget.limit));
     var recurring = budget?.recurring ?? true;
     final inherited = budget?.inherited ?? false;
 
@@ -61,7 +61,8 @@ class BudgetsScreen extends StatelessWidget {
               const SizedBox(height: 12),
               TextField(
                 controller: limit,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
+                inputFormatters: [MoneyInputFormatter()],
                 decoration: const InputDecoration(labelText: 'Limite mensal', prefixText: 'R\$ '),
               ),
               const SizedBox(height: 4),

@@ -183,7 +183,8 @@ Future<void> _deposit(BuildContext context, Goal g) async {
             TextField(
               controller: amount,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: TextInputType.number,
+              inputFormatters: [MoneyInputFormatter()],
               decoration: const InputDecoration(labelText: 'Valor', prefixText: 'R\$ '),
             ),
             const SizedBox(height: 8),
@@ -231,7 +232,7 @@ class _GoalSheet extends StatefulWidget {
 
 class _GoalSheetState extends State<_GoalSheet> {
   late final _name = TextEditingController(text: widget.editing?.name);
-  late final _target = TextEditingController(text: widget.editing?.target.toStringAsFixed(2).replaceAll('.', ','));
+  late final _target = TextEditingController(text: widget.editing == null ? null : amountText(widget.editing!.target));
   late DateTime? _deadline = widget.editing?.deadline;
   late String _icon = widget.editing?.icon ?? 'savings';
   late String _color = widget.editing?.color ?? categoryColors.first;
@@ -319,7 +320,8 @@ class _GoalSheetState extends State<_GoalSheet> {
             const SizedBox(height: 12),
             TextField(
               controller: _target,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: TextInputType.number,
+              inputFormatters: [MoneyInputFormatter()],
               decoration: const InputDecoration(labelText: 'Quanto quer juntar', prefixText: 'R\$ '),
             ),
             const SizedBox(height: 12),

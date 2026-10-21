@@ -291,7 +291,8 @@ class _AmountField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextField(
         controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        keyboardType: TextInputType.number,
+        inputFormatters: [MoneyInputFormatter()],
         style: TextStyle(fontSize: compact ? 18 : 30, fontWeight: FontWeight.w800),
         decoration: InputDecoration(
           labelText: label,

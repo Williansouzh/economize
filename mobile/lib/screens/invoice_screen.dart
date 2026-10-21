@@ -52,7 +52,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       return;
     }
     var from = banks.first.id;
-    final amount = TextEditingController(text: inv.remaining.toStringAsFixed(2).replaceAll('.', ','));
+    final amount = TextEditingController(text: amountText(inv.remaining));
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -64,7 +64,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
             children: [
               TextField(
                 controller: amount,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
+                inputFormatters: [MoneyInputFormatter()],
                 decoration: const InputDecoration(labelText: 'Valor', prefixText: 'R\$ '),
               ),
               const SizedBox(height: 12),
