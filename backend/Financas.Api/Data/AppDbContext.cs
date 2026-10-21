@@ -6,6 +6,7 @@ namespace Financas.Api.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserActivity> UserActivity => Set<UserActivity>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<Transfer> Transfers => Set<Transfer>();
     public DbSet<Category> Categories => Set<Category>();
@@ -55,6 +56,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transfer>().Property(t => t.Description).HasMaxLength(200);
         b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
         b.Entity<Account>().Property(a => a.Icon).HasMaxLength(40);
+
+        b.Entity<UserActivity>().HasKey(x => new { x.UserId, x.Day });
+        b.Entity<UserActivity>().HasIndex(x => x.Day);
+        b.Entity<UserActivity>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
 
         b.Entity<LinkAttempt>().HasKey(x => x.Phone);
         b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);

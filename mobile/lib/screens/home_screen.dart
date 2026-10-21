@@ -10,6 +10,7 @@ import '../state/app_state.dart';
 import '../utils/save_file.dart';
 import '../widgets/common.dart';
 import 'achievements_screen.dart';
+import 'admin_screen.dart';
 import 'bank_notifications_screen.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
@@ -148,6 +149,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'reminders' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
                 'export' => _export(),
+                'admin' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen())),
                 'import' => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
                 'bank' => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankNotificationsScreen())),
                 'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
@@ -160,6 +162,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               itemBuilder: (_) => [
                 PopupMenuItem(enabled: false, child: Text(name.isEmpty ? 'Minha conta' : name)),
                 const PopupMenuDivider(),
+                if (state.isAdmin)
+                  const PopupMenuItem(
+                    value: 'admin',
+                    child: ListTile(leading: Icon(Icons.insights_outlined), title: Text('Painel do admin')),
+                  ),
                 const PopupMenuItem(
                   value: 'categories',
                   child: ListTile(leading: Icon(Icons.category_outlined), title: Text('Categorias')),

@@ -257,3 +257,48 @@ class ImportItem {
         transferLike = j['transferLike'],
         selected = j['status'] == 'new' && j['transferLike'] != true;
 }
+
+/// Painel do super admin (RN-44).
+class AdminStats {
+  final int totalUsers, newToday, new7Days, new30Days, activeToday, active7Days, active30Days;
+  final int whatsAppLinked, transactions30Days;
+  final List<AdminDay> days;
+  final List<AdminUser> recentUsers;
+
+  AdminStats.fromJson(Map<String, dynamic> j)
+      : totalUsers = j['totalUsers'],
+        newToday = j['newToday'],
+        new7Days = j['new7Days'],
+        new30Days = j['new30Days'],
+        activeToday = j['activeToday'],
+        active7Days = j['active7Days'],
+        active30Days = j['active30Days'],
+        whatsAppLinked = j['whatsAppLinked'],
+        transactions30Days = j['transactions30Days'],
+        days = [for (final d in j['days']) AdminDay.fromJson(d)],
+        recentUsers = [for (final u in j['recentUsers']) AdminUser.fromJson(u)];
+}
+
+class AdminDay {
+  final DateTime day;
+  final int signups, active;
+  AdminDay.fromJson(Map<String, dynamic> j)
+      : day = DateTime.parse(j['day']),
+        signups = j['signups'],
+        active = j['active'];
+}
+
+class AdminUser {
+  final String name, email;
+  final DateTime createdAt;
+  final DateTime? lastSeenAt;
+  final int transactions;
+  final bool whatsApp;
+  AdminUser.fromJson(Map<String, dynamic> j)
+      : name = j['name'],
+        email = j['email'],
+        createdAt = DateTime.parse(j['createdAt']).toLocal(),
+        lastSeenAt = j['lastSeenAt'] == null ? null : DateTime.parse(j['lastSeenAt']).toLocal(),
+        transactions = j['transactions'],
+        whatsApp = j['whatsApp'];
+}

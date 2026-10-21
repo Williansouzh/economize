@@ -78,7 +78,15 @@ public record ForgotPasswordRequest(string Email);
 public record ResetPasswordRequest(string Email, string Code, string NewPassword);
 public record ClientErrorRequest(string Message, string? Stack, string? Platform, string? Version);
 
-public record MeDto(string Name, string Email, string? WhatsAppPhone);
+public record MeDto(string Name, string Email, string? WhatsAppPhone, bool IsAdmin = false);
+
+// ---------- Super admin (RN-44) ----------
+/// <summary>Cadastros e usuários ativos (que abriram o app ou usaram o WhatsApp) em um dia.</summary>
+public record AdminDayDto(DateOnly Day, int Signups, int Active);
+public record AdminUserDto(string Name, string Email, DateTime CreatedAt, DateTime? LastSeenAt, int Transactions, bool WhatsApp);
+public record AdminStatsDto(int TotalUsers, int NewToday, int New7Days, int New30Days,
+    int ActiveToday, int Active7Days, int Active30Days, int WhatsAppLinked, int Transactions30Days,
+    List<AdminDayDto> Days, List<AdminUserDto> RecentUsers);
 public record DeleteAccountRequest(string Password);
 public record LinkCodeDto(string Code, DateTime ExpiresAt);
 public record AgentLinkRequest(string Phone, string Code);

@@ -21,10 +21,10 @@ public static class WhatsAppEndpoints
         // ---------- Usado pelo app (JWT do usuário) ----------
         var me = app.MapGroup("/api/me").RequireAuthorization().WithTags("Perfil");
 
-        me.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
+        me.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, AdminAccess admin) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
-            return u is null ? Results.NotFound() : Results.Ok(new MeDto(u.Name, u.Email, u.WhatsAppPhone));
+            return u is null ? Results.NotFound() : Results.Ok(new MeDto(u.Name, u.Email, u.WhatsAppPhone, admin.IsAdmin(u.Email)));
         });
 
         // RN-32: o app troca o token por um novo ao abrir, para quem usa não precisar entrar de novo.

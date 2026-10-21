@@ -314,6 +314,9 @@ namespace Financas.Api.Data.Migrations
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
 
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -355,6 +358,21 @@ namespace Financas.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.UserActivity", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.HasKey("UserId", "Day");
+
+                    b.HasIndex("Day");
+
+                    b.ToTable("UserActivity");
                 });
 
             modelBuilder.Entity("Financas.Api.Models.Budget", b =>
@@ -404,6 +422,15 @@ namespace Financas.Api.Data.Migrations
                     b.Navigation("FromAccount");
 
                     b.Navigation("ToAccount");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.UserActivity", b =>
+                {
+                    b.HasOne("Financas.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

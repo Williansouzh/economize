@@ -14,6 +14,9 @@ class AppState extends ChangeNotifier {
 
   bool initialized = false;
   String? userName;
+
+  /// Super admin: vê o painel de uso do app (RN-44).
+  bool isAdmin = false;
   bool get loggedIn => api.token != null;
 
   /// Já viu a apresentação do app (fica no aparelho, vale para qualquer conta).
@@ -132,6 +135,7 @@ class AppState extends ChangeNotifier {
       // Começa a buscar o Início enquanto a abertura ainda está na tela.
       dashboard().ignore();
       loadReferenceData();
+      _loadAdmin();
       _refreshToken();
       reminders.syncSoon(api);
       bankNotifications.setActive(true).ignore();
@@ -184,12 +188,23 @@ class AppState extends ChangeNotifier {
     reminders.syncSoon(api);
     bankNotifications.setActive(true).ignore();
     await loadReferenceData();
+    _loadAdmin();
     notifyListeners();
+  }
+
+  Future<void> _loadAdmin() async {
+    try {
+      isAdmin = await api.isAdmin();
+      notifyListeners();
+    } on ApiException {
+      // Sem internet: o painel aparece na próxima abertura.
+    }
   }
 
   Future<void> logout() async {
     api.token = null;
     userName = null;
+    isAdmin = false;
     _cache.clear();
     reminders.cancelAll();
     // Para de guardar notificações do banco e apaga a fila: nada de mostrar gastos de outra pessoa.

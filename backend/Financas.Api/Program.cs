@@ -44,11 +44,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
                 var userId = principal.UserId();
                 var current = await db.Users.Where(u => u.Id == userId)
-                    .Select(u => (int?)u.TokenVersion).FirstOrDefaultAsync();
+                    .Select(u => new { u.TokenVersion, u.LastSeenAt }).FirstOrDefaultAsync();
                 // Tokens emitidos antes da RN-32 não têm a versão e valem como 0.
                 var version = principal.FindFirst(TokenService.VersionClaim)?.Value ?? "0";
-                if (current is null || version != current.ToString())
+                if (current is null || version != current.TokenVersion.ToString())
                     ctx.Fail("Sessão encerrada.");
+                else
+                    await ctx.HttpContext.RequestServices.GetRequiredService<ActivityTracker>().TouchAsync(userId, current.LastSeenAt);
             },
         };
     });
@@ -60,6 +62,8 @@ builder.Services.AddSingleton<AppClock>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<LinkAttemptLimiter>();
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<ActivityTracker>();
+builder.Services.AddSingleton<AdminAccess>();
 // E-mail (RN-38): SMTP se "Email:SmtpHost" estiver configurado; em desenvolvimento sem SMTP, só no log.
 if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(builder.Configuration["Email:SmtpHost"]))
     builder.Services.AddSingleton<IEmailSender, LogEmailSender>();
@@ -104,6 +108,7 @@ app.MapInsightsEndpoints();
 app.MapWhatsAppEndpoints();
 app.MapPlanningEndpoints();
 app.MapImportEndpoints();
+app.MapAdminEndpoints();
 
 app.Run();
 

@@ -14,6 +14,8 @@ public class User
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     /// <summary>Vai no token; aumentar invalida todas as sessões abertas (RN-32).</summary>
     public int TokenVersion { get; set; }
+    /// <summary>Último uso do app ou do WhatsApp, atualizado a cada poucos minutos (RN-44).</summary>
+    public DateTime? LastSeenAt { get; set; }
 
     /// <summary>Número do WhatsApp vinculado (formato wa_id, ex.: 5511999999999).</summary>
     public string? WhatsAppPhone { get; set; }
@@ -25,6 +27,13 @@ public class User
     public string? ResetCodeHash { get; set; }
     public DateTime? ResetCodeExpiresAt { get; set; }
     public int ResetAttempts { get; set; }
+}
+
+/// <summary>Dia (no fuso do app) em que o usuário usou o app ou o WhatsApp, para contar ativos por dia (RN-44).</summary>
+public class UserActivity
+{
+    public Guid UserId { get; set; }
+    public DateOnly Day { get; set; }
 }
 
 /// <summary>Conta bancária, carteira, poupança etc.</summary>

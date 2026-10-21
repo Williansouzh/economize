@@ -318,6 +318,10 @@ class ApiClient {
 
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];
+
+  /// Só o super admin enxerga o painel (RN-44); para os outros a API responde false.
+  Future<bool> isAdmin() async => (await get('/me'))['isAdmin'] == true;
+  Future<AdminStats> adminStats() async => AdminStats.fromJson(await get('/admin/stats'));
   Future<String> whatsAppLinkCode() async => (await post('/me/whatsapp-code', {}))['code'];
   Future<void> unlinkWhatsApp() => delete('/me/whatsapp');
 
