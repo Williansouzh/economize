@@ -27,8 +27,12 @@ class _AccountSheet extends StatefulWidget {
 
 class _AccountSheetState extends State<_AccountSheet> {
   late final _name = TextEditingController(text: widget.editing?.name);
+  /// Editando uma conta comum, o campo é o saldo de hoje: quem importa só alguns meses de extrato
+  /// não sabe o saldo de antes do primeiro dia, mas sabe o que o banco mostra agora.
+  bool get _tracksBalance => widget.editing != null && !widget.editing!.isCard;
+
   late final _balance = TextEditingController(
-    text: amountText(widget.editing?.initialBalance ?? 0),
+    text: amountText(_tracksBalance ? widget.editing!.balance : widget.editing?.initialBalance ?? 0),
   );
   late String _icon = widget.editing?.icon ?? (widget.card ? 'credit_card' : 'account_balance');
   late String _color = widget.editing?.color ?? accountColors.first;
@@ -37,6 +41,16 @@ class _AccountSheetState extends State<_AccountSheet> {
   late int _closingDay = widget.editing?.closingDay ?? 1;
   late int _dueDay = widget.editing?.dueDay ?? 10;
   bool _saving = false;
+
+  double _initialBalance() {
+    final typed = parseAmount(_balance.text) ?? 0;
+    // Cartão começa zerado: o que importa é a fatura, que vem dos lançamentos.
+    if (_isCard) return widget.editing?.initialBalance ?? 0;
+    if (!_tracksBalance) return typed;
+    // Saldo atual = inicial + lançamentos; muda o inicial para o atual bater com o digitado.
+    final e = widget.editing!;
+    return e.initialBalance + typed - e.balance;
+  }
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -51,7 +65,7 @@ class _AccountSheetState extends State<_AccountSheet> {
         id: widget.editing?.id,
         name: name,
         // Cartão começa zerado: o que importa é a fatura, que vem dos lançamentos.
-        initialBalance: _isCard ? (widget.editing?.initialBalance ?? 0) : parseAmount(_balance.text) ?? 0,
+        initialBalance: _initialBalance(),
         color: _color,
         icon: _icon,
         isCard: _isCard,
@@ -205,7 +219,11 @@ class _AccountSheetState extends State<_AccountSheet> {
                 controller: _balance,
                 keyboardType: const TextInputType.numberWithOptions(signed: true),
                 inputFormatters: [MoneyInputFormatter(signed: true)],
-                decoration: const InputDecoration(labelText: 'Saldo inicial', prefixText: 'R\$ '),
+                decoration: InputDecoration(
+                  labelText: _tracksBalance ? 'Saldo atual' : 'Saldo inicial',
+                  helperText: _tracksBalance ? 'O mesmo valor que aparece hoje no app do banco.' : null,
+                  prefixText: 'R\$ ',
+                ),
               ),
             const SizedBox(height: 20),
             Text('Ícone', style: text.labelLarge),

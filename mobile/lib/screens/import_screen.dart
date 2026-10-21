@@ -8,6 +8,7 @@ import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'account_sheet.dart';
 
 /// Importar extrato (RN-42): escolhe a conta e o arquivo (OFX, CSV ou PDF exportado do banco),
 /// depois revisa e confirma.
@@ -183,6 +184,27 @@ class _ImportReviewScreenState extends State<ImportReviewScreen> {
     }
   }
 
+  /// O extrato traz o que entrou e saiu, não o saldo de antes do primeiro dia; e aplicações na caixinha
+  /// e pagamentos de fatura costumam ficar de fora. Por isso, depois de importar, o saldo é conferido.
+  Future<void> _checkBalance(Account? account) async {
+    if (account == null || account.isCard) return;
+    final fix = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.account_balance_wallet_outlined),
+        title: Text('Saldo do ${account.name}: ${money(account.balance)}'),
+        content: const Text('É o mesmo que aparece hoje no app do banco?\n\n'
+            'O extrato não traz o saldo de antes do primeiro dia, e o que foi para a caixinha ou para pagar a fatura '
+            'fica de fora da importação. Se não bater, corrija o saldo atual: os lançamentos continuam iguais.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Está certo')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Corrigir saldo')),
+        ],
+      ),
+    );
+    if (fix == true && mounted) await showAccountSheet(context, editing: account);
+  }
+
   Future<void> _save() async {
     final state = context.read<AppState>();
     final chosen = _items!.where((i) => i.selected).toList();
@@ -198,7 +220,10 @@ class _ImportReviewScreenState extends State<ImportReviewScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(created == 1 ? '1 lançamento importado.' : '$created lançamentos importados.')),
       );
-      Navigator.of(context).pop(created);
+      await state.loadReferenceData();
+      if (!mounted) return;
+      await _checkBalance(state.accounts.where((a) => a.id == _accountId).firstOrNull);
+      if (mounted) Navigator.of(context).pop(created);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
