@@ -118,7 +118,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           IconButton(
             tooltip: 'Editar cartão',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () => showAccountSheet(context, editing: account),
+            onPressed: () async {
+              // Cartão excluído: a fatura dele não tem mais o que mostrar.
+              if (await showAccountSheet(context, editing: account) == true && context.mounted) Navigator.pop(context);
+            },
           ),
         ],
       ),

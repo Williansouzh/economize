@@ -126,6 +126,9 @@ class ApiClient {
 
   Future<void> deleteCategory(String id) => delete('/categories/$id');
 
+  /// Exclui uma conta ou cartão com os lançamentos e transferências dela.
+  Future<void> deleteWalletAccount(String id) => delete('/accounts/$id');
+
   /// [repeat]: só na criação. 'monthly' repete o valor por [repeatCount] meses; 'installments'
   /// divide [amount] (total) em [repeatCount] parcelas. [future]: na edição, vale também para os próximos da série.
   Future<void> saveTransaction({

@@ -8,8 +8,8 @@ import '../widgets/common.dart';
 import 'transaction_form_screen.dart';
 
 /// Cria ou edita uma conta ou um cartão de crédito: nome, saldo inicial (ou limite, fechamento e
-/// vencimento), ícone e cor, com prévia ao vivo.
-Future<void> showAccountSheet(BuildContext context, {Account? editing, bool card = false}) => showModalBottomSheet(
+/// vencimento), ícone e cor, com prévia ao vivo. Devolve true se a conta foi excluída.
+Future<bool?> showAccountSheet(BuildContext context, {Account? editing, bool card = false}) => showModalBottomSheet<bool>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
@@ -60,6 +60,39 @@ class _AccountSheetState extends State<_AccountSheet> {
       );
       state.dataChanged();
       if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _delete() async {
+    final state = context.read<AppState>();
+    final what = _isCard ? 'o cartão' : 'a conta';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.delete_outline, color: expenseColor),
+        title: Text('Excluir "${widget.editing!.name}"?'),
+        content: Text('Todos os lançamentos e transferências d$what também serão apagados. '
+            'Isso não pode ser desfeito.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: expenseColor),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _saving = true);
+    try {
+      await state.api.deleteWalletAccount(widget.editing!.id);
+      state.dataChanged();
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -223,6 +256,15 @@ class _AccountSheetState extends State<_AccountSheet> {
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
                   : Text(widget.editing != null ? 'Salvar' : (_isCard ? 'Criar cartão' : 'Criar conta')),
             ),
+            if (widget.editing != null) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: expenseColor),
+                onPressed: _saving ? null : _delete,
+                icon: const Icon(Icons.delete_outline),
+                label: Text(_isCard ? 'Excluir cartão' : 'Excluir conta'),
+              ),
+            ],
           ],
         ),
       ),
