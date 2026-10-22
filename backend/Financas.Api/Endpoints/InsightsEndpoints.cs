@@ -14,7 +14,7 @@ public static class InsightsEndpoints
             DeepSeekClient deepSeek, CancellationToken ct) =>
         {
             if (!deepSeek.IsConfigured) return NotConfigured();
-            try { return Results.Ok(await insights.GetInsightsAsync(user.UserId(), req.Month, ct)); }
+            try { return Results.Ok(await insights.GetInsightsAsync(user.UserId(), req.Month, req.IncludeDescriptions, ct)); }
             catch (HttpRequestException) { return Unavailable(); }
         });
 
@@ -23,7 +23,7 @@ public static class InsightsEndpoints
         {
             if (!deepSeek.IsConfigured) return NotConfigured();
             if (string.IsNullOrWhiteSpace(req.Question)) return Results.BadRequest(new { error = "Pergunta vazia." });
-            try { return Results.Ok(new ChatResponse(await insights.AskAsync(user.UserId(), req.Question, req.Month, ct))); }
+            try { return Results.Ok(new ChatResponse(await insights.AskAsync(user.UserId(), req.Question, req.Month, req.IncludeDescriptions, ct))); }
             catch (HttpRequestException) { return Unavailable(); }
         });
     }

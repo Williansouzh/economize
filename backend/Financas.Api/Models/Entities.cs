@@ -114,6 +114,15 @@ public class LinkAttempt
     public DateTime WindowStartsAt { get; set; }
 }
 
+/// <summary>Requisições de login/cadastro por IP numa janela de 1 minuto (RN-26).
+/// Fica no banco para o limite ser o mesmo com qualquer número de réplicas.</summary>
+public class RateLimitCounter
+{
+    public string Key { get; set; } = "";
+    public DateTime WindowStart { get; set; }
+    public int Count { get; set; }
+}
+
 /// <summary>Limite de gasto mensal por categoria.</summary>
 public class Budget
 {

@@ -195,6 +195,23 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("LinkAttempts");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.RateLimitCounter", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("WindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Key", "WindowStart");
+
+                    b.ToTable("RateLimitCounters");
+                });
+
             modelBuilder.Entity("Financas.Api.Models.Transaction", b =>
                 {
                     b.Property<Guid>("Id")

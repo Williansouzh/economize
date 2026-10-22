@@ -25,7 +25,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
 from .finance_api import FinanceApi
-from .media import MediaProcessor, kind_from_mime
+from .media import MediaProcessor, MediaText, kind_from_mime
 from .prompts import system_prompt
 from .tools import make_tools
 
@@ -59,9 +59,12 @@ def trim_history(messages: list[AnyMessage], limit: int) -> list[AnyMessage]:
     return recent or messages[-1:]
 
 
-def media_to_message(kind: str, text: str, caption: str) -> HumanMessage:
+def media_to_message(kind: str, text: str, caption: str, low_confidence: bool = False) -> HumanMessage:
     if kind == "audio":
         body = f"🎤 [Áudio transcrito]\n{text or '(áudio vazio ou inaudível)'}"
+        if low_confidence:
+            body += ("\n⚠️ [Transcrição com baixa confiança: antes de registrar, confirme com o usuário "
+                     "o valor e a descrição que você entendeu.]")
     else:
         label = "Print/imagem" if kind == "image" else "PDF"
         body = (f"🖼️ [{label} — texto extraído automaticamente, pode conter erros]\n"
@@ -84,10 +87,11 @@ def build_graph(deps: Deps, checkpointer=None):
         mime = mime or media.get("mime", "")
         kind = kind_from_mime(mime)
         if kind is None:
-            text, kind = f"(arquivo do tipo {mime} não suportado)", "image"
+            extracted, kind = MediaText(f"(arquivo do tipo {mime} não suportado)"), "image"
         else:
-            text = await deps.media.to_text(data, mime)
-        return {"messages": [media_to_message(kind, text, media.get("caption", ""))], "media": None}
+            extracted = await deps.media.to_text(data, mime)
+        message = media_to_message(kind, extracted.text, media.get("caption", ""), extracted.low_confidence)
+        return {"messages": [message], "media": None}
 
     async def agent(state: AgentState, config: RunnableConfig) -> dict:
         phone = config["configurable"]["thread_id"]

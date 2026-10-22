@@ -58,11 +58,12 @@ public record DashboardDto(
     IReadOnlyList<AccountDto> Accounts, IReadOnlyList<CategoryTotal> ExpensesByCategory,
     IReadOnlyList<BudgetDto> Budgets);
 
-public record InsightsRequest(string? Month);
+/// <param name="IncludeDescriptions">false: o DeepSeek recebe só data, categoria e valor das despesas, sem as descrições.</param>
+public record InsightsRequest(string? Month, bool IncludeDescriptions = true);
 public record InsightsDto(string Summary, List<string> Alerts, List<string> Tips,
     decimal PotentialSavings, int HealthScore);
 
-public record ChatRequest(string Question, string? Month);
+public record ChatRequest(string Question, string? Month, bool IncludeDescriptions = true);
 public record ChatResponse(string Answer);
 
 public record GoalRequest(string Name, decimal Target, DateOnly? Deadline, string? Icon, string? Color);

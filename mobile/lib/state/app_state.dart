@@ -28,6 +28,15 @@ class AppState extends ChangeNotifier {
   /// A tela de login abre no modo "criar conta" (vindo do "Começar" da apresentação).
   bool preferRegister = false;
 
+  /// Se as descrições das despesas podem ir para o DeepSeek (RN-16). Fica no aparelho, mesmo ao sair da conta.
+  bool sendDescriptionsToAi = true;
+
+  Future<void> setSendDescriptionsToAi(bool value) async {
+    sendDescriptionsToAi = value;
+    notifyListeners();
+    await _storage.write(key: 'ai_descriptions', value: value ? '1' : '0');
+  }
+
   DateTime month = DateTime(DateTime.now().year, DateTime.now().month);
   String get monthKey => '${month.year}-${month.month.toString().padLeft(2, '0')}';
 
@@ -122,6 +131,7 @@ class AppState extends ChangeNotifier {
     api.token = await _storage.read(key: 'token');
     userName = await _storage.read(key: 'name');
     onboardingSeen = await _storage.read(key: 'onboarding_seen') == '1';
+    sendDescriptionsToAi = await _storage.read(key: 'ai_descriptions') != '0';
     needsSetup = loggedIn && await _storage.read(key: 'setup_pending') == '1';
     for (final t in TxType.values) {
       final id = await _storage.read(key: 'last_category_${t.name}');

@@ -61,6 +61,8 @@ builder.Services.AddSingleton<AppClock>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<LinkAttemptLimiter>();
+builder.Services.AddScoped<AuthRateLimiter>();
+builder.Services.AddScoped<AuthRateLimitFilter>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ActivityTracker>();
 builder.Services.AddSingleton<AdminAccess>();

@@ -26,7 +26,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     final state = context.read<AppState>();
     setState(() => _loading = true);
     try {
-      final r = await state.api.insights(state.monthKey);
+      final r = await state.api.insights(state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
       setState(() {
         _insights = r;
         _insightsMonth = state.monthKey;
@@ -48,7 +48,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _question.clear();
     });
     try {
-      final answer = await state.api.ask(q, state.monthKey);
+      final answer = await state.api.ask(q, state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
       setState(() => _chat.add(('ai', answer)));
     } catch (e) {
       setState(() => _chat.add(('ai', '⚠️ $e')));
@@ -304,6 +304,8 @@ class _PrivacyNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final state = context.watch<AppState>();
+    final withDescriptions = state.sendDescriptionsToAi;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -314,12 +316,25 @@ class _PrivacyNote extends StatelessWidget {
         Icon(Icons.shield_outlined, size: 18, color: cs.onSurfaceVariant),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            'Para analisar e responder, enviamos ao DeepSeek os totais do mês, os gastos por categoria, '
-            'os orçamentos e as 10 maiores despesas com data e descrição. '
-            'Seu nome, e-mail e os nomes das suas contas não são enviados.',
-            style: TextStyle(fontSize: 12, height: 1.4, color: cs.onSurfaceVariant),
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              'Para analisar e responder, enviamos ao DeepSeek os totais do mês, os gastos por categoria, '
+              'os orçamentos e as 10 maiores despesas ${withDescriptions ? 'com data e descrição' : 'só com data, categoria e valor'}. '
+              'Seu nome, e-mail e os nomes das suas contas não são enviados.',
+              style: TextStyle(fontSize: 12, height: 1.4, color: cs.onSurfaceVariant),
+            ),
+            SwitchListTile(
+              key: const Key('ai-descriptions'),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Enviar as descrições das despesas'),
+              subtitle: Text(withDescriptions
+                  ? 'Ex.: "Consulta Dr. Silva". Deixa as dicas mais precisas.'
+                  : 'Desligado: a IA não vê as descrições.'),
+              value: withDescriptions,
+              onChanged: state.setSendDescriptionsToAi,
+            ),
+          ]),
         ),
       ]),
     );

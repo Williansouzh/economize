@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
+    public DbSet<RateLimitCounter> RateLimitCounters => Set<RateLimitCounter>();
     public DbSet<Goal> Goals => Set<Goal>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -63,6 +64,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<LinkAttempt>().HasKey(x => x.Phone);
         b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);
+
+        b.Entity<RateLimitCounter>().HasKey(x => new { x.Key, x.WindowStart });
+        b.Entity<RateLimitCounter>().Property(x => x.Key).HasMaxLength(120);
     }
 
     /// <summary>Categorias padrão criadas no cadastro do usuário (estilo Organizze).</summary>

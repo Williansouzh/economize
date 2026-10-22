@@ -95,6 +95,9 @@ pytest
 
 ## Observações
 
+- **Áudio incerto:** quando o Whisper não tem segurança (voz ruim, barulho), a transcrição chega ao modelo
+  marcada e ele confirma o valor com você antes de registrar (AG-11). Para rodar o teste com o modelo real:
+  `RUN_WHISPER_TESTS=1 pytest tests/test_audio_confianca.py`.
 - **Whisper:** `WHISPER_MODEL=small` é um bom equilíbrio em CPU (~500 MB, alguns segundos por áudio).
   Use `base` em servidores fracos ou `medium` para mais precisão. O modelo é baixado no primeiro áudio.
 - **Histórico e várias instâncias:** sem `DATABASE_URL`, o histórico das conversas, os ids de mensagens

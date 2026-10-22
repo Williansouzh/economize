@@ -326,8 +326,10 @@ class ApiClient {
   Future<void> unlinkWhatsApp() => delete('/me/whatsapp');
 
   // ---- IA (DeepSeek via backend) ----
-  Future<Insights> insights(String month) async =>
-      Insights.fromJson(await post('/insights', {'month': month}));
-  Future<String> ask(String question, String month) async =>
-      (await post('/insights/chat', {'question': question, 'month': month}))['answer'];
+  /// [includeDescriptions] = false: o DeepSeek recebe só data, categoria e valor das despesas.
+  Future<Insights> insights(String month, {bool includeDescriptions = true}) async => Insights.fromJson(
+      await post('/insights', {'month': month, 'includeDescriptions': includeDescriptions}));
+  Future<String> ask(String question, String month, {bool includeDescriptions = true}) async =>
+      (await post('/insights/chat',
+          {'question': question, 'month': month, 'includeDescriptions': includeDescriptions}))['answer'];
 }
