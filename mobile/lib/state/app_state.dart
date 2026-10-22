@@ -19,6 +19,15 @@ class AppState extends ChangeNotifier {
   List<Account> accounts = [];
   List<TxCategory> categories = [];
 
+  /// Se as descrições dos lançamentos podem ir para o DeepSeek nos insights. Salvo no aparelho.
+  bool sendDescriptionsToAi = true;
+
+  Future<void> setSendDescriptionsToAi(bool value) async {
+    sendDescriptionsToAi = value;
+    await _storage.write(key: 'ai_descriptions', value: value.toString());
+    notifyListeners();
+  }
+
   /// Incrementado sempre que algo muda, para as telas recarregarem.
   int revision = 0;
 
@@ -29,6 +38,7 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     api.token = await _storage.read(key: 'token');
     userName = await _storage.read(key: 'name');
+    sendDescriptionsToAi = await _storage.read(key: 'ai_descriptions') != 'false';
     initialized = true;
     notifyListeners();
     if (loggedIn) loadReferenceData();
@@ -51,7 +61,9 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     api.token = null;
     userName = null;
-    await _storage.deleteAll();
+    // Só a sessão: preferências como a de privacidade da IA continuam no aparelho.
+    await _storage.delete(key: 'token');
+    await _storage.delete(key: 'name');
     notifyListeners();
   }
 

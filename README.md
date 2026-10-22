@@ -18,7 +18,8 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 - Lançamentos de receitas e despesas, agrupados por dia, com categoria, conta, data e status pago/pendente
 - Categorias padrão criadas no cadastro (Alimentação, Moradia, Transporte, Salário…)
 - Visão geral do mês: saldo, receitas, despesas e gráfico de pizza por categoria
-- Orçamentos (limite mensal por categoria) com barra de progresso e alerta de estouro
+- Transferências entre as próprias contas (não contam como receita nem despesa)
+- Orçamentos (limite mensal por categoria) com barra de progresso, alerta de estouro e opção "repetir todo mês"
 - **Insights IA**: nota de saúde financeira, resumo do mês, alertas, dicas e economia potencial
 - **Pergunte à IA**: chat livre sobre suas finanças, com o contexto do mês
 - **Assistente no WhatsApp**: mande texto, áudio, print ou PDF de comprovante e o lançamento é criado

@@ -1,7 +1,16 @@
-enum TxType { income, expense }
+/// [transfer]: dinheiro entre contas do próprio usuário. Não é receita nem despesa.
+enum TxType { income, expense, transfer }
 
-TxType _type(String v) => v == 'Income' ? TxType.income : TxType.expense;
-String txTypeToJson(TxType t) => t == TxType.income ? 'Income' : 'Expense';
+TxType _type(String v) => switch (v) {
+      'Income' => TxType.income,
+      'Transfer' => TxType.transfer,
+      _ => TxType.expense,
+    };
+String txTypeToJson(TxType t) => switch (t) {
+      TxType.income => 'Income',
+      TxType.expense => 'Expense',
+      TxType.transfer => 'Transfer',
+    };
 double _d(dynamic v) => (v as num).toDouble();
 
 class Account {
@@ -30,8 +39,14 @@ class TxCategory {
 }
 
 class Transaction {
-  final String id, accountId, accountName, categoryId, categoryName;
+  final String id, accountId, accountName, categoryName;
   final String categoryIcon, categoryColor, description;
+
+  /// Vazia em transferências.
+  final String? categoryId;
+
+  /// Só em transferências: para onde o dinheiro foi.
+  final String? destinationAccountId, destinationAccountName;
   final double amount;
   final TxType type;
   final DateTime date;
@@ -48,7 +63,9 @@ class Transaction {
         amount = _d(j['amount']),
         type = _type(j['type']),
         date = DateTime.parse(j['date']),
-        isPaid = j['isPaid'];
+        isPaid = j['isPaid'],
+        destinationAccountId = j['destinationAccountId'],
+        destinationAccountName = j['destinationAccountName'];
 }
 
 class CategoryTotal {
@@ -63,8 +80,12 @@ class CategoryTotal {
 }
 
 class Budget {
+  /// [month]: mês em que o orçamento foi criado.
   final String id, categoryId, categoryName, categoryColor, month;
   final double limit, spent;
+
+  /// [inherited]: vem de um orçamento recorrente de um mês anterior.
+  final bool isRecurring, inherited;
   double get progress => limit == 0 ? 0 : spent / limit;
   Budget.fromJson(Map<String, dynamic> j)
       : id = j['id'],
@@ -73,7 +94,9 @@ class Budget {
         categoryColor = j['categoryColor'],
         month = j['month'],
         limit = _d(j['limit']),
-        spent = _d(j['spent']);
+        spent = _d(j['spent']),
+        isRecurring = j['isRecurring'] ?? false,
+        inherited = j['inherited'] ?? false;
 }
 
 class Dashboard {

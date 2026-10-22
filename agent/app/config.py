@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # PostgreSQL para histórico, dedupe e fila por telefone. Vazio = tudo em memória (uma instância só).
     database_url: str = ""
     database_pool_size: int = 20
+    # Mensagem "processando" há mais que isso (instância caiu) é reassumida por outra instância.
+    processing_timeout_seconds: int = 300
+    recovery_interval_seconds: int = 60
 
     timezone: str = "America/Sao_Paulo"
     # Quantas mensagens do histórico vão para o LLM a cada turno.

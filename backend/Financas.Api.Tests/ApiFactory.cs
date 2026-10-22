@@ -17,7 +17,7 @@ public class ApiFactory : WebApplicationFactory<Program>
 {
     public const string AgentKey = "chave-do-agente-para-testes";
 
-    public static readonly string Server = System.Environment.GetEnvironmentVariable("TEST_DATABASE_URL")
+    public static readonly string PostgresServer = System.Environment.GetEnvironmentVariable("TEST_DATABASE_URL")
         ?? "Host=localhost;Port=5432;Username=postgres;Password=postgres";
 
     /// <summary>Nome do banco. Duas factories com o mesmo nome simulam duas réplicas da API.</summary>
@@ -26,7 +26,7 @@ public class ApiFactory : WebApplicationFactory<Program>
     /// <summary>Só quem cria o banco o apaga (réplicas compartilham).</summary>
     public bool OwnsDatabase { get; init; } = true;
 
-    private string ConnectionString => new NpgsqlConnectionStringBuilder(Server) { Database = DatabaseName }.ToString();
+    private string ConnectionString => new NpgsqlConnectionStringBuilder(PostgresServer) { Database = DatabaseName }.ToString();
 
     public string Environment { get; init; } = "Development";
     public string? JwtKey { get; init; }
@@ -67,7 +67,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         base.Dispose(disposing);
         if (!OwnsDatabase) return;
         NpgsqlConnection.ClearAllPools();
-        using var conn = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(Server) { Database = "postgres" }.ToString());
+        using var conn = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(PostgresServer) { Database = "postgres" }.ToString());
         conn.Open();
         using var cmd = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{DatabaseName}\" WITH (FORCE)", conn);
         cmd.ExecuteNonQuery();

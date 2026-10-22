@@ -249,7 +249,18 @@ class BudgetProgress extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(b.categoryName, style: const TextStyle(fontWeight: FontWeight.w600))),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(b.categoryName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (b.isRecurring)
+                  Text(
+                    b.inherited
+                        ? 'Repete todo mês · desde ${b.month.substring(5)}/${b.month.substring(0, 4)}'
+                        : 'Repete todo mês',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ]),
+            ),
             Text('${money(b.spent)} de ${money(b.limit)}'),
           ]),
           const SizedBox(height: 6),

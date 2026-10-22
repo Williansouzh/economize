@@ -18,9 +18,9 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek)
         Responda sempre em português do Brasil.
         """;
 
-    public async Task<InsightsDto> GetInsightsAsync(Guid userId, string? month, CancellationToken ct)
+    public async Task<InsightsDto> GetInsightsAsync(Guid userId, string? month, bool includeDescriptions, CancellationToken ct)
     {
-        var context = await BuildContextAsync(userId, month);
+        var context = await BuildContextAsync(userId, month, includeDescriptions);
         var prompt = $$"""
             {{context}}
 
@@ -48,9 +48,9 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek)
         return new InsightsDto(raw, [], [], 0, 0);
     }
 
-    public async Task<string> AskAsync(Guid userId, string question, string? month, CancellationToken ct)
+    public async Task<string> AskAsync(Guid userId, string question, string? month, bool includeDescriptions, CancellationToken ct)
     {
-        var context = await BuildContextAsync(userId, month);
+        var context = await BuildContextAsync(userId, month, includeDescriptions);
         var prompt = $"""
             {context}
 
@@ -61,7 +61,8 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek)
     }
 
     /// <summary>Resumo textual do mês atual + mês anterior para comparação. Não envia dados pessoais.</summary>
-    private async Task<string> BuildContextAsync(Guid userId, string? month)
+    /// <param name="includeDescriptions">false: as maiores despesas vão só com data, categoria e valor.</param>
+    private async Task<string> BuildContextAsync(Guid userId, string? month, bool includeDescriptions)
     {
         var (start, end, key) = finance.ParseMonth(month);
         var txs = await finance.GetTransactionsAsync(userId, start, end);
@@ -98,7 +99,13 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek)
 
         sb.AppendLine("\nMaiores despesas do mês:");
         foreach (var t in txs.Where(t => t.Type == TransactionType.Expense).OrderByDescending(t => t.Amount).Take(10))
-            sb.AppendLine($"- {t.Date:dd/MM} {t.Description} ({t.Category!.Name}): {Money(t.Amount)}");
+            sb.AppendLine(includeDescriptions
+                ? $"- {t.Date:dd/MM} {t.Description} ({t.Category!.Name}): {Money(t.Amount)}"
+                : $"- {t.Date:dd/MM} {t.Category!.Name}: {Money(t.Amount)}");
+
+        var transfers = txs.Where(t => t.Type == TransactionType.Transfer).Sum(t => t.Amount);
+        if (transfers > 0)
+            sb.AppendLine($"\nTransferências entre as próprias contas no mês: {Money(transfers)} (não são receita nem despesa).");
 
         if (txs.Count == 0)
             sb.AppendLine("\n(O usuário ainda não registrou transações neste mês.)");

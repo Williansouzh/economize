@@ -3,11 +3,11 @@
 import difflib
 import unicodedata
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
+from langchain_core.tools import InjectedToolCallId, tool
 
 from .finance_api import FinanceApi, FinanceApiError
 
@@ -54,6 +54,7 @@ def make_tools(finance: FinanceApi, timezone: str):
         tipo: Literal["despesa", "receita"],
         categoria: str,
         config: RunnableConfig,
+        tool_call_id: Annotated[str, InjectedToolCallId],
         data: str | None = None,
         conta: str | None = None,
         pago: bool = True,
@@ -95,6 +96,8 @@ def make_tools(finance: FinanceApi, timezone: str):
                 "type": tx_type,
                 "date": when.isoformat(),
                 "isPaid": pago,
+                # Se esta chamada for reexecutada (instância caiu no meio), a API devolve o mesmo lançamento.
+                "externalId": tool_call_id,
             })
         except FinanceApiError as e:
             return f"Erro ao registrar: {e}"
@@ -102,17 +105,68 @@ def make_tools(finance: FinanceApi, timezone: str):
                 f"| data {when.strftime('%d/%m/%Y')} | {descricao}")
 
     @tool
+    async def registrar_transferencia(
+        valor: float,
+        conta_origem: str,
+        conta_destino: str,
+        config: RunnableConfig,
+        tool_call_id: Annotated[str, InjectedToolCallId],
+        data: str | None = None,
+        descricao: str = "Transferência",
+    ) -> str:
+        """Registra dinheiro passando de uma conta do usuário para OUTRA conta DELE (não é gasto nem receita).
+
+        Args:
+            valor: valor positivo em reais.
+            conta_origem: nome da conta de onde o dinheiro sai.
+            conta_destino: nome da conta para onde o dinheiro vai.
+            data: data no formato AAAA-MM-DD. Omitir = hoje.
+            descricao: descrição curta, ex.: "Reserva de emergência".
+        """
+        phone = phone_of(config)
+        if valor <= 0:
+            return "Erro: o valor precisa ser maior que zero."
+        ctx = await finance.context(phone)
+        names = ", ".join(a["name"] for a in ctx.accounts)
+        origem, destino = match_by_name(ctx.accounts, conta_origem), match_by_name(ctx.accounts, conta_destino)
+        if origem is None or destino is None:
+            return f"Erro: não encontrei a conta de origem ou de destino. Contas do usuário: {names}."
+        if origem["id"] == destino["id"]:
+            return "Erro: a conta de origem e a de destino são a mesma."
+        try:
+            when = date.fromisoformat(data) if data else today()
+        except ValueError:
+            when = today()
+        try:
+            tx_id = await finance.create_transaction(phone, {
+                "accountId": origem["id"],
+                "destinationAccountId": destino["id"],
+                "description": descricao.strip()[:120],
+                "amount": round(valor, 2),
+                "type": "Transfer",
+                "date": when.isoformat(),
+                "isPaid": True,
+                "externalId": tool_call_id,
+            })
+        except FinanceApiError as e:
+            return f"Erro ao registrar: {e}"
+        return (f"OK id={tx_id} | transferência {brl(valor)} | de {origem['name']} para {destino['name']} "
+                f"| data {when.strftime('%d/%m/%Y')}")
+
+    @tool
     async def listar_lancamentos(config: RunnableConfig, mes: str | None = None, limite: int = 10) -> str:
         """Lista os lançamentos mais recentes (com id) de um mês. mes no formato AAAA-MM; omitir = mês atual."""
         txs = await finance.transactions(phone_of(config), month_or_current(mes))
         if not txs:
             return "Nenhum lançamento no mês."
-        lines = [
-            f"id={t['id']} | {t['date']} | {'-' if t['type'] == 'Expense' else '+'}{brl(t['amount'])} "
-            f"| {t['categoryName']} | {t['description']}"
-            for t in txs[:limite]
-        ]
-        return "\n".join(lines)
+        def line(t: dict) -> str:
+            if t["type"] == "Transfer":
+                return (f"id={t['id']} | {t['date']} | transferência {brl(t['amount'])} "
+                        f"| {t['accountName']} → {t.get('destinationAccountName')} | {t['description']}")
+            sign = "-" if t["type"] == "Expense" else "+"
+            return f"id={t['id']} | {t['date']} | {sign}{brl(t['amount'])} | {t['categoryName']} | {t['description']}"
+
+        return "\n".join(line(t) for t in txs[:limite])
 
     @tool
     async def excluir_lancamento(id: str, config: RunnableConfig) -> str:
@@ -140,4 +194,4 @@ def make_tools(finance: FinanceApi, timezone: str):
                 f"{b['categoryName']} {brl(b['spent'])} de {brl(b['limit'])}" for b in d["budgets"]))
         return "\n".join(lines)
 
-    return [registrar_lancamento, listar_lancamentos, excluir_lancamento, resumo_do_mes]
+    return [registrar_lancamento, registrar_transferencia, listar_lancamentos, excluir_lancamento, resumo_do_mes]

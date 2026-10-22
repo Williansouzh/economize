@@ -76,7 +76,8 @@ class ApiClient {
   Future<void> saveTransaction({
     String? id,
     required String accountId,
-    required String categoryId,
+    String? categoryId,
+    String? destinationAccountId,
     required String description,
     required double amount,
     required TxType type,
@@ -85,7 +86,8 @@ class ApiClient {
   }) async {
     final body = {
       'accountId': accountId,
-      'categoryId': categoryId,
+      if (type != TxType.transfer) 'categoryId': categoryId,
+      if (type == TxType.transfer) 'destinationAccountId': destinationAccountId,
       'description': description,
       'amount': amount,
       'type': txTypeToJson(type),
@@ -100,9 +102,13 @@ class ApiClient {
   Future<void> createAccount(String name, double initialBalance) =>
       post('/accounts', {'name': name, 'initialBalance': initialBalance});
 
-  Future<void> saveBudget(String categoryId, String month, double limit) =>
-      post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit});
-  Future<void> deleteBudget(String id) => delete('/budgets/$id');
+  /// Cria ou altera o orçamento a partir de [month]. [recurring]: vale também nos meses seguintes.
+  Future<void> saveBudget(String categoryId, String month, double limit, {bool recurring = false}) =>
+      post('/budgets', {'categoryId': categoryId, 'month': month, 'limit': limit, 'isRecurring': recurring});
+
+  /// Vendo o mês de criação: apaga. Vendo um mês posterior (herdado): para de repetir a partir de [month].
+  Future<void> deleteBudget(String id, String month) =>
+      _send(http.delete(_uri('/budgets/$id', {'month': month}), headers: _headers));
 
   // ---- WhatsApp ----
   Future<String?> linkedWhatsApp() async => (await get('/me'))['whatsAppPhone'];
@@ -110,8 +116,10 @@ class ApiClient {
   Future<void> unlinkWhatsApp() => delete('/me/whatsapp');
 
   // ---- IA (DeepSeek via backend) ----
-  Future<Insights> insights(String month) async =>
-      Insights.fromJson(await post('/insights', {'month': month}));
-  Future<String> ask(String question, String month) async =>
-      (await post('/insights/chat', {'question': question, 'month': month}))['answer'];
+  /// [includeDescriptions] = false: o DeepSeek recebe só valores e categorias.
+  Future<Insights> insights(String month, {bool includeDescriptions = true}) async => Insights.fromJson(
+      await post('/insights', {'month': month, 'includeDescriptions': includeDescriptions}));
+  Future<String> ask(String question, String month, {bool includeDescriptions = true}) async =>
+      (await post('/insights/chat',
+          {'question': question, 'month': month, 'includeDescriptions': includeDescriptions}))['answer'];
 }

@@ -96,10 +96,19 @@ class _TransactionTile extends StatelessWidget {
           child: Icon(categoryIcon(t.categoryIcon), color: Colors.white, size: 20),
         ),
         title: Text(t.description.isEmpty ? t.categoryName : t.description),
-        subtitle: Text('${t.categoryName} · ${t.accountName}${t.isPaid ? '' : ' · pendente'}'),
+        subtitle: Text(t.type == TxType.transfer
+            ? '${t.accountName} → ${t.destinationAccountName ?? '?'}${t.isPaid ? '' : ' · pendente'}'
+            : '${t.categoryName} · ${t.accountName}${t.isPaid ? '' : ' · pendente'}'),
+        // Transferência não é ganho nem gasto: sem sinal e em cor neutra.
         trailing: Text(
-          '${isIncome ? '+' : '-'} ${money(t.amount)}',
-          style: TextStyle(fontWeight: FontWeight.bold, color: isIncome ? incomeColor : expenseColor),
+          t.type == TxType.transfer ? money(t.amount) : '${isIncome ? '+' : '-'} ${money(t.amount)}',
+          style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: switch (t.type) {
+                TxType.income => incomeColor,
+                TxType.expense => expenseColor,
+                TxType.transfer => transferColor,
+              }),
         ),
       ),
     );

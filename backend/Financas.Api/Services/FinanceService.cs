@@ -22,7 +22,7 @@ public class FinanceService(AppDbContext db, AppClock clock)
 
     public Task<List<Transaction>> GetTransactionsAsync(Guid userId, DateOnly start, DateOnly end) =>
         db.Transactions.AsNoTracking()
-            .Include(t => t.Account).Include(t => t.Category)
+            .Include(t => t.Account).Include(t => t.Category).Include(t => t.DestinationAccount)
             .Where(t => t.UserId == userId && t.Date >= start && t.Date <= end)
             .OrderByDescending(t => t.Date)
             .ToListAsync();
@@ -38,8 +38,10 @@ public class FinanceService(AppDbContext db, AppClock clock)
         var accounts = await db.Accounts.AsNoTracking().Where(a => a.UserId == userId).ToListAsync();
 
         // Somas feitas pelo PostgreSQL: uma linha por conta, sem trazer os lançamentos para a memória.
-        var sums = await db.Transactions.AsNoTracking()
-            .Where(t => t.UserId == userId && (t.Date <= today || t.Date <= until))
+        // Na conta de origem, despesa e transferência saem (negativas) e receita entra.
+        var period = db.Transactions.AsNoTracking()
+            .Where(t => t.UserId == userId && (t.Date <= today || t.Date <= until));
+        var sums = await period
             .GroupBy(t => t.AccountId)
             .Select(g => new
             {
@@ -51,11 +53,25 @@ public class FinanceService(AppDbContext db, AppClock clock)
             })
             .ToDictionaryAsync(x => x.AccountId);
 
+        // Transferências recebidas entram na conta de destino.
+        var incoming = await period
+            .Where(t => t.Type == TransactionType.Transfer && t.DestinationAccountId != null)
+            .GroupBy(t => t.DestinationAccountId!.Value)
+            .Select(g => new
+            {
+                AccountId = g.Key,
+                Current = g.Sum(t => t.IsPaid && t.Date <= today ? t.Amount : 0m),
+                Forecast = g.Sum(t => t.Date <= until ? t.Amount : 0m),
+            })
+            .ToDictionaryAsync(x => x.AccountId);
+
         return accounts.Select(a =>
         {
-            var s = sums.GetValueOrDefault(a.Id);
+            var o = sums.GetValueOrDefault(a.Id);
+            var i = incoming.GetValueOrDefault(a.Id);
             return new AccountDto(a.Id, a.Name, a.InitialBalance,
-                a.InitialBalance + (s?.Current ?? 0), a.InitialBalance + (s?.Forecast ?? 0), a.Color);
+                a.InitialBalance + (o?.Current ?? 0) + (i?.Current ?? 0),
+                a.InitialBalance + (o?.Forecast ?? 0) + (i?.Forecast ?? 0), a.Color);
         }).OrderBy(a => a.Name).ToList();
     }
 
@@ -64,7 +80,7 @@ public class FinanceService(AppDbContext db, AppClock clock)
         var expenses = txs.Where(t => t.Type == TransactionType.Expense).ToList();
         var total = expenses.Sum(t => t.Amount);
         return expenses
-            .GroupBy(t => t.CategoryId)
+            .GroupBy(t => t.CategoryId!.Value) // despesas sempre têm categoria
             .Select(g => new CategoryTotal(
                 g.Key, g.First().Category!.Name, g.First().Category!.Color, g.Sum(t => t.Amount),
                 total == 0 ? 0 : Math.Round((double)(g.Sum(t => t.Amount) / total) * 100, 1)))
@@ -72,15 +88,30 @@ public class FinanceService(AppDbContext db, AppClock clock)
             .ToList();
     }
 
+    /// <summary>
+    /// Orçamentos que valem no mês: os criados nele e os recorrentes de meses anteriores ainda em vigor.
+    /// Se houver mais de um para a mesma categoria, vale o criado mais recentemente.
+    /// </summary>
     public async Task<List<BudgetDto>> GetBudgetsAsync(Guid userId, string monthKey, IEnumerable<Transaction> monthTxs)
     {
-        var budgets = await db.Budgets.AsNoTracking().Include(b => b.Category)
-            .Where(b => b.UserId == userId && b.Month == monthKey).ToListAsync();
-        return budgets.Select(b => new BudgetDto(
-            b.Id, b.CategoryId, b.Category!.Name, b.Category.Color, b.Month, b.Limit,
-            monthTxs.Where(t => t.CategoryId == b.CategoryId && t.Type == TransactionType.Expense)
-                .Sum(t => t.Amount))).ToList();
+        var candidates = await db.Budgets.AsNoTracking().Include(b => b.Category)
+            .Where(b => b.UserId == userId && string.Compare(b.Month, monthKey) <= 0
+                        && (b.UntilMonth == null || string.Compare(b.UntilMonth, monthKey) >= 0))
+            .ToListAsync();
+        return candidates
+            .GroupBy(b => b.CategoryId)
+            .Select(g => g.OrderByDescending(b => b.Month, StringComparer.Ordinal).First())
+            .OrderBy(b => b.Category!.Name)
+            .Select(b => new BudgetDto(
+                b.Id, b.CategoryId, b.Category!.Name, b.Category.Color, b.Month, b.Limit,
+                monthTxs.Where(t => t.CategoryId == b.CategoryId && t.Type == TransactionType.Expense).Sum(t => t.Amount),
+                b.IsRecurring, b.Month != monthKey, b.UntilMonth))
+            .ToList();
     }
+
+    /// <summary>"2026-10" → "2026-09".</summary>
+    public static string PreviousMonth(string monthKey) =>
+        DateOnly.ParseExact(monthKey + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture).AddMonths(-1).ToString("yyyy-MM");
 
     public async Task<DashboardDto> GetDashboardAsync(Guid userId, string? month)
     {

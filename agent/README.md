@@ -30,6 +30,7 @@ _"desfazer"_, _"na verdade foram 60"_, _"quanto gastei com comida?"_.
 
 | Você manda | O agente faz |
 |---|---|
+| `passei 500 do Nubank pra poupança` | Transferência entre as suas contas (não é gasto) |
 | `gastei 45 no almoço` | Despesa de R$ 45,00 em Alimentação, com a data de hoje |
 | 🎤 _"recebi dois mil do freela ontem"_ | Receita de R$ 2.000,00 em Freelance, com a data de ontem |
 | 🖼️ print de comprovante PIX | Despesa com o valor, a data e o favorecido do comprovante |
@@ -95,6 +96,8 @@ pytest
 
 ## Observações
 
+- **Áudio incerto:** quando o Whisper não tem segurança (voz ruim, barulho), a transcrição chega ao modelo
+  marcada, e ele confirma o valor com você antes de registrar.
 - **Whisper:** `WHISPER_MODEL=small` é um bom equilíbrio em CPU (~500 MB, alguns segundos por áudio).
   Use `base` em servidores fracos ou `medium` para mais precisão. O modelo é baixado no primeiro áudio.
 - **Histórico e várias instâncias:** sem `DATABASE_URL`, o histórico das conversas, os ids de mensagens
@@ -104,6 +107,10 @@ pytest
   - o histórico usa o checkpointer oficial do LangGraph (`langgraph-checkpoint-postgres`) e sobrevive a reinícios;
   - cada id de mensagem da Meta é gravado numa tabela com chave única, então um reenvio é descartado mesmo que caia em outra instância;
   - mensagens do mesmo telefone são processadas uma de cada vez com `pg_advisory_lock`, que o Postgres libera sozinho se a instância cair.
+
+  - uma mensagem só é marcada como concluída depois que a resposta é enviada. Se a instância cair antes,
+    outra a reassume depois de `PROCESSING_TIMEOUT_SECONDS` (padrão 300) e continua do último passo salvo,
+    sem registrar nada duas vezes.
 
   O `docker-compose.yml` já sobe o Postgres e configura isso. Para testar com Postgres:
   `TEST_DATABASE_URL=postgresql://... pytest`.

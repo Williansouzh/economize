@@ -57,12 +57,19 @@ namespace Financas.Api.Data.Migrations
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("IsRecurring")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal>("Limit")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)");
 
                     b.Property<string>("Month")
                         .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("UntilMonth")
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)");
 
@@ -125,6 +132,23 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("LinkAttempts");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.RateLimitCounter", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("WindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Key", "WindowStart");
+
+                    b.ToTable("RateLimitCounters");
+                });
+
             modelBuilder.Entity("Financas.Api.Models.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -138,7 +162,7 @@ namespace Financas.Api.Data.Migrations
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)");
 
-                    b.Property<Guid>("CategoryId")
+                    b.Property<Guid?>("CategoryId")
                         .HasColumnType("uuid");
 
                     b.Property<DateOnly>("Date")
@@ -148,6 +172,13 @@ namespace Financas.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("DestinationAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<bool>("IsPaid")
                         .HasColumnType("boolean");
@@ -164,9 +195,18 @@ namespace Financas.Api.Data.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("DestinationAccountId");
+
                     b.HasIndex("UserId", "Date");
 
-                    b.ToTable("Transactions");
+                    b.HasIndex("UserId", "ExternalId")
+                        .IsUnique()
+                        .HasFilter("\"ExternalId\" IS NOT NULL");
+
+                    b.ToTable("Transactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_Transactions_TransferShape", "(\"Type\" = 3) = (\"DestinationAccountId\" IS NOT NULL AND \"CategoryId\" IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Financas.Api.Models.User", b =>
@@ -235,12 +275,18 @@ namespace Financas.Api.Data.Migrations
                     b.HasOne("Financas.Api.Models.Category", "Category")
                         .WithMany()
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Financas.Api.Models.Account", "DestinationAccount")
+                        .WithMany()
+                        .HasForeignKey("DestinationAccountId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.Navigation("Account");
 
                     b.Navigation("Category");
+
+                    b.Navigation("DestinationAccount");
                 });
 #pragma warning restore 612, 618
         }

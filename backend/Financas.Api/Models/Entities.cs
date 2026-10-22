@@ -1,6 +1,7 @@
 namespace Financas.Api.Models;
 
-public enum TransactionType { Income = 1, Expense = 2 }
+/// <summary>Transfer move dinheiro entre contas do próprio usuário: não é receita nem despesa.</summary>
+public enum TransactionType { Income = 1, Expense = 2, Transfer = 3 }
 
 public class User
 {
@@ -43,8 +44,15 @@ public class Transaction
     public Guid UserId { get; set; }
     public Guid AccountId { get; set; }
     public Account? Account { get; set; }
-    public Guid CategoryId { get; set; }
+    /// <summary>Obrigatória em receitas e despesas; vazia em transferências.</summary>
+    public Guid? CategoryId { get; set; }
     public Category? Category { get; set; }
+    /// <summary>Só em transferências: a conta que recebe o dinheiro (sai de <see cref="AccountId"/>).</summary>
+    public Guid? DestinationAccountId { get; set; }
+    public Account? DestinationAccount { get; set; }
+    /// <summary>Chave de idempotência enviada pelo cliente (o agente usa o id da chamada de ferramenta).
+    /// Repetir o POST com a mesma chave devolve o lançamento já criado.</summary>
+    public string? ExternalId { get; set; }
     public string Description { get; set; } = "";
     /// <summary>Sempre positivo; o sinal vem de <see cref="Type"/>.</summary>
     public decimal Amount { get; set; }
@@ -69,7 +77,19 @@ public class Budget
     public Guid UserId { get; set; }
     public Guid CategoryId { get; set; }
     public Category? Category { get; set; }
-    /// <summary>Formato yyyy-MM.</summary>
+    /// <summary>Primeiro mês em que vale (yyyy-MM).</summary>
     public string Month { get; set; } = "";
     public decimal Limit { get; set; }
+    /// <summary>Se true, vale também nos meses seguintes até <see cref="UntilMonth"/>.</summary>
+    public bool IsRecurring { get; set; }
+    /// <summary>Último mês em que vale (yyyy-MM). Igual a Month quando não repete; null = sem fim.</summary>
+    public string? UntilMonth { get; set; }
+}
+
+/// <summary>Contador de requisições por janela de 1 minuto, compartilhado entre réplicas (RN-26).</summary>
+public class RateLimitCounter
+{
+    public string Key { get; set; } = "";
+    public DateTime WindowStart { get; set; }
+    public int Count { get; set; }
 }

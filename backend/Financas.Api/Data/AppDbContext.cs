@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
+    public DbSet<RateLimitCounter> RateLimitCounters => Set<RateLimitCounter>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -19,8 +20,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.Date });
         b.Entity<Budget>().HasIndex(x => new { x.UserId, x.CategoryId, x.Month }).IsUnique();
 
-        b.Entity<Transaction>().HasOne(t => t.Account).WithMany().OnDelete(DeleteBehavior.Cascade);
-        b.Entity<Transaction>().HasOne(t => t.Category).WithMany().OnDelete(DeleteBehavior.Restrict);
+        b.Entity<Transaction>().HasOne(t => t.Account).WithMany()
+            .HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Transaction>().HasOne(t => t.DestinationAccount).WithMany()
+            .HasForeignKey(t => t.DestinationAccountId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Transaction>().HasOne(t => t.Category).WithMany()
+            .HasForeignKey(t => t.CategoryId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<Transaction>().ToTable(t => t.HasCheckConstraint("CK_Transactions_TransferShape",
+            "(\"Type\" = 3) = (\"DestinationAccountId\" IS NOT NULL AND \"CategoryId\" IS NULL)"));
+        b.Entity<Transaction>().Property(t => t.ExternalId).HasMaxLength(100);
+        b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.ExternalId }).IsUnique()
+            .HasFilter("\"ExternalId\" IS NOT NULL");
 
         // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.
         b.Entity<Transaction>().Property(t => t.Amount).HasPrecision(14, 2);
@@ -31,10 +41,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<User>().Property(u => u.WhatsAppPhone).HasMaxLength(20);
         b.Entity<User>().Property(u => u.WhatsAppLinkCode).HasMaxLength(6);
         b.Entity<Budget>().Property(x => x.Month).HasMaxLength(7);
+        b.Entity<Budget>().Property(x => x.UntilMonth).HasMaxLength(7);
         b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
 
         b.Entity<LinkAttempt>().HasKey(x => x.Phone);
         b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);
+
+        b.Entity<RateLimitCounter>().HasKey(x => new { x.Key, x.WindowStart });
+        b.Entity<RateLimitCounter>().Property(x => x.Key).HasMaxLength(120);
     }
 
     /// <summary>Categorias padrão criadas no cadastro do usuário (estilo Organizze).</summary>

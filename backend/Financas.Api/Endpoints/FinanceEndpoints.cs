@@ -4,6 +4,7 @@ using Financas.Api.Dtos;
 using Financas.Api.Models;
 using Financas.Api.Services;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Financas.Api.Endpoints;
 
@@ -76,11 +77,27 @@ public static class FinanceEndpoints
         txs.MapPost("/", async (TransactionRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
             var uid = user.UserId();
+            var externalId = string.IsNullOrWhiteSpace(req.ExternalId) ? null : req.ExternalId.Trim();
+            if (externalId is { Length: > 100 })
+                return Results.BadRequest(new { error = "ExternalId pode ter no máximo 100 caracteres." });
+
+            // Idempotência: repetir o POST com a mesma chave devolve o lançamento já criado (200, não 201).
+            if (externalId is not null && await FindByExternalIdAsync(db, uid, externalId) is { } existing)
+                return Results.Ok(new { Id = existing });
+
             if (await Validate(req, uid, db) is { } error) return error;
-            var t = new Transaction { UserId = uid };
+            var t = new Transaction { UserId = uid, ExternalId = externalId };
             Apply(t, req);
             db.Transactions.Add(t);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException e) when (externalId is not null && e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                // Duas réplicas recebendo a mesma chave ao mesmo tempo: a segunda devolve a da primeira.
+                return Results.Ok(new { Id = (await FindByExternalIdAsync(db, uid, externalId))!.Value });
+            }
             return Results.Created($"/api/transactions/{t.Id}", new { t.Id });
         });
 
@@ -108,11 +125,13 @@ public static class FinanceEndpoints
             return await finance.GetBudgetsAsync(user.UserId(), key, monthTxs);
         });
 
-        // Upsert: um limite por categoria/mês.
+        // Cria ou altera o orçamento da categoria a partir do mês informado.
+        // Recorrente: vale também nos meses seguintes, até ser substituído ou interrompido.
         budgets.MapPost("/", async (BudgetRequest req, ClaimsPrincipal user, AppDbContext db, FinanceService finance) =>
         {
             var uid = user.UserId();
             var (_, _, key) = finance.ParseMonth(req.Month);
+            if (req.Limit <= 0) return Results.BadRequest(new { error = "O limite precisa ser maior que zero." });
             // Orçamento é limite de gasto: só faz sentido para categorias de despesa.
             if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid && c.Type == TransactionType.Expense))
                 return Results.BadRequest(new { error = "Escolha uma categoria de despesa." });
@@ -120,14 +139,44 @@ public static class FinanceEndpoints
             var b = await db.Budgets.FirstOrDefaultAsync(x => x.UserId == uid && x.CategoryId == req.CategoryId && x.Month == key);
             if (b is null) db.Budgets.Add(b = new Budget { UserId = uid, CategoryId = req.CategoryId, Month = key });
             b.Limit = req.Limit;
+            b.IsRecurring = req.IsRecurring;
+            b.UntilMonth = req.IsRecurring ? null : key;
             await db.SaveChangesAsync();
             return Results.Ok(new { b.Id });
         });
 
-        budgets.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
-            await db.Budgets.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
-                ? Results.NoContent() : Results.NotFound());
+        // month = mês que o usuário está vendo.
+        // - É o mês de criação (ou não foi informado): apaga o orçamento.
+        // - É um mês posterior (orçamento herdado): para de repetir a partir desse mês, sem mexer nos anteriores.
+        budgets.MapDelete("/{id:guid}", async (Guid id, string? month, ClaimsPrincipal user, AppDbContext db, FinanceService finance) =>
+        {
+            var uid = user.UserId();
+            var b = await db.Budgets.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
+            if (b is null) return Results.NotFound();
+
+            var key = month is null ? b.Month : finance.ParseMonth(month).Key;
+            if (string.CompareOrdinal(key, b.Month) <= 0)
+            {
+                db.Budgets.Remove(b);
+            }
+            else
+            {
+                // Encerra este e qualquer outro recorrente mais antigo da categoria que ainda valeria,
+                // para um orçamento antigo não "reaparecer" no lugar do que foi interrompido.
+                var previous = FinanceService.PreviousMonth(key);
+                var open = await db.Budgets.Where(x => x.UserId == uid && x.CategoryId == b.CategoryId && x.IsRecurring
+                        && string.Compare(x.Month, key) < 0 && (x.UntilMonth == null || string.Compare(x.UntilMonth, key) >= 0))
+                    .ToListAsync();
+                foreach (var o in open) o.UntilMonth = previous;
+            }
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        });
     }
+
+    private static async Task<Guid?> FindByExternalIdAsync(AppDbContext db, Guid uid, string externalId) =>
+        await db.Transactions.Where(x => x.UserId == uid && x.ExternalId == externalId)
+            .Select(x => (Guid?)x.Id).FirstOrDefaultAsync();
 
     private static async Task<IResult?> Validate(TransactionRequest req, Guid uid, AppDbContext db)
     {
@@ -137,7 +186,21 @@ public static class FinanceEndpoints
             return Results.BadRequest(new { error = "Descrição pode ter no máximo 200 caracteres." });
         if (!await db.Accounts.AnyAsync(a => a.Id == req.AccountId && a.UserId == uid))
             return Results.BadRequest(new { error = "Conta inválida." });
-        var category = await db.Categories.AsNoTracking()
+
+        if (req.Type == TransactionType.Transfer)
+        {
+            if (req.DestinationAccountId is not { } dest || !await db.Accounts.AnyAsync(a => a.Id == dest && a.UserId == uid))
+                return Results.BadRequest(new { error = "Escolha a conta de destino da transferência." });
+            if (dest == req.AccountId)
+                return Results.BadRequest(new { error = "A conta de origem e a de destino precisam ser diferentes." });
+            if (req.CategoryId is not null)
+                return Results.BadRequest(new { error = "Transferência não tem categoria." });
+            return null;
+        }
+
+        if (req.Type is not (TransactionType.Income or TransactionType.Expense))
+            return Results.BadRequest(new { error = "Tipo de lançamento inválido." });
+        var category = req.CategoryId is null ? null : await db.Categories.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == req.CategoryId && c.UserId == uid);
         if (category is null)
             return Results.BadRequest(new { error = "Categoria inválida." });
@@ -149,11 +212,17 @@ public static class FinanceEndpoints
 
     private static void Apply(Transaction t, TransactionRequest req)
     {
-        t.AccountId = req.AccountId; t.CategoryId = req.CategoryId; t.Description = (req.Description ?? "").Trim();
+        var transfer = req.Type == TransactionType.Transfer;
+        t.AccountId = req.AccountId;
+        t.CategoryId = transfer ? null : req.CategoryId;
+        t.DestinationAccountId = transfer ? req.DestinationAccountId : null;
+        t.Description = (req.Description ?? "").Trim();
         t.Amount = req.Amount; t.Type = req.Type; t.Date = req.Date; t.IsPaid = req.IsPaid;
     }
 
-    private static TransactionDto ToDto(Transaction t) => new(
-        t.Id, t.AccountId, t.Account!.Name, t.CategoryId, t.Category!.Name, t.Category.Icon, t.Category.Color,
-        t.Description, t.Amount, t.Type, t.Date, t.IsPaid);
+    private static TransactionDto ToDto(Transaction t) => t.Type == TransactionType.Transfer
+        ? new(t.Id, t.AccountId, t.Account!.Name, null, "Transferência", "swap_horiz", "#607D8B",
+            t.Description, t.Amount, t.Type, t.Date, t.IsPaid, t.DestinationAccountId, t.DestinationAccount?.Name)
+        : new(t.Id, t.AccountId, t.Account!.Name, t.CategoryId, t.Category!.Name, t.Category.Icon, t.Category.Color,
+            t.Description, t.Amount, t.Type, t.Date, t.IsPaid, null, null);
 }

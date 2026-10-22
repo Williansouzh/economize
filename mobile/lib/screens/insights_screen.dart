@@ -26,7 +26,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
     final state = context.read<AppState>();
     setState(() => _loading = true);
     try {
-      final r = await state.api.insights(state.monthKey);
+      final r = await state.api.insights(state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
       setState(() {
         _insights = r;
         _insightsMonth = state.monthKey;
@@ -48,7 +48,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _question.clear();
     });
     try {
-      final answer = await state.api.ask(q, state.monthKey);
+      final answer = await state.api.ask(q, state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
       setState(() => _chat.add(('ai', answer)));
     } catch (e) {
       setState(() => _chat.add(('ai', '⚠️ $e')));
@@ -89,6 +89,8 @@ class _InsightsScreenState extends State<InsightsScreen> {
             )
           else
             _InsightsView(insights, onRefresh: _loading ? null : _generate),
+          const SizedBox(height: 8),
+          const _PrivacyNotice(),
           const SizedBox(height: 16),
           Text('Pergunte à IA', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -212,4 +214,42 @@ class _ListCard extends StatelessWidget {
           ]),
         ),
       );
+}
+
+/// Explica o que é enviado ao DeepSeek e deixa o usuário tirar as descrições.
+class _PrivacyNotice extends StatelessWidget {
+  const _PrivacyNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.lock_outline, size: 18, color: cs.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Text('O que vai para a IA (DeepSeek)', style: Theme.of(context).textTheme.titleSmall),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          'Totais do mês, gastos por categoria, orçamentos e as 10 maiores despesas do mês. '
+          'Seu nome e seu e-mail nunca são enviados.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Enviar as descrições das despesas'),
+          subtitle: Text(state.sendDescriptionsToAi
+              ? 'Ex.: "Consulta Dr. Silva". Deixa as dicas mais precisas.'
+              : 'A IA vê só data, categoria e valor.'),
+          value: state.sendDescriptionsToAi,
+          onChanged: state.setSendDescriptionsToAi,
+        ),
+      ]),
+    );
+  }
 }

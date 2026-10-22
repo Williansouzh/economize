@@ -60,9 +60,10 @@ async def test_texto_registra_despesa_e_desfaz():
 
     reply = await handler.handle(text("gastei 45,50 no almoço"))
     assert reply == "✅ Despesa de *R$ 45,50* em Alimentação"  # markdown → WhatsApp
+    call_id = llm.received[1][-1].tool_call_id  # id da chamada de ferramenta que gerou o registro
     assert finance.created == [{
         "accountId": "a1", "categoryId": "c1", "description": "Almoço", "amount": 45.5,
-        "type": "Expense", "date": TODAY, "isPaid": True,
+        "type": "Expense", "date": TODAY, "isPaid": True, "externalId": call_id,
     }]
     # O prompt de sistema traz as categorias do usuário e a data de hoje.
     system = llm.received[0][0].content

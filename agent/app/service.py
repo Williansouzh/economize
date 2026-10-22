@@ -48,12 +48,23 @@ class MessageHandler:
         if await self._finance.login(msg.phone) is None:
             return WELCOME_UNLINKED
 
+        config = {"configurable": {"thread_id": msg.phone}}
+
+        # Reprocessamento (a instância anterior caiu): se a mensagem já entrou no histórico,
+        # não começa de novo. Continua do último passo salvo, ou só devolve a resposta pronta.
+        snapshot = await self._graph.aget_state(config)
+        if any(getattr(m, "id", None) == msg.id for m in snapshot.values.get("messages", [])):
+            log.info("Mensagem %s já estava no histórico: retomando", msg.id)
+            result = await self._graph.ainvoke(None, config) if snapshot.next else snapshot.values
+            return to_whatsapp_format(result["messages"][-1].content)
+
         if msg.type == "text":
-            state = {"messages": [HumanMessage(content=msg.text)], "media": None}
+            state = {"messages": [HumanMessage(content=msg.text, id=msg.id)], "media": None}
         elif msg.type in MEDIA_TYPES and msg.media_id:
-            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text}}
+            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text,
+                                               "message_id": msg.id}}
         else:
             return "Por enquanto eu entendo *texto*, *áudio*, *imagens* e *PDFs*. 🙂"
 
-        result = await self._graph.ainvoke(state, {"configurable": {"thread_id": msg.phone}})
+        result = await self._graph.ainvoke(state, config)
         return to_whatsapp_format(result["messages"][-1].content)

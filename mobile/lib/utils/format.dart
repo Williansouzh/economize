@@ -25,8 +25,10 @@ const _icons = <String, IconData>{
   'work': Icons.work,
   'trending_up': Icons.trending_up,
   'attach_money': Icons.attach_money,
+  'swap_horiz': Icons.swap_horiz,
 };
 IconData categoryIcon(String name) => _icons[name] ?? Icons.category;
 
 const incomeColor = Color(0xFF2E7D32);
 const expenseColor = Color(0xFFC62828);
+const transferColor = Color(0xFF546E7A);

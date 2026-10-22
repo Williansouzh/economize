@@ -8,11 +8,9 @@ namespace Financas.Api.Services;
 /// <summary>Rate limiting, CORS e cabeçalhos de proxy reverso.</summary>
 public static class HttpProtection
 {
-    public const string AuthPolicy = "auth";
 
     public static IServiceCollection AddHttpProtection(this IServiceCollection services, IConfiguration config, IHostEnvironment env)
     {
-        var authPerMinute = config.GetValue("RateLimit:AuthPerMinute", 10);
         var apiPerMinute = config.GetValue("RateLimit:ApiPerMinute", 300);
 
         services.AddRateLimiter(o =>
@@ -26,15 +24,8 @@ public static class HttpProtection
                     new { error = "Muitas requisições. Aguarde um minuto e tente de novo." }, ct);
             };
 
-            // Login e cadastro: por IP, para frear tentativas de senha.
-            o.AddPolicy(AuthPolicy, http => RateLimitPartition.GetFixedWindowLimiter(
-                ClientIp(http), _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = authPerMinute,
-                    Window = TimeSpan.FromMinutes(1),
-                }));
-
-            // Demais rotas: por usuário logado (ou IP). As rotas do agente já são protegidas
+            // Login e cadastro têm um limite próprio, contado no banco (AuthRateLimiter).
+            // Este, em memória e por réplica, é só contra abuso nas demais rotas: por usuário logado (ou IP). As rotas do agente já são protegidas
             // pela X-Agent-Key e pelo limite por telefone, e concentram o tráfego de todos os usuários.
             o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(http =>
                 http.Request.Path.StartsWithSegments("/api/agent")

@@ -51,8 +51,8 @@ async def assert_serializes(coord_a, coord_b, phone: str):
 
 async def test_memoria_descarta_repetidas_e_serializa():
     coord = InMemoryCoordinator()
-    assert await coord.first_time("m1") is True
-    assert await coord.first_time("m1") is False
+    assert await coord.claim("m1", {}) is True
+    assert await coord.claim("m1", {}) is False
     await assert_serializes(coord, coord, "5511")
 
 
@@ -60,7 +60,7 @@ async def test_memoria_descarta_repetidas_e_serializa():
 async def test_postgres_duas_instancias_descartam_a_mesma_mensagem():
     msg_id = f"wamid.{uuid.uuid4()}"
     async with postgres_backend(DB_URL, 4) as (_, a), postgres_backend(DB_URL, 4) as (_, b):
-        results = await asyncio.gather(*[c.first_time(msg_id) for c in (a, b, a, b)])
+        results = await asyncio.gather(*[c.claim(msg_id, {"id": msg_id}) for c in (a, b, a, b)])
     assert sorted(results) == [False, False, False, True]
 
 

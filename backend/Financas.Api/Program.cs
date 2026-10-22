@@ -40,6 +40,8 @@ builder.Services.AddSingleton<AppClock>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<LinkAttemptLimiter>();
+builder.Services.AddScoped<AuthRateLimiter>();
+builder.Services.AddScoped<AuthRateLimitFilter>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
@@ -51,13 +53,12 @@ builder.Services.AddHttpClient<DeepSeekClient>(c =>
 
 var app = builder.Build();
 
-// Aplica as migrations pendentes na subida. O EF Core trava a tabela de histórico durante a
-// aplicação, então várias réplicas subindo juntas não aplicam a mesma migration duas vezes.
+// Aplica as migrations pendentes na subida, com um lock que vale entre réplicas (ver DatabaseMigrator).
 // Para aplicar fora da API (pipeline de deploy), use Database:MigrateOnStartup=false e "dotnet ef database update".
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 {
     using var scope = app.Services.CreateScope();
-    scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.Migrate();
+    DatabaseMigrator.MigrateWithLock(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 }
 
 if (app.Environment.IsDevelopment())
