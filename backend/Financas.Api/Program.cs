@@ -73,6 +73,8 @@ else
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
+builder.Services.AddScoped<AnalysisService>();
+builder.Services.AddScoped<AiQuota>();
 builder.Services.AddScoped<ImportService>();
 builder.Services.AddHttpClient<AgentClient>(c => c.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddHttpClient<DeepSeekClient>(c =>
@@ -96,6 +98,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpProtection();
 app.UseAuthentication();
+app.UseProfileScope();
 app.UseAuthorization();
 // Depois da autenticação, para o limite global poder separar por usuário.
 app.UseRateLimiter();
@@ -111,6 +114,7 @@ app.MapWhatsAppEndpoints();
 app.MapPlanningEndpoints();
 app.MapImportEndpoints();
 app.MapAdminEndpoints();
+app.MapProfileEndpoints();
 
 app.Run();
 

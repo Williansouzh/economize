@@ -76,7 +76,7 @@ public static class WhatsAppEndpoints
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {
-                await DeleteFinancialDataAsync(db, uid);
+                await DeleteAllProfilesAsync(db, uid);
                 if (u.WhatsAppPhone is not null)
                     await db.LinkAttempts.Where(x => x.Phone == u.WhatsAppPhone).ExecuteDeleteAsync();
                 await db.Users.Where(x => x.Id == uid).ExecuteDeleteAsync();
@@ -98,7 +98,7 @@ public static class WhatsAppEndpoints
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {
-                await DeleteFinancialDataAsync(db, uid);
+                await DeleteAllProfilesAsync(db, uid);
                 db.Categories.AddRange(AppDbContext.DefaultCategories(uid));
                 db.Accounts.Add(new Account { UserId = uid, Name = "Carteira", Color = "#0C7A68" });
                 await db.SaveChangesAsync();
@@ -158,8 +158,20 @@ public static class WhatsAppEndpoints
         });
     }
 
+    /// <summary>Apaga os dados financeiros do usuário e dos perfis de empresa dele (RN-47), e os próprios perfis.</summary>
+    private static async Task DeleteAllProfilesAsync(AppDbContext db, Guid uid)
+    {
+        var business = await db.Profiles.Where(p => p.OwnerId == uid).Select(p => p.Id).ToListAsync();
+        foreach (var id in business.Prepend(uid))
+        {
+            await DeleteFinancialDataAsync(db, id);
+            await db.AiCache.Where(x => x.ProfileId == id).ExecuteDeleteAsync();
+        }
+        await db.Profiles.Where(p => p.OwnerId == uid).ExecuteDeleteAsync();
+    }
+
     // Ordem das chaves estrangeiras: lançamentos antes das categorias (exclusão restrita).
-    private static async Task DeleteFinancialDataAsync(AppDbContext db, Guid uid)
+    public static async Task DeleteFinancialDataAsync(AppDbContext db, Guid uid)
     {
         await db.Transactions.Where(x => x.UserId == uid).ExecuteDeleteAsync();
         await db.Transfers.Where(x => x.UserId == uid).ExecuteDeleteAsync();

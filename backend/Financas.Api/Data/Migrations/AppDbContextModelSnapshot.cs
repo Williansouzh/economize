@@ -66,6 +66,52 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("Accounts");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.AiCache", b =>
+                {
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContextHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProfileId", "Key");
+
+                    b.ToTable("AiCache");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.AiUsage", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Kind")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer");
+
+                    b.HasKey("UserId", "Day", "Kind");
+
+                    b.ToTable("AiUsage");
+                });
+
             modelBuilder.Entity("Financas.Api.Models.Budget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -193,6 +239,37 @@ namespace Financas.Api.Data.Migrations
                     b.HasKey("Phone");
 
                     b.ToTable("LinkAttempts");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.Profile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Cnpj")
+                        .HasMaxLength(14)
+                        .HasColumnType("character varying(14)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsMei")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("Profiles");
                 });
 
             modelBuilder.Entity("Financas.Api.Models.RateLimitCounter", b =>
@@ -331,16 +408,37 @@ namespace Financas.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AboutUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("BirthYear")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DeclaredIncome")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(254)
                         .HasColumnType("character varying(254)");
 
+                    b.Property<string>("IncomeSources")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("JobCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("LastSeenAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MainGoal")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -359,6 +457,10 @@ namespace Financas.Api.Data.Migrations
                     b.Property<string>("ResetCodeHash")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("State")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)");
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
@@ -400,6 +502,15 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("UserActivity");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.AiUsage", b =>
+                {
+                    b.HasOne("Financas.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Financas.Api.Models.Budget", b =>
                 {
                     b.HasOne("Financas.Api.Models.Category", "Category")
@@ -409,6 +520,15 @@ namespace Financas.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.Profile", b =>
+                {
+                    b.HasOne("Financas.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Financas.Api.Models.Transaction", b =>

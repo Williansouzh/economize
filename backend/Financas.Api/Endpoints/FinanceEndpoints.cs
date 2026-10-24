@@ -17,16 +17,16 @@ public static class FinanceEndpoints
 
         // ---------- Dashboard ----------
         api.MapGet("/dashboard", (string? month, ClaimsPrincipal user, FinanceService finance) =>
-            finance.GetDashboardAsync(user.UserId(), month)).WithTags("Dashboard");
+            finance.GetDashboardAsync(user.ProfileId(), month)).WithTags("Dashboard");
 
         // ---------- Contas ----------
         var accounts = api.MapGroup("/accounts").WithTags("Contas");
-        accounts.MapGet("/", (ClaimsPrincipal user, FinanceService finance) => finance.GetAccountsAsync(user.UserId()));
+        accounts.MapGet("/", (ClaimsPrincipal user, FinanceService finance) => finance.GetAccountsAsync(user.ProfileId()));
 
         accounts.MapPost("/", async (AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
             if (Validate(req) is { } error) return error;
-            var a = new Account { UserId = user.UserId() };
+            var a = new Account { UserId = user.ProfileId() };
             Apply(a, req);
             db.Accounts.Add(a);
             await db.SaveChangesAsync();
@@ -36,7 +36,7 @@ public static class FinanceEndpoints
 
         accounts.MapPut("/{id:guid}", async (Guid id, AccountRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var a = await db.Accounts.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
+            var a = await db.Accounts.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.ProfileId());
             if (a is null) return Results.NotFound();
             if (Validate(req) is { } error) return error;
             Apply(a, req);
@@ -46,23 +46,23 @@ public static class FinanceEndpoints
 
         // RN-35: fatura do cartão que fecha no mês informado (sem mês: a que está aberta hoje).
         accounts.MapGet("/{id:guid}/invoice", async (Guid id, string? month, ClaimsPrincipal user, FinanceService finance) =>
-            await finance.GetInvoiceAsync(user.UserId(), id, month) is { } invoice
+            await finance.GetInvoiceAsync(user.ProfileId(), id, month) is { } invoice
                 ? Results.Ok(invoice)
                 : Results.NotFound(new { error = "Cartão não encontrado." }));
 
         accounts.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
-            await db.Accounts.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
+            await db.Accounts.Where(x => x.Id == id && x.UserId == user.ProfileId()).ExecuteDeleteAsync() > 0
                 ? Results.NoContent() : Results.NotFound());
 
         // ---------- Categorias ----------
         var categories = api.MapGroup("/categories").WithTags("Categorias");
         categories.MapGet("/", async (ClaimsPrincipal user, AppDbContext db) =>
-            await db.Categories.AsNoTracking().Where(c => c.UserId == user.UserId()).OrderBy(c => c.Name)
+            await db.Categories.AsNoTracking().Where(c => c.UserId == user.ProfileId()).OrderBy(c => c.Name)
                 .Select(c => new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color)).ToListAsync());
 
         categories.MapPost("/", async (CategoryRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             if (await ValidateCategory(req, uid, null, db) is { } error) return error;
             var c = new Category { UserId = uid, Name = req.Name.Trim(), Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#9E9E9E" };
             db.Categories.Add(c);
@@ -74,7 +74,7 @@ public static class FinanceEndpoints
         // lançamentos nem orçamentos (senão uma despesa viraria receita no histórico).
         categories.MapPut("/{id:guid}", async (Guid id, CategoryRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var c = await db.Categories.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
             if (c is null) return Results.NotFound();
             if (await ValidateCategory(req, uid, id, db) is { } error) return error;
@@ -88,7 +88,7 @@ public static class FinanceEndpoints
 
         categories.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             if (await db.Transactions.AnyAsync(t => t.CategoryId == id && t.UserId == uid))
                 return Results.Conflict(new { error = "Essa categoria tem lançamentos. Mude a categoria deles ou apague-os antes." });
             return await db.Categories.Where(x => x.Id == id && x.UserId == uid).ExecuteDeleteAsync() > 0
@@ -100,14 +100,14 @@ public static class FinanceEndpoints
         txs.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
             var (start, end, _) = finance.ParseMonth(month);
-            return (await finance.GetTransactionsAsync(user.UserId(), start, end)).Select(FinanceService.ToDto);
+            return (await finance.GetTransactionsAsync(user.ProfileId(), start, end)).Select(FinanceService.ToDto);
         });
 
         // RN-34: busca em todos os meses por texto (descrição ou categoria), categoria, conta e tipo.
         txs.MapGet("/search", async (string? q, Guid? categoryId, Guid? accountId, TransactionType? type,
             ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var query = db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
                 .Where(t => t.UserId == uid);
             var text = (q ?? "").Trim();
@@ -128,7 +128,7 @@ public static class FinanceEndpoints
         // Contas a pagar e a receber nos próximos dias (lembretes do app, RN-39).
         txs.MapGet("/upcoming", async (int? days, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var today = clock.Today;
             var until = today.AddDays(Math.Clamp(days ?? 30, 1, 90));
             var found = await db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
@@ -142,7 +142,7 @@ public static class FinanceEndpoints
         txs.MapPost("/", async (TransactionRequest req, [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
             ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var key = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
             if (key is { Length: > 100 })
                 return Results.BadRequest(new { error = "Idempotency-Key pode ter no máximo 100 caracteres." });
@@ -171,7 +171,7 @@ public static class FinanceEndpoints
         // Cada um mantém a própria data e a situação (pago ou não).
         txs.MapPut("/{id:guid}", async (Guid id, string? scope, TransactionRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var t = await db.Transactions.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
             if (t is null) return Results.NotFound();
             if (await Validate(req, uid, db) is { } error) return error;
@@ -195,7 +195,7 @@ public static class FinanceEndpoints
         // scope=future: exclui este e os próximos da mesma série (RN-33).
         txs.MapDelete("/{id:guid}", async (Guid id, string? scope, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var t = await db.Transactions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
             if (t is null) return Results.NotFound();
             if (scope == "future" && t.SeriesId is not null)
@@ -210,14 +210,14 @@ public static class FinanceEndpoints
         budgets.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
             var (start, end, key) = finance.ParseMonth(month);
-            var monthTxs = await finance.GetTransactionsAsync(user.UserId(), start, end);
-            return await finance.GetBudgetsAsync(user.UserId(), key, monthTxs);
+            var monthTxs = await finance.GetTransactionsAsync(user.ProfileId(), start, end);
+            return await finance.GetBudgetsAsync(user.ProfileId(), key, monthTxs);
         });
 
         // Upsert: um limite por categoria/mês.
         budgets.MapPost("/", async (BudgetRequest req, ClaimsPrincipal user, AppDbContext db, FinanceService finance) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var (_, _, key) = finance.ParseMonth(req.Month);
             // Orçamento é limite de gasto: só faz sentido para categorias de despesa.
             if (!await db.Categories.AnyAsync(c => c.Id == req.CategoryId && c.UserId == uid && c.Type == TransactionType.Expense))
@@ -238,7 +238,7 @@ public static class FinanceEndpoints
         // repetição (RN-27): para de repetir a partir desse mês, sem mexer nos meses anteriores.
         budgets.MapDelete("/{id:guid}", async (Guid id, string? month, ClaimsPrincipal user, AppDbContext db, FinanceService finance) =>
         {
-            var b = await db.Budgets.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
+            var b = await db.Budgets.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.ProfileId());
             if (b is null) return Results.NotFound();
             var key = month is null ? b.Month : finance.ParseMonth(month).Key;
             if (string.CompareOrdinal(key, b.Month) <= 0) db.Budgets.Remove(b);
@@ -252,12 +252,12 @@ public static class FinanceEndpoints
         transfers.MapGet("/", async (string? month, ClaimsPrincipal user, FinanceService finance) =>
         {
             var (start, end, _) = finance.ParseMonth(month);
-            return (await finance.GetTransfersAsync(user.UserId(), start, end)).Select(ToDto);
+            return (await finance.GetTransfersAsync(user.ProfileId(), start, end)).Select(ToDto);
         });
 
         transfers.MapPost("/", async (TransferRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             if (await Validate(req, uid, db) is { } error) return error;
             var t = new Transfer { UserId = uid };
             Apply(t, req);
@@ -268,7 +268,7 @@ public static class FinanceEndpoints
 
         transfers.MapPut("/{id:guid}", async (Guid id, TransferRequest req, ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var t = await db.Transfers.FirstOrDefaultAsync(x => x.Id == id && x.UserId == uid);
             if (t is null) return Results.NotFound();
             if (await Validate(req, uid, db) is { } error) return error;
@@ -278,7 +278,7 @@ public static class FinanceEndpoints
         });
 
         transfers.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
-            await db.Transfers.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
+            await db.Transfers.Where(x => x.Id == id && x.UserId == user.ProfileId()).ExecuteDeleteAsync() > 0
                 ? Results.NoContent() : Results.NotFound());
     }
 

@@ -27,6 +27,57 @@ public class User
     public string? ResetCodeHash { get; set; }
     public DateTime? ResetCodeExpiresAt { get; set; }
     public int ResetAttempts { get; set; }
+
+    // ---------- Questionário do onboarding (RN-46), base da análise inicial e mensal ----------
+    public int? BirthYear { get; set; }
+    /// <summary>Sigla da UF, para comparar com a renda da região.</summary>
+    public string? State { get; set; }
+    /// <summary>Fontes de renda separadas por vírgula (veja <c>AboutRequest.Sources</c>), ex.: "clt,freela".</summary>
+    public string? IncomeSources { get; set; }
+    /// <summary>Quantos trabalhos ou clientes fixos a pessoa tem (0 = nenhum no momento).</summary>
+    public int? JobCount { get; set; }
+    /// <summary>Renda mensal aproximada informada no onboarding, somando todas as fontes.</summary>
+    public decimal? DeclaredIncome { get; set; }
+    public string? MainGoal { get; set; }
+    public DateTime? AboutUpdatedAt { get; set; }
+}
+
+public enum ProfileKind { Personal = 0, Business = 1 }
+
+/// <summary>
+/// Perfil de empresa (PJ/MEI) do usuário (RN-47). O perfil pessoal não tem linha nesta tabela: o id
+/// dele é o próprio id do usuário. Contas, categorias, lançamentos, orçamentos, metas e transferências
+/// guardam em <c>UserId</c> o id do perfil a que pertencem, então os dois perfis nunca se misturam.
+/// </summary>
+public class Profile
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid OwnerId { get; set; }
+    public string Name { get; set; } = "";
+    public string? Cnpj { get; set; }
+    public bool IsMei { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>Uso da IA por usuário e dia, para a cota diária (RN-48). Contado no banco: vale em todas as réplicas.</summary>
+public class AiUsage
+{
+    public Guid UserId { get; set; }
+    public DateOnly Day { get; set; }
+    /// <summary>"chat" ou "insights".</summary>
+    public string Kind { get; set; } = "";
+    public int Count { get; set; }
+}
+
+/// <summary>Última análise da IA por perfil e mês (RN-48). Se os dados não mudaram, devolve esta em vez de chamar a IA.</summary>
+public class AiCache
+{
+    public Guid ProfileId { get; set; }
+    public string Key { get; set; } = "";
+    /// <summary>SHA-256 do contexto enviado à IA.</summary>
+    public string ContextHash { get; set; } = "";
+    public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
 }
 
 /// <summary>Dia (no fuso do app) em que o usuário usou o app ou o WhatsApp, para contar ativos por dia (RN-44).</summary>

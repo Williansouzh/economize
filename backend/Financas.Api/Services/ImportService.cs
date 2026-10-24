@@ -83,7 +83,7 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
             Datas sem ano: use o ano do documento (ou {year}).
             """;
         string raw;
-        try { raw = await deepSeek.ChatAsync("Você extrai lançamentos de extratos bancários com precisão.", prompt, jsonOutput: true, ct); }
+        try { raw = await deepSeek.ChatAsync("Você extrai lançamentos de extratos bancários com precisão.", prompt, jsonOutput: true, ct, maxTokens: 8000); }
         catch (HttpRequestException) { throw new ImportException("Não foi possível ler o PDF agora. Tente de novo.", StatusCodes.Status502BadGateway); }
 
         var lines = new List<(DateOnly, string, decimal, string?)>();

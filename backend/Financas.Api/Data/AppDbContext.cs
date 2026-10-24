@@ -15,6 +15,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
     public DbSet<RateLimitCounter> RateLimitCounters => Set<RateLimitCounter>();
     public DbSet<Goal> Goals => Set<Goal>();
+    public DbSet<Profile> Profiles => Set<Profile>();
+    public DbSet<AiUsage> AiUsage => Set<AiUsage>();
+    public DbSet<AiCache> AiCache => Set<AiCache>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -70,6 +73,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<RateLimitCounter>().HasKey(x => new { x.Key, x.WindowStart });
         b.Entity<RateLimitCounter>().Property(x => x.Key).HasMaxLength(120);
+
+        b.Entity<User>().Property(u => u.State).HasMaxLength(2);
+        b.Entity<User>().Property(u => u.IncomeSources).HasMaxLength(200);
+        b.Entity<User>().Property(u => u.MainGoal).HasMaxLength(30);
+        b.Entity<User>().Property(u => u.DeclaredIncome).HasPrecision(14, 2);
+
+        b.Entity<Profile>().HasIndex(p => p.OwnerId);
+        b.Entity<Profile>().Property(p => p.Name).HasMaxLength(60);
+        b.Entity<Profile>().Property(p => p.Cnpj).HasMaxLength(14);
+        b.Entity<Profile>().HasOne<User>().WithMany().HasForeignKey(p => p.OwnerId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<AiUsage>().HasKey(x => new { x.UserId, x.Day, x.Kind });
+        b.Entity<AiUsage>().Property(x => x.Kind).HasMaxLength(20);
+        b.Entity<AiUsage>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+
+        b.Entity<AiCache>().HasKey(x => new { x.ProfileId, x.Key });
+        b.Entity<AiCache>().Property(x => x.Key).HasMaxLength(60);
+        b.Entity<AiCache>().Property(x => x.ContextHash).HasMaxLength(64);
     }
 
     /// <summary>Categorias padrão criadas no cadastro do usuário (estilo Organizze).</summary>
@@ -88,5 +109,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         new() { UserId = userId, Name = "Freelance", Type = TransactionType.Income, Icon = "work", Color = "#009688" },
         new() { UserId = userId, Name = "Investimentos", Type = TransactionType.Income, Icon = "trending_up", Color = "#8BC34A" },
         new() { UserId = userId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#CDDC39" },
+    ];
+
+    /// <summary>Categorias de um perfil de empresa (RN-47). "Pró-labore" é o que vai da empresa para a pessoa.</summary>
+    public static IEnumerable<Category> BusinessCategories(Guid profileId) =>
+    [
+        new() { UserId = profileId, Name = "DAS (imposto do MEI)", Type = TransactionType.Expense, Icon = "receipt_long", Color = "#607D8B" },
+        new() { UserId = profileId, Name = "Mercadorias e fornecedores", Type = TransactionType.Expense, Icon = "inventory_2", Color = "#795548" },
+        new() { UserId = profileId, Name = "Pró-labore", Type = TransactionType.Expense, Icon = "person", Color = "#0C7A68" },
+        new() { UserId = profileId, Name = "Ferramentas e software", Type = TransactionType.Expense, Icon = "build", Color = "#3F51B5" },
+        new() { UserId = profileId, Name = "Marketing", Type = TransactionType.Expense, Icon = "campaign", Color = "#FF9800" },
+        new() { UserId = profileId, Name = "Taxas e maquininha", Type = TransactionType.Expense, Icon = "credit_card", Color = "#9C27B0" },
+        new() { UserId = profileId, Name = "Transporte e entregas", Type = TransactionType.Expense, Icon = "local_shipping", Color = "#2196F3" },
+        new() { UserId = profileId, Name = "Outras despesas", Type = TransactionType.Expense, Icon = "more_horiz", Color = "#9E9E9E" },
+        new() { UserId = profileId, Name = "Vendas", Type = TransactionType.Income, Icon = "storefront", Color = "#4CAF50" },
+        new() { UserId = profileId, Name = "Serviços prestados", Type = TransactionType.Income, Icon = "handyman", Color = "#009688" },
+        new() { UserId = profileId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#CDDC39" },
     ];
 }

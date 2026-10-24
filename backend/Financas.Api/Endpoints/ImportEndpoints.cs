@@ -26,11 +26,11 @@ public static class ImportEndpoints
         g.MapPost("/preview", async (ImportPreviewRequest req, ClaimsPrincipal user, ImportService import, CancellationToken ct) =>
         {
             if (req.Items.Count > StatementLimits) return Results.BadRequest(new { error = $"Envie no máximo {StatementLimits} linhas." });
-            return Results.Ok(await import.PreviewAsync(user.UserId(), req.AccountId, req.Items, ct));
+            return Results.Ok(await import.PreviewAsync(user.ProfileId(), req.AccountId, req.Items, ct));
         });
 
         g.MapPost("/commit", async (ImportCommitRequest req, ClaimsPrincipal user, ImportService import, CancellationToken ct) =>
-            await Run(async () => Results.Ok(new { created = await import.CommitAsync(user.UserId(), req, ct) })));
+            await Run(async () => Results.Ok(new { created = await import.CommitAsync(user.ProfileId(), req, ct) })));
     }
 
     private const int StatementLimits = StatementParser.MaxLines;

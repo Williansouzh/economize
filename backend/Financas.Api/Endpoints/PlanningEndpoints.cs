@@ -19,13 +19,13 @@ public static class PlanningEndpoints
         // ---------- Metas ----------
         var goals = api.MapGroup("/goals").WithTags("Metas");
         goals.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
-            (await db.Goals.AsNoTracking().Where(g => g.UserId == user.UserId()).OrderBy(g => g.CreatedAt).ToListAsync())
+            (await db.Goals.AsNoTracking().Where(g => g.UserId == user.ProfileId()).OrderBy(g => g.CreatedAt).ToListAsync())
                 .Select(g => ToDto(g, clock.Today)));
 
         goals.MapPost("/", async (GoalRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
             if (Validate(req) is { } error) return error;
-            var g = new Goal { UserId = user.UserId(), CreatedAt = clock.UtcNow };
+            var g = new Goal { UserId = user.ProfileId(), CreatedAt = clock.UtcNow };
             Apply(g, req);
             db.Goals.Add(g);
             await db.SaveChangesAsync();
@@ -34,7 +34,7 @@ public static class PlanningEndpoints
 
         goals.MapPut("/{id:guid}", async (Guid id, GoalRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
-            var g = await db.Goals.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
+            var g = await db.Goals.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.ProfileId());
             if (g is null) return Results.NotFound();
             if (Validate(req) is { } error) return error;
             Apply(g, req);
@@ -45,7 +45,7 @@ public static class PlanningEndpoints
         // Guardar (valor positivo) ou retirar (negativo). O guardado nunca fica abaixo de zero.
         goals.MapPost("/{id:guid}/deposit", async (Guid id, GoalDepositRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
-            var g = await db.Goals.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.UserId());
+            var g = await db.Goals.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.ProfileId());
             if (g is null) return Results.NotFound();
             if (req.Amount == 0 || Math.Abs(req.Amount) >= 1_000_000_000m)
                 return Results.BadRequest(new { error = "Informe um valor válido." });
@@ -55,13 +55,13 @@ public static class PlanningEndpoints
         });
 
         goals.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
-            await db.Goals.Where(x => x.Id == id && x.UserId == user.UserId()).ExecuteDeleteAsync() > 0
+            await db.Goals.Where(x => x.Id == id && x.UserId == user.ProfileId()).ExecuteDeleteAsync() > 0
                 ? Results.NoContent() : Results.NotFound());
 
         // ---------- Sequência e conquistas ----------
         api.MapGet("/me/progress", async (ClaimsPrincipal user, AppDbContext db, AppClock clock, FinanceService finance) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var created = await db.Transactions.AsNoTracking().Where(t => t.UserId == uid)
                 .Select(t => t.CreatedAt).ToListAsync();
             var days = created.Select(clock.LocalDate).ToHashSet();
@@ -104,7 +104,7 @@ public static class PlanningEndpoints
         // decimal, como o Excel em português abre sem configurar nada).
         api.MapGet("/export/transactions.csv", async (ClaimsPrincipal user, AppDbContext db) =>
         {
-            var uid = user.UserId();
+            var uid = user.ProfileId();
             var txs = await db.Transactions.AsNoTracking().Include(t => t.Account).Include(t => t.Category)
                 .Where(t => t.UserId == uid).OrderBy(t => t.Date).ToListAsync();
             var transfers = await db.Transfers.AsNoTracking().Include(t => t.FromAccount).Include(t => t.ToAccount)

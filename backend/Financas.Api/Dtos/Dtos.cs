@@ -60,11 +60,41 @@ public record DashboardDto(
 
 /// <param name="IncludeDescriptions">false: o DeepSeek recebe só data, categoria e valor das despesas, sem as descrições.</param>
 public record InsightsRequest(string? Month, bool IncludeDescriptions = true);
+/// <param name="Cached">Veio da última análise guardada, porque os dados do mês não mudaram (RN-48).</param>
 public record InsightsDto(string Summary, List<string> Alerts, List<string> Tips,
-    decimal PotentialSavings, int HealthScore);
+    decimal PotentialSavings, int HealthScore, bool Cached = false);
 
 public record ChatRequest(string Question, string? Month, bool IncludeDescriptions = true);
-public record ChatResponse(string Answer);
+/// <param name="Remaining">Perguntas que ainda restam hoje (RN-48).</param>
+public record ChatResponse(string Answer, int? Remaining = null);
+public record AiQuotaDto(int ChatUsed, int ChatLimit, int ChatRemaining, DateTime ResetsAt);
+
+// ---------- Questionário (RN-46), perfis PF/PJ (RN-47) e análises ----------
+/// <param name="Sources">clt, servidor, autonomo, mei, estagio, aposentadoria, beneficio, pensao, aluguel, investimentos, outros.</param>
+/// <param name="MainGoal">organizar, dividas, reserva, investir, sonho, aposentadoria.</param>
+public record AboutRequest(int? BirthYear, string? State, List<string>? Sources, int? JobCount, decimal? MonthlyIncome, string? MainGoal);
+public record AboutDto(int? BirthYear, int? Age, string? State, List<string> Sources, int? JobCount,
+    decimal? MonthlyIncome, string? MainGoal, bool Completed);
+
+public record ProfileRequest(string Name, string? Cnpj, bool IsMei = true);
+public record ProfileDto(Guid Id, string Name, ProfileKind Kind, string? Cnpj, bool IsMei);
+
+/// <param name="Status">"ok", "atencao" (no ritmo de passar do teto) ou "estourou".</param>
+public record MeiSummaryDto(int Year, decimal Revenue, decimal Limit, double Percent, decimal ProjectedRevenue,
+    decimal MonthlyRoom, int MonthsLeft, string Status);
+
+/// <param name="Percentile">Porcentagem aproximada das pessoas da faixa que ganham menos que o usuário.</param>
+public record BenchmarkDto(string AgeGroup, string AgeGroupLabel, int Mean, int Median, string Region, string RegionName,
+    int RegionMean, int? Percentile, string Source);
+
+/// <param name="Tone">good, warn, bad ou info.</param>
+public record AnalysisPointDto(string Icon, string Tone, string Text);
+
+/// <param name="Kind">"initial" (pelo questionário) ou "monthly" (pelos lançamentos do mês).</param>
+/// <param name="Status">Inicial: acima, na_media, abaixo ou sem_dados. Mensal: otimo, bom, atencao, critico ou sem_dados.</param>
+public record AnalysisDto(string Kind, string? Month, string Status, string Headline, string Message,
+    decimal? Income, decimal? Expenses, double? SavingsRate, BenchmarkDto? Benchmark, MeiSummaryDto? Mei,
+    List<AnalysisPointDto> Points);
 
 public record GoalRequest(string Name, decimal Target, DateOnly? Deadline, string? Icon, string? Color);
 public record GoalDepositRequest(decimal Amount);

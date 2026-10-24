@@ -14,8 +14,9 @@ public class DeepSeekClient(HttpClient http, IConfiguration config, ILogger<Deep
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(config["DeepSeek:ApiKey"]);
 
+    /// <param name="maxTokens">Teto da resposta (RN-48): corta o custo de uma resposta longa demais.</param>
     public async Task<string> ChatAsync(string systemPrompt, string userPrompt, bool jsonOutput,
-        CancellationToken ct = default)
+        CancellationToken ct = default, int maxTokens = 400)
     {
         var body = new ChatCompletionRequest
         {
@@ -25,7 +26,8 @@ public class DeepSeekClient(HttpClient http, IConfiguration config, ILogger<Deep
                 new("system", systemPrompt),
                 new("user", userPrompt),
             ],
-            Temperature = 0.4,
+            Temperature = 0.6,
+            MaxTokens = maxTokens,
             ResponseFormat = jsonOutput ? new ResponseFormat("json_object") : null,
         };
 
@@ -58,6 +60,7 @@ public class DeepSeekClient(HttpClient http, IConfiguration config, ILogger<Deep
         [JsonPropertyName("model")] public string Model { get; init; } = "";
         [JsonPropertyName("messages")] public List<ChatMessage> Messages { get; init; } = [];
         [JsonPropertyName("temperature")] public double Temperature { get; init; }
+        [JsonPropertyName("max_tokens")] public int MaxTokens { get; init; }
         [JsonPropertyName("response_format")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public ResponseFormat? ResponseFormat { get; init; }

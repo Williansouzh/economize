@@ -12,6 +12,9 @@ public class AppClock(TimeProvider time, IConfiguration config)
 
     public DateTime UtcNow => time.GetUtcNow().UtcDateTime;
 
+    /// <summary>Data e hora agora no fuso do usuário.</summary>
+    public DateTime LocalNow => TimeZoneInfo.ConvertTime(time.GetUtcNow(), _zone).DateTime;
+
     /// <summary>Dia, no fuso do usuário, de um instante em UTC.</summary>
     public DateOnly LocalDate(DateTime utc) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _zone));
