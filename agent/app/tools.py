@@ -3,11 +3,11 @@
 import difflib
 import unicodedata
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import tool
+from langchain_core.tools import InjectedToolCallId, tool
 
 from .finance_api import FinanceApi, FinanceApiError
 
@@ -54,6 +54,7 @@ def make_tools(finance: FinanceApi, timezone: str):
         tipo: Literal["despesa", "receita"],
         categoria: str,
         config: RunnableConfig,
+        tool_call_id: Annotated[str, InjectedToolCallId],
         data: str | None = None,
         conta: str | None = None,
         pago: bool = True,
@@ -95,7 +96,9 @@ def make_tools(finance: FinanceApi, timezone: str):
                 "type": tx_type,
                 "date": when.isoformat(),
                 "isPaid": pago,
-            })
+            # O id da chamada fica salvo no histórico: se a instância cair e a mensagem for retomada,
+            # esta mesma chamada é refeita com o mesmo id e a API devolve o lançamento já criado.
+            }, idempotency_key=f"wa:{tool_call_id}")
         except FinanceApiError as e:
             return f"Erro ao registrar: {e}"
         return (f"OK id={tx_id} | {tipo} {brl(valor)} | categoria {cat['name']} | conta {acc['name']} "

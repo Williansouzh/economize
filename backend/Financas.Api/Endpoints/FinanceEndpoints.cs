@@ -3,7 +3,9 @@ using Financas.Api.Data;
 using Financas.Api.Dtos;
 using Financas.Api.Models;
 using Financas.Api.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Financas.Api.Endpoints;
 
@@ -135,14 +137,33 @@ public static class FinanceEndpoints
             return found.Select(FinanceService.ToDto);
         });
 
-        txs.MapPost("/", async (TransactionRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
+        // Idempotency-Key (opcional, RN-45): repetir o POST com a mesma chave devolve o lançamento já criado
+        // (200 em vez de 201), mesmo com envios simultâneos.
+        txs.MapPost("/", async (TransactionRequest req, [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+            ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
             var uid = user.UserId();
+            var key = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey.Trim();
+            if (key is { Length: > 100 })
+                return Results.BadRequest(new { error = "Idempotency-Key pode ter no máximo 100 caracteres." });
+            if (key is not null && await FindByIdempotencyKeyAsync(db, uid, key) is { } existing)
+                return Results.Ok(new { Id = existing });
+
             if (await Validate(req, uid, db) is { } error) return error;
             if (ValidateRepeat(req.Repeat) is { } repeatError) return repeatError;
             var created = Expand(req, uid, clock);
+            created[0].IdempotencyKey = key; // numa série, a chave fica no primeiro lançamento
             db.Transactions.AddRange(created);
-            await db.SaveChangesAsync();
+            try
+            {
+                await db.SaveChangesAsync();
+            }
+            catch (DbUpdateException e) when (key is not null
+                && e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+            {
+                // Outra requisição com a mesma chave gravou primeiro (duas réplicas ao mesmo tempo).
+                return Results.Ok(new { Id = (await FindByIdempotencyKeyAsync(db, uid, key))!.Value });
+            }
             return Results.Created($"/api/transactions/{created[0].Id}", new { created[0].Id });
         });
 
@@ -392,4 +413,8 @@ public static class FinanceEndpoints
         a.ClosingDay = card ? req.ClosingDay : null;
         a.DueDay = card ? req.DueDay : null;
     }
+
+    private static async Task<Guid?> FindByIdempotencyKeyAsync(AppDbContext db, Guid uid, string key) =>
+        await db.Transactions.Where(t => t.UserId == uid && t.IdempotencyKey == key)
+            .Select(t => (Guid?)t.Id).FirstOrDefaultAsync();
 }

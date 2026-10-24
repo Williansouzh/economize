@@ -32,6 +32,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transaction>().HasIndex(t => t.SeriesId);
         b.Entity<Transaction>().HasIndex(t => new { t.AccountId, t.ExternalId });
         b.Entity<Transaction>().Property(t => t.ExternalId).HasMaxLength(100);
+        b.Entity<Transaction>().Property(t => t.IdempotencyKey).HasMaxLength(100);
+        b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.IdempotencyKey }).IsUnique()
+            .HasFilter("\"IdempotencyKey\" IS NOT NULL");
         b.Entity<Goal>().HasIndex(g => g.UserId);
 
         // Dinheiro: numeric(14,2) — até R$ 999 bilhões, sempre com 2 casas.

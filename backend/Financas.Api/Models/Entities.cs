@@ -88,6 +88,9 @@ public class Transaction
     /// <summary>Origem de um lançamento importado do extrato ou da notificação do banco (RN-42/43),
     /// para não importar a mesma linha duas vezes. Nulo nos lançados à mão.</summary>
     public string? ExternalId { get; set; }
+    /// <summary>Cabeçalho Idempotency-Key do POST que criou o lançamento (RN-45). Repetir o POST com a
+    /// mesma chave devolve este lançamento em vez de criar outro. O agente usa o id da chamada de ferramenta.</summary>
+    public string? IdempotencyKey { get; set; }
 }
 
 /// <summary>Meta de economia, como "R$ 5 mil para a viagem até dezembro" (RN-36). O valor guardado

@@ -67,7 +67,8 @@ class FinanceApi:
         auth = await self.login(phone)
         if auth is None:
             raise FinanceApiError("Número não vinculado a nenhuma conta.")
-        res = await self._http.request(method, path, headers={"Authorization": f"Bearer {auth[0]}"}, **kw)
+        headers = {"Authorization": f"Bearer {auth[0]}", **(kw.pop("headers", None) or {})}
+        res = await self._http.request(method, path, headers=headers, **kw)
         if res.status_code >= 400:
             raise self._error(res)
         return res.json() if res.content else None
@@ -78,8 +79,10 @@ class FinanceApi:
         accounts = await self._request(phone, "GET", "/accounts")
         return UserContext(name=auth[1] if auth else "", categories=categories, accounts=accounts)
 
-    async def create_transaction(self, phone: str, payload: dict) -> str:
-        return (await self._request(phone, "POST", "/transactions", json=payload))["id"]
+    async def create_transaction(self, phone: str, payload: dict, idempotency_key: str | None = None) -> str:
+        """Com idempotency_key, repetir a chamada (retomada depois de queda) devolve o mesmo lançamento (RN-45)."""
+        headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
+        return (await self._request(phone, "POST", "/transactions", json=payload, headers=headers))["id"]
 
     async def transactions(self, phone: str, month: str) -> list[dict]:
         return await self._request(phone, "GET", "/transactions", params={"month": month})

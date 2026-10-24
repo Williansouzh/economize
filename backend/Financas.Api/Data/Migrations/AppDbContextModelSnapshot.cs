@@ -245,6 +245,10 @@ namespace Financas.Api.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int?>("InstallmentCount")
                         .HasColumnType("integer");
 
@@ -272,6 +276,10 @@ namespace Financas.Api.Data.Migrations
                     b.HasIndex("AccountId", "ExternalId");
 
                     b.HasIndex("UserId", "Date");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("\"IdempotencyKey\" IS NOT NULL");
 
                     b.ToTable("Transactions");
                 });

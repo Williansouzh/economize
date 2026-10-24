@@ -69,13 +69,36 @@ class MessageHandler:
             await self.forget(msg.phone, messages=False)
             return WELCOME_UNLINKED
 
+        config = {"configurable": {"thread_id": msg.phone}}
+
+        # Retomada (a instância anterior caiu): se a mensagem já entrou no histórico, continua do último
+        # passo salvo em vez de recomeçar. Uma chamada de ferramenta refeita mantém o mesmo id, e a API
+        # usa esse id para não criar o lançamento de novo (RN-45). Se o grafo já tinha terminado,
+        # só a resposta faltou: devolve a que está no histórico, sem chamar a IA.
+        if await self._already_started(msg, config):
+            log.info("Mensagem %s já estava no histórico: continuando de onde parou", msg.id)
+            snapshot = await self._graph.aget_state(config)
+            result = await self._graph.ainvoke(None, config) if snapshot.next else snapshot.values
+            return to_whatsapp_format(result["messages"][-1].content)
+
         if msg.type == "text":
-            state = {"messages": [HumanMessage(content=msg.text)], "media": None, "recovered": msg.recovered}
+            state = {"messages": [HumanMessage(content=msg.text, id=msg.id)], "media": None,
+                     "recovered": msg.recovered}
         elif msg.type in MEDIA_TYPES and msg.media_id:
-            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text},
+            state = {"messages": [], "media": {"id": msg.media_id, "mime": msg.mime, "caption": msg.text,
+                                               "message_id": msg.id},
                      "recovered": msg.recovered}
         else:
             return "Por enquanto eu entendo *texto*, *áudio*, *imagens* e *PDFs*. 🙂"
 
-        result = await self._graph.ainvoke(state, {"configurable": {"thread_id": msg.phone}})
+        result = await self._graph.ainvoke(state, config)
         return to_whatsapp_format(result["messages"][-1].content)
+
+    async def _already_started(self, msg: IncomingMessage, config: dict) -> bool:
+        if self._graph.checkpointer is None:
+            return False
+        values = (await self._graph.aget_state(config)).values
+        if any(getattr(m, "id", None) == msg.id for m in values.get("messages", [])):
+            return True
+        # Mídia que caiu durante a transcrição/OCR: ainda não virou mensagem, mas está pendente no estado.
+        return (values.get("media") or {}).get("message_id") == msg.id

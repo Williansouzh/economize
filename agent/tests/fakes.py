@@ -64,9 +64,17 @@ class FakeFinance:
         return UserContext(name=self.linked[phone], categories=CATEGORIES,
                            accounts=[{"id": "a1", "name": "Carteira"}, {"id": "a2", "name": "Nubank"}])
 
-    async def create_transaction(self, phone, payload):
+    async def create_transaction(self, phone, payload, idempotency_key=None):
+        # Igual à API (RN-45): a mesma chave devolve o lançamento já criado.
+        if idempotency_key is not None:
+            self.keys = getattr(self, "keys", {})
+            if idempotency_key in self.keys:
+                return self.keys[idempotency_key]
         self.created.append(payload)
-        return f"tx{len(self.created)}"
+        tx_id = f"tx{len(self.created)}"
+        if idempotency_key is not None:
+            self.keys[idempotency_key] = tx_id
+        return tx_id
 
     async def transactions(self, phone, month):
         return []

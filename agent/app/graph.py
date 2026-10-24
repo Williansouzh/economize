@@ -59,7 +59,8 @@ def trim_history(messages: list[AnyMessage], limit: int) -> list[AnyMessage]:
     return recent or messages[-1:]
 
 
-def media_to_message(kind: str, text: str, caption: str, low_confidence: bool = False) -> HumanMessage:
+def media_to_message(kind: str, text: str, caption: str, low_confidence: bool = False,
+                     message_id: str | None = None) -> HumanMessage:
     if kind == "audio":
         body = f"🎤 [Áudio transcrito]\n{text or '(áudio vazio ou inaudível)'}"
         if low_confidence:
@@ -71,7 +72,8 @@ def media_to_message(kind: str, text: str, caption: str, low_confidence: bool = 
                 f"---\n{text or '(nenhum texto legível)'}\n---")
     if caption:
         body += f"\nLegenda do usuário: {caption}"
-    return HumanMessage(content=body)
+    # O id da mensagem do WhatsApp mostra, numa retomada, que ela já entrou no histórico.
+    return HumanMessage(content=body, id=message_id)
 
 
 def build_graph(deps: Deps, checkpointer=None):
@@ -90,7 +92,8 @@ def build_graph(deps: Deps, checkpointer=None):
             extracted, kind = MediaText(f"(arquivo do tipo {mime} não suportado)"), "image"
         else:
             extracted = await deps.media.to_text(data, mime)
-        message = media_to_message(kind, extracted.text, media.get("caption", ""), extracted.low_confidence)
+        message = media_to_message(kind, extracted.text, media.get("caption", ""), extracted.low_confidence,
+                                   media.get("message_id"))
         return {"messages": [message], "media": None}
 
     async def agent(state: AgentState, config: RunnableConfig) -> dict:
