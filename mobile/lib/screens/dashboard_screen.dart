@@ -8,6 +8,8 @@ import '../state/app_state.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/count_up.dart';
+import 'analysis_screen.dart';
 import 'bank_notifications_screen.dart';
 import '../widgets/month_loader.dart';
 import 'account_sheet.dart';
@@ -29,7 +31,9 @@ class DashboardScreen extends StatelessWidget {
               children: [
                 const DetectedBanner(),
                 _BalanceCard(d),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                const SituationCard(),
+                const SizedBox(height: 4),
                 _MetricsGrid(d),
                 const SizedBox(height: 16),
                 _AccountsSection(d.accounts),
@@ -96,8 +100,9 @@ class _BalanceCard extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              money(d.totalBalance),
+            child: CountUpMoney(
+              d.totalBalance,
+              duration: const Duration(milliseconds: 1200),
               style: text.displaySmall?.copyWith(color: white, fontWeight: FontWeight.w800, letterSpacing: -.5),
             ),
           ),
@@ -148,8 +153,8 @@ class _Flow extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(
-                money(value),
+              child: CountUpMoney(
+                value,
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
               ),
             ),
@@ -169,6 +174,7 @@ class _MetricsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final month = context.watch<AppState>().month;
+    final business = context.watch<AppState>().inBusinessProfile;
     final now = DateTime.now();
     final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
     final isCurrent = month.year == now.year && month.month == now.month;
@@ -181,7 +187,7 @@ class _MetricsGrid extends StatelessWidget {
         icon: d.monthResult >= 0 ? Icons.trending_up : Icons.trending_down,
         color: d.monthResult >= 0 ? incomeColor : expenseColor,
         label: 'Resultado do mês',
-        value: money(d.monthResult),
+        amount: d.monthResult,
         hint: d.monthResult >= 0 ? 'Sobrou dinheiro' : 'Gastou mais do que ganhou',
       ),
       _MetricTile(
@@ -193,22 +199,26 @@ class _MetricsGrid extends StatelessWidget {
             : savingsRate >= 0
             ? warningColor
             : expenseColor,
-        label: 'Taxa de economia',
-        value: savingsRate == null ? '—' : percent(savingsRate),
-        hint: savingsRate == null ? 'Sem receitas no mês' : 'Meta saudável: 20%',
+        label: business ? 'Margem do mês' : 'Taxa de economia',
+        value: savingsRate == null ? '—' : null,
+        amount: savingsRate,
+        format: percent,
+        hint: savingsRate == null
+            ? (business ? 'Sem vendas no mês' : 'Sem receitas no mês')
+            : (business ? 'Lucro sobre as vendas' : 'Meta saudável: 20%'),
       ),
       _MetricTile(
         icon: Icons.calendar_today_outlined,
         color: const Color(0xFF3B82F6),
         label: 'Gasto médio por dia',
-        value: money(days == 0 ? 0 : d.expenses / days),
+        amount: days == 0 ? 0 : d.expenses / days,
         hint: top == null ? 'Nenhum gasto ainda' : 'Maior gasto: ${top.name}',
       ),
       _MetricTile(
         icon: Icons.schedule,
         color: const Color(0xFF8B5CF6),
         label: 'Pendentes',
-        value: money(d.pendingExpenses),
+        amount: d.pendingExpenses,
         hint: d.pendingIncome > 0 ? 'a pagar · ${money(d.pendingIncome)} a receber' : 'a pagar neste mês',
       ),
     ];
@@ -231,12 +241,19 @@ class _MetricsGrid extends StatelessWidget {
 class _MetricTile extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final String label, value, hint;
+  final String label, hint;
+
+  /// Texto fixo; sem ele, [amount] aparece subindo até o valor.
+  final String? value;
+  final double? amount;
+  final String Function(double) format;
   const _MetricTile({
     required this.icon,
     required this.color,
     required this.label,
-    required this.value,
+    this.value,
+    this.amount,
+    this.format = money,
     required this.hint,
   });
 
@@ -267,7 +284,9 @@ class _MetricTile extends StatelessWidget {
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              child: value != null || amount == null
+                  ? Text(value ?? '—', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))
+                  : CountUpMoney(amount!, format: format, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ),
             const SizedBox(height: 2),
             Text(

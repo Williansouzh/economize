@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../services/app_icon.dart';
 import '../services/bank_notifications.dart';
 import '../services/reminders.dart';
 import '../state/app_state.dart';
@@ -11,12 +12,14 @@ import '../utils/save_file.dart';
 import '../widgets/common.dart';
 import 'achievements_screen.dart';
 import 'admin_screen.dart';
+import 'analysis_screen.dart';
 import 'bank_notifications_screen.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'dashboard_screen.dart';
 import 'delete_account_screen.dart';
 import 'import_screen.dart';
+import 'profiles_screen.dart';
 import 'insights_screen.dart';
 import 'reminders_screen.dart';
 import 'search_screen.dart';
@@ -57,6 +60,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState s) {
     if (s == AppLifecycleState.resumed) context.read<AppState>().refreshDetected();
+    // Android: o ícone troca quando o app sai da frente (RN-49).
+    if (s == AppLifecycleState.paused && AppIcon.changeOnPause) context.read<AppState>().applyPendingIcon();
   }
   // As abas só são montadas (e carregam dados) na primeira vez em que são abertas.
   final _visited = {0};
@@ -124,7 +129,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ])
             : Text(_titles[_index]),
         actions: [
-          if (_index == 0) const StreakChip(),
+          // Com um perfil de empresa, o seletor fica no topo de todas as abas (RN-47).
+          if (state.profiles.length > 1) const ProfileSwitcher() else if (_index == 0) const StreakChip(),
           if (_index == 1)
             IconButton(
               tooltip: 'Buscar',
@@ -142,6 +148,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 'logout_all' => _logoutEverywhere(),
                 'whatsapp' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
+                'situation' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalysisScreen())),
+                'about' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
+                'profiles' => showProfileSheet(context),
+                'icon' => state.setDynamicIcon(!state.dynamicIcon),
                 'categories' => Navigator.push(
                     context, MaterialPageRoute(builder: (_) => const CategoriesScreen())),
                 'achievements' => Navigator.push(
@@ -166,6 +176,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   const PopupMenuItem(
                     value: 'admin',
                     child: ListTile(leading: Icon(Icons.insights_outlined), title: Text('Painel do admin')),
+                  ),
+                const PopupMenuItem(
+                  value: 'situation',
+                  child: ListTile(leading: Icon(Icons.monitor_heart_outlined), title: Text('Minha situação')),
+                ),
+                const PopupMenuItem(
+                  value: 'about',
+                  child: ListTile(leading: Icon(Icons.person_outline), title: Text('Sobre você')),
+                ),
+                PopupMenuItem(
+                  value: 'profiles',
+                  child: ListTile(
+                    leading: const Icon(Icons.storefront_outlined),
+                    title: Text(state.profiles.length > 1 ? 'Trocar de perfil' : 'Perfil de empresa (PJ/MEI)'),
+                  ),
+                ),
+                if (AppIcon.supported)
+                  CheckedPopupMenuItem(
+                    value: 'icon',
+                    checked: state.dynamicIcon,
+                    child: const Text('Ícone que muda com o mês'),
                   ),
                 const PopupMenuItem(
                   value: 'categories',

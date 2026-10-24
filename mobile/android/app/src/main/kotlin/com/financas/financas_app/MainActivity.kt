@@ -1,7 +1,9 @@
 package com.financas.financas_app
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import androidx.core.app.NotificationManagerCompat
@@ -15,6 +17,25 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Ícone que muda com o mês (RN-49): cada ícone é uma activity-alias do AndroidManifest.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "economizze/app_icon").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "supported" -> result.success(true)
+                "current" -> result.success(ICONS.entries.firstOrNull { isEnabled(it.value) }?.key ?: "padrao")
+                "set" -> {
+                    val target = ICONS[call.arguments as String]
+                    if (target == null) {
+                        result.error("icone", "Ícone desconhecido", null)
+                    } else {
+                        // Liga o novo antes de desligar o antigo: o app nunca fica sem entrada no launcher.
+                        setEnabled(target, true)
+                        ICONS.values.filter { it != target }.forEach { setEnabled(it, false) }
+                        result.success(null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         // Ponte com lib/services/bank_notifications.dart (RN-43).
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "economizze/bank_notifications").apply {
             setMethodCallHandler { call, result ->
@@ -59,6 +80,25 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun component(alias: String) = ComponentName(packageName, "com.financas.financas_app.$alias")
+
+    private fun isEnabled(alias: String): Boolean =
+        when (packageManager.getComponentEnabledSetting(component(alias))) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED -> false
+            else -> alias == ICONS.getValue("padrao") // estado do manifest
+        }
+
+    private fun setEnabled(alias: String, on: Boolean) = packageManager.setComponentEnabledSetting(
+        component(alias),
+        if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.DONT_KILL_APP,
+    )
+
+    companion object {
+        private val ICONS = mapOf("padrao" to "IconePadrao", "atencao" to "IconeAtencao", "alerta" to "IconeAlerta")
     }
 
     // Toque no aviso "gasto detectado" com o app já aberto: avisa o Flutter para abrir a revisão.

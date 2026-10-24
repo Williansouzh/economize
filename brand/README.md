@@ -28,6 +28,16 @@ No app, o componente `Wordmark` (`mobile/lib/widgets/playful.dart`) faz isso.
 **Área de respiro:** deixe em volta do logo pelo menos a altura do "z".
 **Tamanho mínimo:** símbolo com 16 px; logo horizontal com 96 px de largura.
 
+### Ícones de status (ícone que muda com o mês)
+
+| Arquivo | Quando |
+|---|---|
+| `svg/icone-app.svg` | Padrão: mês no azul ou sem dados. O zz sobe. |
+| `svg/icone-app-atencao.svg` | Atenção: sobrou pouco. Moeda âmbar `#FFB547`, os dois z no mesmo nível. |
+| `svg/icone-app-alerta.svg` | No vermelho: gastou mais do que entrou. Moeda coral `#FF7A6B`, o zz desce. |
+
+Única exceção à regra do degrau: aqui a altura dos z conta a situação. Âmbar e coral só aparecem nesses ícones.
+
 ## Cores
 
 | Nome | Hex | Papel |

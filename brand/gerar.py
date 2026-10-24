@@ -28,6 +28,8 @@ MAR = "#0C7A68"     # cor principal no tema claro (botões, links)
 LIMA = "#C5F04A"    # destaque: moeda, "zz", ação principal; nunca texto sobre fundo claro
 NEVOA = "#F2F6F4"   # fundo do tema claro
 BRANCO = "#FFFFFF"
+AMBAR = "#FFB547"   # ícone "atenção" (só no ícone do app, RN-49)
+CORAL = "#FF7A6B"   # ícone "no vermelho" (só no ícone do app, RN-49)
 
 # ---------- Símbolo: moeda com "zz" (viewBox 100x100, centro 50,50) ----------
 COIN_R = 33          # raio da moeda
@@ -40,10 +42,11 @@ def _z(x, y, w, h):
     return f"M{x:.1f},{y:.1f} H{x + w:.1f} L{x:.1f},{y + h:.1f} H{x + w:.1f}"
 
 
-def zz_path():
+def zz_path(rise=Z_RISE):
+    """rise: quanto o segundo z sobe. 0 = os dois no mesmo nível; negativo = desce (ícones de status)."""
     x0 = 50 - (2 * Z_W + Z_GAP) / 2
-    y_low = 50 - Z_H / 2 + Z_RISE / 2         # o par fica centrado verticalmente
-    return _z(x0, y_low, Z_W, Z_H) + " " + _z(x0 + Z_W + Z_GAP, y_low - Z_RISE, Z_W, Z_H)
+    y_first = 50 - Z_H / 2 + rise / 2         # o par fica centrado verticalmente
+    return _z(x0, y_first, Z_W, Z_H) + " " + _z(x0 + Z_W + Z_GAP, y_first - rise, Z_W, Z_H)
 
 
 def symbol_outline(fg):
@@ -51,9 +54,9 @@ def symbol_outline(fg):
             f'<path d="{zz_path()}" fill="none" stroke="{fg}" stroke-width="{ZW}" stroke-linecap="round" stroke-linejoin="round"/>')
 
 
-def symbol_solid(coin, zz):
+def symbol_solid(coin, zz, rise=Z_RISE):
     return (f'<circle cx="50" cy="50" r="{COIN_R}" fill="{coin}"/>'
-            f'<path d="{zz_path()}" fill="none" stroke="{zz}" stroke-width="{ZW + 1}" stroke-linecap="round" stroke-linejoin="round"/>')
+            f'<path d="{zz_path(rise)}" fill="none" stroke="{zz}" stroke-width="{ZW + 1}" stroke-linecap="round" stroke-linejoin="round"/>')
 
 
 def symbol_cutout(color):
@@ -63,11 +66,11 @@ def symbol_cutout(color):
             f'<circle cx="50" cy="50" r="{COIN_R}" fill="{color}" mask="url(#zz)"/>')
 
 
-def cutout_png(path, canvas, coin_diameter, px):
+def cutout_png(path, canvas, coin_diameter, px, rise=Z_RISE):
     """Silhueta branca da moeda com o zz transparente (notificação e ícone monocromático)."""
     coin = render(svg(canvas, canvas, placed(f'<circle cx="50" cy="50" r="{COIN_R}" fill="#fff"/>', canvas, coin_diameter)), px)
     zz = render(svg(canvas, canvas, placed(
-        f'<path d="{zz_path()}" fill="none" stroke="#fff" stroke-width="{ZW + 1}" stroke-linecap="round" stroke-linejoin="round"/>',
+        f'<path d="{zz_path(rise)}" fill="none" stroke="#fff" stroke-width="{ZW + 1}" stroke-linecap="round" stroke-linejoin="round"/>',
         canvas, coin_diameter)), px)
     alpha = Image.eval(coin.getchannel("A"), lambda a: a).point(lambda a: a)
     alpha = Image.composite(Image.new("L", alpha.size, 0), alpha, zz.getchannel("A").point(lambda a: 255 if a > 127 else a * 2))
@@ -204,6 +207,31 @@ def main():
         save(icon, web / f"icons/Icon-{n}.png", n)
         save(maskable, web / f"icons/Icon-maskable-{n}.png", n)
     save(icon, web / "favicon.png", 32)
+
+    # Ícones de status (RN-49): o app troca o ícone conforme o mês. Atenção = moeda âmbar com os dois
+    # z no mesmo nível; no vermelho = moeda coral com o segundo z descendo o degrau.
+    import json
+    for name, coin, rise in (("atencao", AMBAR, 0), ("alerta", CORAL, -Z_RISE)):
+        (BRAND / f"svg/icone-app-{name}.svg").write_text(svg(100, 100, placed(symbol_solid(coin, TINTA, rise), 100, 64), TINTA, 22))
+        save((BRAND / f"svg/icone-app-{name}.svg").read_text(), BRAND / f"png/icone-app-{name}.png", 512)
+        for d, k in dens.items():
+            save(svg(48, 48, placed(symbol_solid(coin, TINTA, rise), 48, 31), TINTA, 10.5), RES / f"mipmap-{d}/ic_launcher_{name}.png", round(48 * k))
+            save(svg(108, 108, placed(symbol_solid(coin, TINTA, rise), 108, 60)), RES / f"mipmap-{d}/ic_launcher_{name}_foreground.png", round(108 * k))
+            cutout_png(RES / f"mipmap-{d}/ic_launcher_{name}_monochrome.png", 108, 60, round(108 * k), rise)
+        (RES / f"mipmap-anydpi-v26/ic_launcher_{name}.xml").write_text(f"""<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_{name}_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_{name}_monochrome" />
+</adaptive-icon>
+""")
+        alt = MOBILE / f"ios/Runner/Assets.xcassets/AppIcon-{name.capitalize()}.appiconset"
+        alt.mkdir(parents=True, exist_ok=True)
+        contents = json.loads((appicon / "Contents.json").read_text())
+        (alt / "Contents.json").write_text(json.dumps(contents, indent=2) + "\n")
+        for f in appicon.glob("Icon-App-*.png"):
+            n = Image.open(f).size[0]
+            save(svg(100, 100, placed(symbol_solid(coin, TINTA, rise), 100, 62), TINTA), alt / f.name, n, rgb=True)
 
     # Mascote do app (mesmo arquivo e enquadramento de antes)
     mascot_png(MOBILE / "assets/mascot.png")

@@ -35,7 +35,11 @@ _"desfazer"_, _"na verdade foram 60"_, _"quanto gastei com comida?"_.
 | 🖼️ print de comprovante PIX | Despesa com o valor, a data e o favorecido do comprovante |
 | 🖼️ print da fatura com 5 compras | 5 lançamentos, um para cada compra |
 | `desfazer` | Exclui o último lançamento registrado |
+| `vendi 120 de bolo` (quem tem perfil de empresa) | Receita de R$ 120,00 em Vendas, **no perfil da empresa** |
 | `quanto gastei esse mês?` | Resumo com o total por categoria |
+
+Respostas curtas, em tom de conversa (até 3 frases). Cada mensagem nova gasta uma da cota diária
+de 60 mensagens do usuário (`POST /api/insights/quota/whatsapp`); acabou, o agente avisa sem chamar a IA.
 
 ## Vinculação do número
 

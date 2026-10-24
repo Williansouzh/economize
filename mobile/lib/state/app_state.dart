@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/models.dart';
 import '../services/api_client.dart';
+import '../services/app_icon.dart';
 import '../services/bank_notifications.dart';
 import '../services/reminders.dart';
 
@@ -42,6 +43,83 @@ class AppState extends ChangeNotifier {
 
   List<Account> accounts = [];
   List<TxCategory> categories = [];
+
+  /// Perfis pessoal e de empresa (RN-47). O primeiro é sempre o pessoal.
+  List<Profile> profiles = [];
+  Profile? get activeProfile => profiles.where((p) => p.id == api.profileId).firstOrNull ?? profiles.firstOrNull;
+  bool get inBusinessProfile => api.profileId != null;
+
+  /// Troca de perfil: tudo o que estava carregado era do outro perfil.
+  Future<void> switchProfile(Profile p) async {
+    api.profileId = p.isBusiness ? p.id : null;
+    _lastAccount = null;
+    _lastCategory.clear();
+    if (p.isBusiness) {
+      await _storage.write(key: 'profile', value: p.id);
+    } else {
+      await _storage.delete(key: 'profile');
+    }
+    dataChanged();
+  }
+
+  Future<void> loadProfiles() async {
+    try {
+      profiles = await api.profiles();
+      // Perfil guardado que não existe mais (excluído em outro aparelho): volta para o pessoal.
+      if (api.profileId != null && !profiles.any((p) => p.id == api.profileId)) {
+        api.profileId = null;
+        await _storage.delete(key: 'profile');
+        dataChanged();
+      }
+      notifyListeners();
+    } on ApiException {
+      // Sem internet: o seletor aparece quando a lista carregar.
+    }
+  }
+
+  Future<Profile> createBusinessProfile(String name, {String? cnpj, bool isMei = true}) async {
+    final p = await api.createProfile(name, cnpj: cnpj, isMei: isMei);
+    profiles = [...profiles, p];
+    notifyListeners();
+    return p;
+  }
+
+  Future<void> deleteBusinessProfile(Profile p, String password) async {
+    await api.deleteProfile(p.id, password);
+    profiles = profiles.where((x) => x.id != p.id).toList();
+    if (api.profileId == p.id) await switchProfile(profiles.first);
+    notifyListeners();
+  }
+
+  /// Respostas do questionário (RN-46), para a análise inicial e para saber se falta responder.
+  About? about;
+
+  Future<void> loadAbout() async {
+    try {
+      about = await api.about();
+      notifyListeners();
+    } on ApiException {
+      // Sem internet: tenta de novo na próxima abertura.
+    }
+  }
+
+  Future<void> saveAbout({
+    int? birthYear,
+    String? state,
+    List<String> sources = const [],
+    int? jobCount,
+    double? monthlyIncome,
+    String? mainGoal,
+  }) async {
+    about = await api.saveAbout(
+        birthYear: birthYear,
+        state: state,
+        sources: sources,
+        jobCount: jobCount,
+        monthlyIncome: monthlyIncome,
+        mainGoal: mainGoal);
+    notifyListeners();
+  }
 
   /// Compras e Pix lidos das notificações do banco, esperando revisão (RN-43, só Android).
   final bankNotifications = BankNotifications();
@@ -97,6 +175,57 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  Future<Analysis> monthlyAnalysis() {
+    final m = monthKey;
+    return _cached('analysis:$m', () async {
+      final a = await api.monthlyAnalysis(m);
+      final now = DateTime.now();
+      // O ícone acompanha o mês atual do perfil pessoal (RN-49).
+      if (!inBusinessProfile && month.year == now.year && month.month == now.month) _iconFor(a.status);
+      return a;
+    });
+  }
+
+  // ---------- Ícone que muda com o mês (RN-49) ----------
+  /// Opção do aparelho, desligada por padrão (no iOS cada troca mostra um aviso do sistema).
+  bool dynamicIcon = false;
+  String? _pendingIcon;
+
+  Future<void> setDynamicIcon(bool on) async {
+    dynamicIcon = on;
+    notifyListeners();
+    await _storage.write(key: 'dynamic_icon', value: on ? '1' : '0');
+    if (!on) {
+      _pendingIcon = 'padrao';
+      await applyPendingIcon(force: true);
+    } else {
+      clearCache();
+      monthlyAnalysis().ignore(); // calcula a situação e já troca no iOS
+    }
+  }
+
+  void _iconFor(String status) {
+    if (!dynamicIcon || !AppIcon.supported) return;
+    _pendingIcon = AppIcon.variantFor(status);
+    if (!AppIcon.changeOnPause) applyPendingIcon();
+  }
+
+  /// Troca o ícone se a situação mudou. No máximo uma vez por dia, para não incomodar.
+  Future<void> applyPendingIcon({bool force = false}) async {
+    final target = _pendingIcon;
+    if (target == null || !AppIcon.supported) return;
+    _pendingIcon = null;
+    try {
+      if (await AppIcon.current() == target) return;
+      final today = DateTime.now().toIso8601String().substring(0, 10);
+      if (!force && await _storage.read(key: 'icon_changed_on') == today) return;
+      await AppIcon.set(target);
+      await _storage.write(key: 'icon_changed_on', value: today);
+    } catch (e) {
+      debugPrint('Ícone do app: $e');
+    }
+  }
+
   Future<List<Goal>> goals() => _cached('goals', api.goals);
   Future<Progress> progress() => _cached('progress', api.progress);
 
@@ -132,12 +261,14 @@ class AppState extends ChangeNotifier {
     userName = await _storage.read(key: 'name');
     onboardingSeen = await _storage.read(key: 'onboarding_seen') == '1';
     sendDescriptionsToAi = await _storage.read(key: 'ai_descriptions') != '0';
+    dynamicIcon = await _storage.read(key: 'dynamic_icon') == '1';
     needsSetup = loggedIn && await _storage.read(key: 'setup_pending') == '1';
     for (final t in TxType.values) {
       final id = await _storage.read(key: 'last_category_${t.name}');
       if (id != null) _lastCategory[t] = id;
     }
     _lastAccount = await _storage.read(key: 'last_account');
+    api.profileId = loggedIn ? await _storage.read(key: 'profile') : null;
     await BankNotifications.detect();
     initialized = true;
     notifyListeners();
@@ -145,6 +276,8 @@ class AppState extends ChangeNotifier {
       // Começa a buscar o Início enquanto a abertura ainda está na tela.
       dashboard().ignore();
       loadReferenceData();
+      loadProfiles();
+      loadAbout();
       _loadAdmin();
       _refreshToken();
       reminders.syncSoon(api);
@@ -194,10 +327,13 @@ class AppState extends ChangeNotifier {
     userName = res['name'];
     await _storage.write(key: 'token', value: api.token);
     await _storage.write(key: 'name', value: userName);
+    api.profileId = null;
     _cache.clear();
     reminders.syncSoon(api);
     bankNotifications.setActive(true).ignore();
     await loadReferenceData();
+    loadProfiles();
+    loadAbout();
     _loadAdmin();
     notifyListeners();
   }
@@ -213,6 +349,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> logout() async {
     api.token = null;
+    api.profileId = null;
+    profiles = [];
+    about = null;
     userName = null;
     isAdmin = false;
     _cache.clear();
@@ -224,7 +363,7 @@ class AppState extends ChangeNotifier {
     // Só os dados da sessão: "já viu a apresentação" continua valendo neste aparelho.
     _lastCategory.clear();
     _lastAccount = null;
-    for (final key in ['token', 'name', 'setup_pending', 'last_category_income', 'last_category_expense', 'last_account']) {
+    for (final key in ['token', 'name', 'setup_pending', 'profile', 'last_category_income', 'last_category_expense', 'last_account']) {
       await _storage.delete(key: key);
     }
     notifyListeners();
@@ -233,6 +372,10 @@ class AppState extends ChangeNotifier {
   /// "Começar do zero": a conta continua, os dados somem e o app volta para a configuração inicial.
   Future<void> resetData(String password) async {
     await api.resetData(password);
+    // A API apaga também os perfis de empresa (RN-41).
+    api.profileId = null;
+    profiles = profiles.where((p) => !p.isBusiness).toList();
+    await _storage.delete(key: 'profile');
     _lastCategory.clear();
     _lastAccount = null;
     for (final key in ['last_category_income', 'last_category_expense', 'last_account']) {

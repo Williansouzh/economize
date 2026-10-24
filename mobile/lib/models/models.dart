@@ -149,12 +149,110 @@ class Insights {
   final List<String> alerts, tips;
   final double potentialSavings;
   final int healthScore;
+
+  /// Veio da análise guardada: os dados do mês não mudaram desde a última vez (RN-48).
+  final bool cached;
   Insights.fromJson(Map<String, dynamic> j)
       : summary = j['summary'] ?? '',
         alerts = List<String>.from(j['alerts'] ?? []),
         tips = List<String>.from(j['tips'] ?? []),
         potentialSavings = _d(j['potentialSavings'] ?? 0),
-        healthScore = (j['healthScore'] as num? ?? 0).toInt();
+        healthScore = (j['healthScore'] as num? ?? 0).toInt(),
+        cached = j['cached'] == true;
+}
+
+/// Perfil pessoal ou de empresa (PJ/MEI), com dados separados (RN-47).
+class Profile {
+  final String id, name;
+  final bool isBusiness, isMei;
+  final String? cnpj;
+  const Profile({required this.id, required this.name, this.isBusiness = false, this.isMei = false, this.cnpj});
+  Profile.fromJson(Map<String, dynamic> j)
+      : id = j['id'],
+        name = j['name'],
+        isBusiness = j['kind'] == 'Business',
+        isMei = j['isMei'] == true,
+        cnpj = j['cnpj'];
+}
+
+/// Respostas do questionário do onboarding (RN-46).
+class About {
+  final int? birthYear, age, jobCount;
+  final String? state, mainGoal;
+  final List<String> sources;
+  final double? monthlyIncome;
+  final bool completed;
+  About.fromJson(Map<String, dynamic> j)
+      : birthYear = j['birthYear'],
+        age = j['age'],
+        jobCount = j['jobCount'],
+        state = j['state'],
+        mainGoal = j['mainGoal'],
+        sources = List<String>.from(j['sources'] ?? []),
+        monthlyIncome = _dn(j['monthlyIncome']),
+        completed = j['completed'] == true;
+}
+
+class Benchmark {
+  final String ageGroupLabel, regionName, source;
+  final int mean, median, regionMean;
+  final int? percentile;
+  final bool hasRegion;
+  Benchmark.fromJson(Map<String, dynamic> j)
+      : ageGroupLabel = j['ageGroupLabel'],
+        regionName = j['regionName'],
+        source = j['source'],
+        mean = j['mean'],
+        median = j['median'],
+        regionMean = j['regionMean'],
+        percentile = j['percentile'],
+        hasRegion = j['region'] != 'BR';
+}
+
+/// Faturamento do ano do MEI e o teto (RN-47).
+class MeiSummary {
+  final int year, monthsLeft;
+  final double revenue, limit, percent, projectedRevenue, monthlyRoom;
+
+  /// ok, atencao (no ritmo de passar do teto) ou estourou.
+  final String status;
+  MeiSummary.fromJson(Map<String, dynamic> j)
+      : year = j['year'],
+        monthsLeft = j['monthsLeft'],
+        revenue = _d(j['revenue']),
+        limit = _d(j['limit']),
+        percent = _d(j['percent']),
+        projectedRevenue = _d(j['projectedRevenue']),
+        monthlyRoom = _d(j['monthlyRoom']),
+        status = j['status'];
+}
+
+class AnalysisPoint {
+  final String icon, tone, text;
+  AnalysisPoint.fromJson(Map<String, dynamic> j)
+      : icon = j['icon'],
+        tone = j['tone'],
+        text = j['text'];
+}
+
+/// Análise inicial (questionário) ou do mês (lançamentos), calculada pela API sem IA (RN-46).
+class Analysis {
+  final String kind, status, headline, message;
+  final double? income, expenses, savingsRate;
+  final Benchmark? benchmark;
+  final MeiSummary? mei;
+  final List<AnalysisPoint> points;
+  Analysis.fromJson(Map<String, dynamic> j)
+      : kind = j['kind'],
+        status = j['status'],
+        headline = j['headline'],
+        message = j['message'],
+        income = _dn(j['income']),
+        expenses = _dn(j['expenses']),
+        savingsRate = _dn(j['savingsRate']),
+        benchmark = j['benchmark'] == null ? null : Benchmark.fromJson(j['benchmark']),
+        mei = j['mei'] == null ? null : MeiSummary.fromJson(j['mei']),
+        points = [for (final p in j['points'] ?? []) AnalysisPoint.fromJson(p)];
 }
 
 /// Fatura do cartão que fecha em [month] (compras de [periodStart] até a véspera de [closingDate]).

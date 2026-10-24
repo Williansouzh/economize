@@ -21,7 +21,12 @@ App mobile simples de finanças pessoais (inspirado no Organizze) com **insights
 - Visão geral do mês: saldo, receitas, despesas e gráfico de pizza por categoria
 - Orçamentos (limite mensal por categoria) que podem se repetir todo mês, com barra de progresso e alerta de estouro
 - Transferências entre contas, que mudam os saldos sem contar como receita ou despesa
-- **Insights IA**: nota de saúde financeira, resumo do mês, alertas, dicas e economia potencial
+- **Onboarding completo**: idade, estado, fontes de renda, quantos trabalhos, renda e objetivo
+- **Pessoa física e PJ/MEI**: perfil de empresa separado do pessoal, com categorias de MEI e o teto de faturamento do ano
+- **Análise da situação** inicial e mensal, comparando a renda com a de quem tem a mesma idade no Brasil (PNAD Contínua/IBGE)
+- Abertura animada com a moeda da marca, números do Início que sobem até o valor e ícone do app que muda com o mês (opcional)
+- **Insights IA**: nota de saúde financeira, resumo do mês, alertas, dicas e economia potencial, em tom de conversa e curtos
+- **Cota da IA**: 20 perguntas por dia no chat, para não gastar todos os tokens
 - **Pergunte à IA**: chat livre sobre suas finanças, com o contexto do mês
 - **Assistente no WhatsApp**: mande texto, áudio, print ou PDF de comprovante e o lançamento é criado
   automaticamente (veja [`agent/README.md`](agent/README.md))
@@ -140,7 +145,11 @@ Esse `docker-compose.yml` é para desenvolvimento. Para produção use o `docker
 | GET/POST/DELETE | `/api/budgets` | Orçamentos por categoria, com repetição mensal (`DELETE ?month=` para de repetir) |
 | GET/POST/PUT/DELETE | `/api/transfers` | Transferências entre contas |
 | POST | `/api/insights` | Análise do mês pela IA (JSON estruturado) |
-| POST | `/api/insights/chat` | Pergunta livre para a IA |
+| POST | `/api/insights/chat` | Pergunta livre para a IA (20 por dia) |
+| GET | `/api/insights/quota` | Perguntas que restam hoje |
+| GET · PUT | `/api/me/about` | Questionário (idade, UF, fontes de renda, trabalhos, renda, objetivo) |
+| GET | `/api/analysis/initial` · `/api/analysis/monthly?month=` · `/api/analysis/mei` | Análises da situação e teto do MEI |
+| GET · POST · PUT · DELETE | `/api/profiles` | Perfis de empresa (PJ/MEI). Header `X-Profile` escolhe o perfil nas demais rotas |
 | GET · DELETE | `/api/me` | Perfil; excluir a conta e todos os dados (pede a senha) |
 | POST · DELETE | `/api/me/whatsapp-code` · `/api/me/whatsapp` | Vinculação do WhatsApp |
 | POST | `/api/agent/link` · `/api/agent/token` | Usadas só pelo agente (header `X-Agent-Key`) |

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
+import '../services/api_client.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
@@ -22,6 +23,25 @@ class _InsightsScreenState extends State<InsightsScreen> {
   final _chat = <(String role, String text)>[];
   bool _asking = false;
 
+  /// Perguntas que restam hoje (RN-48). Nulo até a primeira consulta.
+  int? _remaining;
+  static const maxQuestion = 300;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuota();
+  }
+
+  Future<void> _loadQuota() async {
+    try {
+      final r = await context.read<AppState>().api.chatRemaining();
+      if (mounted) setState(() => _remaining = r);
+    } catch (_) {
+      // Sem internet ou IA desligada: o contador só aparece depois da primeira pergunta.
+    }
+  }
+
   Future<void> _generate() async {
     final state = context.read<AppState>();
     setState(() => _loading = true);
@@ -40,7 +60,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
 
   Future<void> _ask([String? preset]) async {
     final q = (preset ?? _question.text).trim();
-    if (q.isEmpty) return;
+    if (q.isEmpty || _remaining == 0) return;
     final state = context.read<AppState>();
     setState(() {
       _chat.add(('user', q));
@@ -48,10 +68,17 @@ class _InsightsScreenState extends State<InsightsScreen> {
       _question.clear();
     });
     try {
-      final answer = await state.api.ask(q, state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
-      setState(() => _chat.add(('ai', answer)));
-    } catch (e) {
-      setState(() => _chat.add(('ai', '⚠️ $e')));
+      final (answer, remaining) =
+          await state.api.ask(q, state.monthKey, includeDescriptions: state.sendDescriptionsToAi);
+      setState(() {
+        _chat.add(('ai', answer));
+        _remaining = remaining ?? _remaining;
+      });
+    } on ApiException catch (e) {
+      setState(() {
+        _chat.add(('ai', e.status == 429 ? '$e' : '⚠️ $e'));
+        if (e.status == 429) _remaining = 0;
+      });
     } finally {
       if (mounted) setState(() => _asking = false);
     }
@@ -86,10 +113,10 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     child: const Icon(Icons.auto_awesome, size: 36, color: Colors.white),
                   ),
                   const SizedBox(height: 14),
-                  const Text('Análise do mês com IA',
+                  const Text('Que tal uma análise do mês?',
                       style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 6),
-                  Text('A IA lê seus gastos, dá uma nota para sua saúde financeira e mostra onde dá para economizar.',
+                  Text('Eu olho seus gastos, dou uma nota e aponto onde dá para economizar. Leva uns segundos.',
                       textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: .85))),
                   const SizedBox(height: 18),
                   FilledButton.icon(
@@ -111,8 +138,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
           Row(children: [
             const IconBadge(Icons.forum_outlined, Color(0xFF6D5DF6), size: 34),
             const SizedBox(width: 10),
-            Text('Pergunte à IA',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Expanded(
+              child: Text('Pergunte à IA',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            if (_remaining != null)
+              Tooltip(
+                message: 'Para não pesar no servidor, são 20 perguntas por dia. Zera à meia-noite.',
+                child: Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: Icon(Icons.bolt, size: 16, color: _remaining == 0 ? expenseColor : null),
+                  label: Text(_remaining == 0 ? 'Acabou por hoje' : '$_remaining perguntas hoje',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                ),
+              ),
           ]),
           const SizedBox(height: 12),
           if (_chat.isEmpty)
@@ -125,7 +164,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                 ActionChip(
                   avatar: const Icon(Icons.bolt, size: 16),
                   label: Text(s),
-                  onPressed: _asking ? null : () => _ask(s),
+                  onPressed: _asking || _remaining == 0 ? null : () => _ask(s),
                 ),
             ]),
           for (final (role, text) in _chat)
@@ -158,8 +197,13 @@ class _InsightsScreenState extends State<InsightsScreen> {
             Expanded(
               child: TextField(
                 controller: _question,
+                enabled: _remaining != 0,
+                maxLength: maxQuestion,
+                maxLines: 3,
+                minLines: 1,
                 decoration: InputDecoration(
-                  hintText: 'Ex.: posso gastar com uma viagem?',
+                  counterText: '',
+                  hintText: _remaining == 0 ? 'Amanhã tem mais perguntas 😊' : 'Ex.: posso gastar com uma viagem?',
                   isDense: true,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
                   enabledBorder: OutlineInputBorder(
@@ -170,7 +214,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             ),
             const SizedBox(width: 8),
             IconButton.filled(
-              onPressed: _asking ? null : _ask,
+              onPressed: _asking || _remaining == 0 ? null : _ask,
               icon: const Icon(Icons.arrow_upward),
               style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
             ),
@@ -242,19 +286,28 @@ class _InsightsView extends StatelessWidget {
                 ],
               ]),
             ),
-            IconButton(onPressed: onRefresh, icon: const Icon(Icons.refresh), tooltip: 'Gerar novamente'),
+            IconButton(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
+                tooltip: i.cached ? 'Seus dados não mudaram: é a mesma análise' : 'Gerar novamente'),
           ]),
         ),
       ),
       const SizedBox(height: 12),
       _ListCard('Resumo', Icons.description_outlined, const Color(0xFF3B82F6), [i.summary], bullets: false),
+      if (i.cached)
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 4),
+          child: Text('Nada mudou desde a última análise, então mostrei a mesma.',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
       if (i.alerts.isNotEmpty) ...[
         const SizedBox(height: 12),
         _ListCard('Alertas', Icons.warning_amber_rounded, warningColor, i.alerts),
       ],
       if (i.tips.isNotEmpty) ...[
         const SizedBox(height: 12),
-        _ListCard('Dicas para economizar', Icons.lightbulb_outline, incomeColor, i.tips),
+        _ListCard('Dá para fazer', Icons.lightbulb_outline, incomeColor, i.tips),
       ],
     ]);
   }
@@ -319,7 +372,8 @@ class _PrivacyNote extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
               'Para analisar e responder, enviamos ao DeepSeek os totais do mês, os gastos por categoria, '
-              'os orçamentos e as 10 maiores despesas ${withDescriptions ? 'com data e descrição' : 'só com data, categoria e valor'}. '
+              'os orçamentos e as 10 maiores despesas ${withDescriptions ? 'com data e descrição' : 'só com data, categoria e valor'}, '
+              'além da idade, do estado e das fontes de renda que você respondeu no questionário. '
               'Seu nome, e-mail e os nomes das suas contas não são enviados.',
               style: TextStyle(fontSize: 12, height: 1.4, color: cs.onSurfaceVariant),
             ),

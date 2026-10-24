@@ -4,12 +4,17 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart';
+import '../widgets/about_fields.dart';
 import '../widgets/common.dart';
 import '../widgets/playful.dart';
+import 'analysis_screen.dart';
+import 'profiles_screen.dart';
 import 'transaction_form_screen.dart';
 import 'whatsapp_screen.dart';
 
-/// Configuração guiada logo depois de criar a conta: carteira, bancos, orçamentos e WhatsApp.
+/// Configuração guiada logo depois de criar a conta: quem é a pessoa (idade, fontes de renda,
+/// trabalhos, renda e objetivo, RN-46), perfil da empresa para quem tem CNPJ (RN-47), a análise
+/// inicial e depois carteira, bancos, orçamentos e WhatsApp.
 /// Cada passo salva ao continuar, então dá para fechar no meio sem perder o que já foi feito.
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -39,9 +44,22 @@ const _banks = [
 const _budgetCategories = ['Alimentação', 'Transporte', 'Lazer', 'Compras'];
 
 class _SetupScreenState extends State<SetupScreen> {
-  static const _steps = 6;
   int _step = 0;
   bool _busy = false;
+
+  final _about = AboutDraft();
+  final _business = GlobalKey<BusinessProfileFormState>();
+  Future<Analysis>? _analysis;
+  bool _businessCreated = false;
+
+  /// O passo da empresa só aparece para quem marcou MEI/CNPJ nas fontes de renda.
+  List<String> get _flow => [
+        'intro', 'age', 'sources', 'income',
+        if (_about.sources.contains('mei') || _businessCreated) 'business',
+        'analysis', 'wallet', 'banks', 'budgets', 'whatsapp', 'done',
+      ];
+
+  void _next() => setState(() => _step++);
 
   final _wallet = TextEditingController();
   final _selectedBanks = <String>{};
@@ -64,6 +82,33 @@ class _SetupScreenState extends State<SetupScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _saveAbout() async {
+    await _state.saveAbout(
+      birthYear: _about.validYear ? _about.year : null,
+      state: _about.state,
+      sources: _about.sources.toList(),
+      jobCount: _about.jobCount,
+      monthlyIncome: _about.monthlyIncome,
+      mainGoal: _about.goal,
+    );
+    _analysis = _state.api.initialAnalysis();
+  }
+
+  Future<void> _createBusiness() async {
+    final form = _business.currentState;
+    if (form == null || !form.valid) return;
+    setState(() => _busy = true);
+    final p = await form.save();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (p != null) {
+        _businessCreated = true;
+        _step++;
+      }
+    });
   }
 
   Future<void> _saveWallet() async {
@@ -103,38 +148,82 @@ class _SetupScreenState extends State<SetupScreen> {
     for (final c in [_wallet, ..._bankBalances.values, ..._budgets.values]) {
       c.dispose();
     }
+    _about.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final firstName = (context.watch<AppState>().userName ?? '').trim().split(' ').first;
-    final (bubble, content, primary, secondary) = switch (_step) {
-      0 => (
-          'Oi${firstName.isEmpty ? '' : ', $firstName'}! 🎉 Em 1 minutinho a gente deixa o Economizze com a sua cara. Bora?',
+    void changed() => setState(() {});
+    final flow = _flow;
+    final id = flow[_step.clamp(0, flow.length - 1)];
+    final (bubble, content, primary, secondary) = switch (id) {
+      'intro' => (
+          'Oi${firstName.isEmpty ? '' : ', $firstName'}! 🎉 Em 2 minutinhos a gente deixa o Economizze com a sua cara. Bora?',
           const SizedBox.shrink(),
-          ('Bora!', () => setState(() => _step++)),
+          ('Bora!', _next),
           null,
         ),
-      1 => (
+      'age' => (
+          'Primeiro, me conta um pouco de você. Em que ano você nasceu, e onde mora? 🎂',
+          AgeFields(_about, onChanged: changed),
+          ('Continuar', _about.validYear ? _next : null),
+          ('Prefiro não dizer', _next),
+        ),
+      'sources' => (
+          'De onde vem o seu dinheiro? Pode marcar mais de uma opção. 💼',
+          SourcesFields(_about, onChanged: changed),
+          ('Continuar', _next),
+          ('Pular', _next),
+        ),
+      'income' => (
+          'Quanto entra por mês, mais ou menos? E qual é o seu objetivo agora? 🎯',
+          IncomeGoalFields(_about, onChanged: changed),
+          ('Continuar', () => _run(_saveAbout)),
+          ('Pular', () => _run(_saveAbout)),
+        ),
+      'business' => (
+          'Você tem CNPJ! Vamos criar um perfil só para a empresa? Assim o dinheiro dela não se mistura com o seu. 🏪',
+          _businessCreated
+              ? const Text('Perfil da empresa criado! Troque de perfil no topo do app.',
+                  style: TextStyle(fontWeight: FontWeight.w700))
+              : BusinessProfileScreen(key: _business, embedded: true),
+          ('Criar perfil da empresa', _businessCreated ? _next : _createBusiness),
+          ('Agora não', _next),
+        ),
+      'analysis' => (
+          'Olha como você está em relação a quem tem a sua idade no Brasil 👇',
+          FutureBuilder<Analysis>(
+            future: _analysis ??= _state.api.initialAnalysis(),
+            builder: (context, snap) => snap.hasData
+                ? AnalysisView(snap.data!)
+                : snap.hasError
+                    ? const Text('Não consegui carregar a análise agora. Ela fica em Menu → Minha situação.')
+                    : const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
+          ),
+          ('Continuar', _next),
+          null,
+        ),
+      'wallet' => (
           'Quanto dinheiro você tem na carteira agora? Só o dinheiro vivo, em espécie. 💵',
           _AmountField(controller: _wallet, label: 'Na carteira'),
           ('Continuar', () => _run(_saveWallet)),
-          ('Não ando com dinheiro', () => setState(() => _step++)),
+          ('Não ando com dinheiro', _next),
         ),
-      2 => (
+      'banks' => (
           'Em quais bancos você tem conta? Assim eu separo o saldo de cada um. 🏦',
           _banksStep(),
           ('Continuar', () => _run(_saveBanks)),
-          ('Agora não', () => setState(() => _step++)),
+          ('Agora não', _next),
         ),
-      3 => (
+      'budgets' => (
           'Quanto você quer gastar por mês com cada coisa? Eu aviso antes de você estourar! 🎯',
           _budgetsStep(),
           ('Continuar', () => _run(_saveBudgets)),
-          ('Deixo para depois', () => setState(() => _step++)),
+          ('Deixo para depois', _next),
         ),
-      4 => (
+      'whatsapp' => (
           'Sabia que dá para anotar gastos pelo WhatsApp? Manda "gastei 30 no almoço", um áudio ou o print do PIX. 📱',
           const _WhatsAppArt(),
           (
@@ -144,7 +233,7 @@ class _SetupScreenState extends State<SetupScreen> {
               if (mounted) setState(() => _step++);
             }
           ),
-          ('Depois', () => setState(() => _step++)),
+          ('Depois', _next),
         ),
       _ => (
           'Tudo pronto! 🚀 Agora é só registrar seus gastos. Quanto mais você anota, melhor eu te ajudo a economizar.',
@@ -165,7 +254,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 icon: const Icon(Icons.close),
                 onPressed: () => _state.completeSetup(),
               ),
-              Expanded(child: ChunkyProgress(value: (_step + 1) / _steps)),
+              Expanded(child: ChunkyProgress(value: (_step + 1) / flow.length)),
             ]),
           ),
           Expanded(
@@ -182,7 +271,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 key: ValueKey(_step),
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                 children: [
-                  if (_step == 0 || _step == _steps - 1) ...[
+                  if (id == 'intro' || id == 'done') ...[
                     SpeechBubble(child: Text(bubble, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, height: 1.4))),
                     const SizedBox(height: 4),
                     const Center(child: MascotAvatar(size: 170, bounce: true)),

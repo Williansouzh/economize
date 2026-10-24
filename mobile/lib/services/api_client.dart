@@ -19,12 +19,16 @@ class ApiClient {
   final http.Client _http;
   String? token;
 
+  /// Perfil de empresa ativo (header X-Profile, RN-47). Nulo = perfil pessoal.
+  String? profileId;
+
   ApiClient({http.Client? client}) : _http = client ?? http.Client();
   void Function()? onUnauthorized;
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
+        'X-Profile': ?profileId,
       };
 
   Uri _uri(String path, [Map<String, String>? query]) =>
@@ -329,7 +333,43 @@ class ApiClient {
   /// [includeDescriptions] = false: o DeepSeek recebe só data, categoria e valor das despesas.
   Future<Insights> insights(String month, {bool includeDescriptions = true}) async => Insights.fromJson(
       await post('/insights', {'month': month, 'includeDescriptions': includeDescriptions}));
-  Future<String> ask(String question, String month, {bool includeDescriptions = true}) async =>
-      (await post('/insights/chat',
-          {'question': question, 'month': month, 'includeDescriptions': includeDescriptions}))['answer'];
+
+  /// Resposta da IA e quantas perguntas ainda restam hoje (RN-48).
+  Future<(String answer, int? remaining)> ask(String question, String month, {bool includeDescriptions = true}) async {
+    final r = await post('/insights/chat',
+        {'question': question, 'month': month, 'includeDescriptions': includeDescriptions});
+    return (r['answer'] as String, r['remaining'] as int?);
+  }
+
+  /// Perguntas que restam hoje no chat.
+  Future<int> chatRemaining() async => (await get('/insights/quota'))['chatRemaining'];
+
+  // ---- Perfis (RN-47), questionário e análises (RN-46) ----
+  Future<List<Profile>> profiles() async => [for (final j in await get('/profiles') as List) Profile.fromJson(j)];
+  Future<Profile> createProfile(String name, {String? cnpj, bool isMei = true}) async =>
+      Profile.fromJson(await post('/profiles', {'name': name, 'cnpj': cnpj, 'isMei': isMei}));
+  Future<void> deleteProfile(String id, String password) => _send(
+      _http.delete(_uri('/profiles/$id'), headers: _headers, body: jsonEncode({'password': password})));
+
+  Future<About> about() async => About.fromJson(await get('/me/about'));
+  Future<About> saveAbout({
+    int? birthYear,
+    String? state,
+    List<String> sources = const [],
+    int? jobCount,
+    double? monthlyIncome,
+    String? mainGoal,
+  }) async =>
+      About.fromJson(await put('/me/about', {
+        'birthYear': birthYear,
+        'state': state,
+        'sources': sources,
+        'jobCount': jobCount,
+        'monthlyIncome': monthlyIncome,
+        'mainGoal': mainGoal,
+      }));
+
+  Future<Analysis> initialAnalysis() async => Analysis.fromJson(await get('/analysis/initial'));
+  Future<Analysis> monthlyAnalysis(String month) async =>
+      Analysis.fromJson(await get('/analysis/monthly', {'month': month}));
 }
