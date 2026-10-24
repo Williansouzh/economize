@@ -111,13 +111,14 @@ IconData accountIcon(String name) => accountIcons[name] ?? Icons.account_balance
 
 /// Cores sugeridas para contas (as dos bancos mais comuns aparecem primeiro).
 const accountColors = [
-  '#00A86B', '#8A05BE', '#EC7000', '#CC092F', '#FFCC00', '#0070AF',
+  '#0C7A68', '#8A05BE', '#EC7000', '#CC092F', '#FFCC00', '#0070AF',
   '#1E88E5', '#00897B', '#5E35B1', '#F4511E', '#6D4C41', '#546E7A',
 ];
 
-const incomeColor = Color(0xFF1B9E5A);
-const expenseColor = Color(0xFFE5484D);
-const warningColor = Color(0xFFF5A524);
+// Valem nos dois temas: 4,5:1 sobre o branco e 3:1 sobre o cartão escuro (números grandes em negrito).
+const incomeColor = Color(0xFF13864D);
+const expenseColor = Color(0xFFD24148);
+const warningColor = Color(0xFFA96404);
 
 String percent(double v) => '${(v * 100).toStringAsFixed(v.abs() < .1 ? 1 : 0).replaceAll('.', ',')}%';
 

@@ -42,13 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final text = Theme.of(context).textTheme;
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF00C27C), brandDark],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
+        decoration: const BoxDecoration(gradient: brandGradient),
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -58,9 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   const Center(child: Mascot(size: 120)),
                   const SizedBox(height: 16),
-                  Text('Economizze',
-                      textAlign: TextAlign.center,
-                      style: text.headlineMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                  const Center(child: Wordmark(size: 34)),
                   const SizedBox(height: 4),
                   Text('Seu dinheiro organizado, com uma IA te ajudando a economizar',
                       textAlign: TextAlign.center,

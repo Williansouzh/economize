@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/tips.dart';
 import '../theme.dart';
+import '../widgets/playful.dart';
 
 /// Abertura do app: o cofrinho entra pulando, o nome aparece e uma dica curta fica embaixo.
 /// O fundo é o mesmo verde da splash nativa do Android, então a troca não pisca.
@@ -39,7 +40,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final footer = _step(.45, .9);
 
     return Scaffold(
-      backgroundColor: brandColor,
+      backgroundColor: tinta,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(32, 0, 32, 28),
@@ -76,10 +77,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
             const SizedBox(height: 20),
             _FadeUp(
               animation: name,
-              child: const Text(
-                'Economizze',
-                style: TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -.8),
-              ),
+              child: const Wordmark(size: 38),
             ),
             const Spacer(flex: 4),
             _FadeUp(

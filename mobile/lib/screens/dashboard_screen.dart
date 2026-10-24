@@ -76,12 +76,8 @@ class _BalanceCard extends StatelessWidget {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00C27C), brandDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [BoxShadow(color: brandColor.withValues(alpha: .35), blurRadius: 24, offset: const Offset(0, 10))],
+        gradient: brandGradient,
+        boxShadow: [BoxShadow(color: tinta.withValues(alpha: .28), blurRadius: 24, offset: const Offset(0, 10))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

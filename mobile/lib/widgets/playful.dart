@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 /// Componentes no estilo "jogo" (splash, apresentação e configuração guiada).
 
@@ -13,7 +14,7 @@ class ChunkyButton extends StatefulWidget {
     super.key,
     required this.label,
     required this.onPressed,
-    this.color = const Color(0xFF00A86B),
+    this.color = mar,
     this.textColor,
     this.busy = false,
   });
@@ -102,14 +103,7 @@ class MascotAvatar extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: size,
         height: size,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [Color(0xFF00C27C), Color(0xFF007A4D)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle, gradient: brandGradient),
         child: Mascot(size: size, bounce: bounce),
       );
 }
@@ -179,9 +173,35 @@ class ChunkyProgress extends StatelessWidget {
           builder: (_, v, _) => LinearProgressIndicator(
             value: v,
             minHeight: 14,
-            color: const Color(0xFF00C27C),
+            color: mar,
             backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
           ),
         ),
       );
+}
+
+/// O nome da marca escrito como no logo: "economizze" em Nunito Black, com o "zz" em destaque.
+class Wordmark extends StatelessWidget {
+  final double size;
+  final Color color;
+  final Color accent;
+  const Wordmark({super.key, this.size = 34, this.color = Colors.white, this.accent = lima});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+        fontFamily: 'Nunito', fontSize: size, fontWeight: FontWeight.w900, letterSpacing: -size * .01, color: color);
+    return Semantics(
+      label: 'Economizze',
+      child: ExcludeSemantics(
+        child: Text.rich(
+          TextSpan(style: style, children: [
+            const TextSpan(text: 'economi'),
+            TextSpan(text: 'zz', style: TextStyle(color: accent)),
+            const TextSpan(text: 'e'),
+          ]),
+        ),
+      ),
+    );
+  }
 }

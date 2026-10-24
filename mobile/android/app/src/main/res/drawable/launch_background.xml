@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash nativa (Android até 11): verde da marca com o cofrinho, enquanto o Flutter inicia. -->
+<!-- Splash nativa (Android até 11): tinta da marca com a moeda Economizze, enquanto o Flutter inicia. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_background" />
     <item>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 /// Liga e desliga os lembretes do celular: diário para registrar e véspera das contas.
@@ -57,7 +58,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
               Card(
                 child: Column(children: [
                   SwitchListTile(
-                    secondary: const IconBadge(Icons.edit_note, Color(0xFF00A86B), size: 40),
+                    secondary: const IconBadge(Icons.edit_note, mar, size: 40),
                     title: const Text('Registrar os gastos do dia'),
                     subtitle: const Text('Um lembrete por dia para manter a sequência'),
                     value: _daily,

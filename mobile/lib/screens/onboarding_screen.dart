@@ -169,7 +169,7 @@ class _Art extends StatelessWidget {
             shape: BoxShape.circle,
             gradient: LinearGradient(
               colors: child != null
-                  ? const [Color(0xFF00C27C), brandDark]
+                  ? const [mar, tinta]
                   : [color.withValues(alpha: .9), Color.lerp(color, Colors.black, .2)!],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,

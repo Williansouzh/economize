@@ -31,7 +31,7 @@ public static class AuthEndpoints
             var user = new User { Name = req.Name.Trim(), Email = email, CreatedAt = clock.UtcNow, PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password) };
             db.Users.Add(user);
             db.Categories.AddRange(AppDbContext.DefaultCategories(user.Id));
-            db.Accounts.Add(new Account { UserId = user.Id, Name = "Carteira", Color = "#4CAF50" });
+            db.Accounts.Add(new Account { UserId = user.Id, Name = "Carteira", Color = "#0C7A68" });
             await db.SaveChangesAsync();
             await activity.TouchAsync(user.Id, null);
 

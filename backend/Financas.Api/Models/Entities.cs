@@ -43,7 +43,7 @@ public class Account
     public Guid UserId { get; set; }
     public string Name { get; set; } = "";
     public decimal InitialBalance { get; set; }
-    public string Color { get; set; } = "#4CAF50";
+    public string Color { get; set; } = "#0C7A68";
     public string Icon { get; set; } = "account_balance_wallet";
 
     public AccountKind Kind { get; set; }
@@ -104,7 +104,7 @@ public class Goal
     public decimal Saved { get; set; }
     public DateOnly? Deadline { get; set; }
     public string Icon { get; set; } = "savings";
-    public string Color { get; set; } = "#00A86B";
+    public string Color { get; set; } = "#0C7A68";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

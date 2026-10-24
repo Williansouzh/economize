@@ -100,7 +100,7 @@ public static class WhatsAppEndpoints
             {
                 await DeleteFinancialDataAsync(db, uid);
                 db.Categories.AddRange(AppDbContext.DefaultCategories(uid));
-                db.Accounts.Add(new Account { UserId = uid, Name = "Carteira", Color = "#4CAF50" });
+                db.Accounts.Add(new Account { UserId = uid, Name = "Carteira", Color = "#0C7A68" });
                 await db.SaveChangesAsync();
                 await tx.CommitAsync();
             }
