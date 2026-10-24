@@ -6,17 +6,22 @@ namespace Financas.Api.Services;
 
 /// <summary>
 /// Cota diária de uso da IA por usuário (RN-48), somando os perfis pessoal e de empresa:
-/// 20 perguntas no chat e 10 análises do mês geradas (análises que vêm do cache não contam).
+/// 20 perguntas no chat, 10 análises do mês geradas (análises que vêm do cache não contam) e
+/// 60 mensagens ao assistente do WhatsApp, que também usa a IA.
 /// O dia vira à meia-noite no fuso do app. Contado no PostgreSQL para valer em todas as réplicas.
 /// </summary>
 public class AiQuota(AppDbContext db, AppClock clock, IConfiguration config)
 {
     public const string Chat = "chat";
     public const string Insights = "insights";
+    public const string WhatsApp = "whatsapp";
 
-    public int Limit(string kind) => kind == Chat
-        ? config.GetValue("Ai:ChatPerDay", 20)
-        : config.GetValue("Ai:InsightsPerDay", 10);
+    public int Limit(string kind) => kind switch
+    {
+        Chat => config.GetValue("Ai:ChatPerDay", 20),
+        WhatsApp => config.GetValue("Ai:WhatsAppPerDay", 60),
+        _ => config.GetValue("Ai:InsightsPerDay", 10),
+    };
 
     public async Task<int> UsedAsync(Guid userId, string kind) =>
         await db.AiUsage.Where(x => x.UserId == userId && x.Day == clock.Today && x.Kind == kind)

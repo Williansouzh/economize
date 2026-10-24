@@ -38,6 +38,12 @@ public static class InsightsEndpoints
             return new AiQuotaDto(used, limit, Math.Max(0, limit - used), quota.ResetsAt);
         });
 
+        // O agente do WhatsApp gasta uma mensagem da cota antes de chamar a IA (RN-48).
+        g.MapPost("/quota/whatsapp", async (ClaimsPrincipal user, AiQuota quota, CancellationToken ct) =>
+            await quota.TryUseAsync(user.UserId(), AiQuota.WhatsApp, ct) is { } remaining
+                ? Results.Ok(new { remaining })
+                : QuotaExceeded("Limite de mensagens do dia atingido.", quota));
+
         g.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, InsightsService insights,
             DeepSeekClient deepSeek, AiQuota quota, CancellationToken ct) =>
         {

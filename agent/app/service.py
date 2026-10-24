@@ -7,8 +7,8 @@ import re
 from langchain_core.messages import HumanMessage
 
 from .coordination import Coordinator, InMemoryCoordinator
-from .finance_api import FinanceApi, FinanceApiError
-from .prompts import HELP, WELCOME_UNLINKED
+from .finance_api import FinanceApi, FinanceApiError, QuotaExceeded
+from .prompts import HELP, QUOTA_EXCEEDED, WELCOME_UNLINKED
 from .whatsapp import IncomingMessage
 
 log = logging.getLogger(__name__)
@@ -80,6 +80,12 @@ class MessageHandler:
             snapshot = await self._graph.aget_state(config)
             result = await self._graph.ainvoke(None, config) if snapshot.next else snapshot.values
             return to_whatsapp_format(result["messages"][-1].content)
+
+        # Cada mensagem nova usa a IA: gasta uma da cota diária do usuário (RN-48). A retomada acima não conta.
+        try:
+            await self._finance.use_quota(msg.phone)
+        except QuotaExceeded:
+            return QUOTA_EXCEEDED
 
         if msg.type == "text":
             state = {"messages": [HumanMessage(content=msg.text, id=msg.id)], "media": None,

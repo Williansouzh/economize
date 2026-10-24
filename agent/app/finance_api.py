@@ -10,11 +10,25 @@ class FinanceApiError(Exception):
     pass
 
 
+class QuotaExceeded(FinanceApiError):
+    """Cota diária de mensagens do WhatsApp acabou (RN-48)."""
+
+
+@dataclass
+class BusinessContext:
+    """Perfil de empresa (PJ/MEI) do usuário (RN-47): contas e categorias próprias."""
+    id: str
+    name: str
+    categories: list[dict]
+    accounts: list[dict]
+
+
 @dataclass
 class UserContext:
     name: str
     categories: list[dict]
     accounts: list[dict]
+    business: BusinessContext | None = None
 
 
 class FinanceApi:
@@ -63,11 +77,14 @@ class FinanceApi:
         return data["token"], data["name"]
 
     # ---------- Rotas do usuário (com JWT) ----------
-    async def _request(self, phone: str, method: str, path: str, **kw):
+    async def _request(self, phone: str, method: str, path: str, profile: str | None = None, **kw):
+        """profile: id do perfil de empresa (header X-Profile). None = perfil pessoal."""
         auth = await self.login(phone)
         if auth is None:
             raise FinanceApiError("Número não vinculado a nenhuma conta.")
         headers = {"Authorization": f"Bearer {auth[0]}", **(kw.pop("headers", None) or {})}
+        if profile:
+            headers["X-Profile"] = profile
         res = await self._http.request(method, path, headers=headers, **kw)
         if res.status_code >= 400:
             raise self._error(res)
@@ -77,18 +94,39 @@ class FinanceApi:
         auth = await self.login(phone)
         categories = await self._request(phone, "GET", "/categories")
         accounts = await self._request(phone, "GET", "/accounts")
-        return UserContext(name=auth[1] if auth else "", categories=categories, accounts=accounts)
+        business = None
+        profiles = await self._request(phone, "GET", "/profiles")
+        # O agente usa o primeiro perfil de empresa; quem tem dois escolhe qual no app.
+        if biz := next((p for p in profiles if p["kind"] == "Business"), None):
+            business = BusinessContext(
+                id=biz["id"], name=biz["name"],
+                categories=await self._request(phone, "GET", "/categories", profile=biz["id"]),
+                accounts=await self._request(phone, "GET", "/accounts", profile=biz["id"]))
+        return UserContext(name=auth[1] if auth else "", categories=categories, accounts=accounts, business=business)
 
-    async def create_transaction(self, phone: str, payload: dict, idempotency_key: str | None = None) -> str:
+    async def use_quota(self, phone: str) -> int:
+        """Gasta uma mensagem da cota diária do WhatsApp. Devolve quantas restam; sem cota, QuotaExceeded."""
+        auth = await self.login(phone)
+        if auth is None:
+            raise FinanceApiError("Número não vinculado a nenhuma conta.")
+        res = await self._http.post("/insights/quota/whatsapp", headers={"Authorization": f"Bearer {auth[0]}"})
+        if res.status_code == 429:
+            raise QuotaExceeded("Limite de mensagens do dia atingido.")
+        if res.status_code >= 400:
+            raise self._error(res)
+        return res.json()["remaining"]
+
+    async def create_transaction(self, phone: str, payload: dict, idempotency_key: str | None = None,
+                                 profile: str | None = None) -> str:
         """Com idempotency_key, repetir a chamada (retomada depois de queda) devolve o mesmo lançamento (RN-45)."""
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
-        return (await self._request(phone, "POST", "/transactions", json=payload, headers=headers))["id"]
+        return (await self._request(phone, "POST", "/transactions", profile, json=payload, headers=headers))["id"]
 
-    async def transactions(self, phone: str, month: str) -> list[dict]:
-        return await self._request(phone, "GET", "/transactions", params={"month": month})
+    async def transactions(self, phone: str, month: str, profile: str | None = None) -> list[dict]:
+        return await self._request(phone, "GET", "/transactions", profile, params={"month": month})
 
-    async def delete_transaction(self, phone: str, tx_id: str) -> None:
-        await self._request(phone, "DELETE", f"/transactions/{tx_id}")
+    async def delete_transaction(self, phone: str, tx_id: str, profile: str | None = None) -> None:
+        await self._request(phone, "DELETE", f"/transactions/{tx_id}", profile)
 
-    async def dashboard(self, phone: str, month: str) -> dict:
-        return await self._request(phone, "GET", "/dashboard", params={"month": month})
+    async def dashboard(self, phone: str, month: str, profile: str | None = None) -> dict:
+        return await self._request(phone, "GET", "/dashboard", profile, params={"month": month})

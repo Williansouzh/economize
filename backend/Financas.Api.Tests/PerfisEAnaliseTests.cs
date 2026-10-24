@@ -347,4 +347,15 @@ public class PerfisEAnaliseTests
         Assert.Contains("Perfil: EMPRESA (MEI)", business);
         Assert.Contains("teto do MEI", business);
     }
+
+    [Fact]
+    public async Task Mensagens_do_whatsapp_tem_cota_propria()
+    {
+        using var f = new ApiFactory { Settings = { ["Ai:WhatsAppPerDay"] = "2" } };
+        var c = await f.CreateUserClientAsync();
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsync("/api/insights/quota/whatsapp", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.PostAsync("/api/insights/quota/whatsapp", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await c.PostAsync("/api/insights/quota/whatsapp", null)).StatusCode);
+        Assert.Equal(20, (await c.GetFromJsonAsync<Quota>("/api/insights/quota"))!.ChatRemaining); // o chat do app não é afetado
+    }
 }

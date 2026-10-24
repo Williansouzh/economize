@@ -7,7 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from app.finance_api import FinanceApiError, UserContext
+from app.finance_api import BusinessContext, FinanceApiError, QuotaExceeded, UserContext
 
 
 class ScriptedLLM(BaseChatModel):
@@ -41,12 +41,23 @@ CATEGORIES = [
 ]
 
 
+BUSINESS = BusinessContext(
+    id="p-empresa", name="Doces da Ana",
+    categories=[{"id": "b1", "name": "Vendas", "type": "Income"}, {"id": "b2", "name": "DAS (imposto do MEI)", "type": "Expense"},
+                {"id": "b3", "name": "Outras despesas", "type": "Expense"}],
+    accounts=[{"id": "ba1", "name": "Conta da empresa"}])
+
+
 class FakeFinance:
-    def __init__(self, linked: dict[str, str] | None = None, codes: dict[str, str] | None = None):
+    def __init__(self, linked: dict[str, str] | None = None, codes: dict[str, str] | None = None,
+                 business: bool = False, quota: int = 1000):
         self.linked = linked or {}       # phone -> nome
         self.codes = codes or {}         # código -> nome
         self.created: list[dict] = []
         self.deleted: list[str] = []
+        self.business = business
+        self.quota = quota
+        self.profiles_used: list[str | None] = []
 
     async def link(self, phone, code):
         if code not in self.codes:
@@ -62,9 +73,17 @@ class FakeFinance:
 
     async def context(self, phone):
         return UserContext(name=self.linked[phone], categories=CATEGORIES,
-                           accounts=[{"id": "a1", "name": "Carteira"}, {"id": "a2", "name": "Nubank"}])
+                           accounts=[{"id": "a1", "name": "Carteira"}, {"id": "a2", "name": "Nubank"}],
+                           business=BUSINESS if self.business else None)
 
-    async def create_transaction(self, phone, payload, idempotency_key=None):
+    async def use_quota(self, phone):
+        if self.quota <= 0:
+            raise QuotaExceeded("Limite de mensagens do dia atingido.")
+        self.quota -= 1
+        return self.quota
+
+    async def create_transaction(self, phone, payload, idempotency_key=None, profile=None):
+        self.profiles_used.append(profile)
         # Igual à API (RN-45): a mesma chave devolve o lançamento já criado.
         if idempotency_key is not None:
             self.keys = getattr(self, "keys", {})
@@ -76,13 +95,13 @@ class FakeFinance:
             self.keys[idempotency_key] = tx_id
         return tx_id
 
-    async def transactions(self, phone, month):
+    async def transactions(self, phone, month, profile=None):
         return []
 
-    async def delete_transaction(self, phone, tx_id):
+    async def delete_transaction(self, phone, tx_id, profile=None):
         self.deleted.append(tx_id)
 
-    async def dashboard(self, phone, month):
+    async def dashboard(self, phone, month, profile=None):
         return {"month": month, "totalBalance": 0, "forecastBalance": 0, "income": 0, "expenses": 0,
                 "monthResult": 0, "pendingIncome": 0, "pendingExpenses": 0,
                 "expensesByCategory": [], "budgets": []}

@@ -39,8 +39,8 @@ class DiesAfterWrite(FakeFinance):
         super().__init__(**kw)
         self.die = True
 
-    async def create_transaction(self, phone, payload, idempotency_key=None):
-        tx_id = await super().create_transaction(phone, payload, idempotency_key)
+    async def create_transaction(self, phone, payload, idempotency_key=None, profile=None):
+        tx_id = await super().create_transaction(phone, payload, idempotency_key, profile)
         if self.die:
             self.die = False
             raise InstanceDied()
