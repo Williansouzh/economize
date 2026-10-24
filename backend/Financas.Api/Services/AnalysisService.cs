@@ -13,7 +13,8 @@ namespace Financas.Api.Services;
 public class AnalysisService(AppDbContext db, FinanceService finance, AppClock clock, IConfiguration config)
 {
     private static readonly CultureInfo PtBr = new("pt-BR");
-    private static string Money(decimal v) => Math.Round(v).ToString("C0", PtBr);
+    // Espaço inquebrável: "R$" nunca fica sozinho no fim da linha.
+    private static string Money(decimal v) => Math.Round(v).ToString("C0", PtBr).Replace("R$ ", "R$\u00A0");
     private static string Pct(double v) => $"{Math.Round(v * 100):0}%";
 
     public decimal MeiLimit => config.GetValue("Mei:AnnualLimit", 81_000m);

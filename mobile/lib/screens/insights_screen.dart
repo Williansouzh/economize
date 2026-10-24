@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 
@@ -99,11 +100,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(28),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6D5DF6), Color(0xFF3B82F6)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                gradient: brandGradient,
               ),
               child: Column(children: [
                   Container(
@@ -121,7 +118,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                   const SizedBox(height: 18),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                        backgroundColor: Colors.white, foregroundColor: const Color(0xFF4F46E5)),
+                        backgroundColor: lima, foregroundColor: tinta),
                     onPressed: _loading ? null : _generate,
                     icon: _loading
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
@@ -136,7 +133,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
           const _PrivacyNote(),
           const SizedBox(height: 24),
           Row(children: [
-            const IconBadge(Icons.forum_outlined, Color(0xFF6D5DF6), size: 34),
+            const IconBadge(Icons.forum_outlined, mar, size: 34),
             const SizedBox(width: 10),
             Expanded(
               child: Text('Pergunte à IA',

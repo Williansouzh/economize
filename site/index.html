@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Economizze — suas finanças organizadas, com IA</title>
-  <meta name="description" content="Anote gastos em segundos, acompanhe orçamentos e receba dicas de uma IA que conhece o seu mês. Baixe o Economizze para Android.">
-  <meta name="theme-color" content="#00A86B">
+  <meta name="description" content="Anote gastos em segundos, separe o dinheiro pessoal do MEI, veja como você está comparado a quem tem a sua idade e receba dicas curtas de uma IA. Baixe o Economizze para Android.">
+  <meta name="theme-color" content="#0B2B2E">
   <meta property="og:title" content="Economizze — suas finanças organizadas, com IA">
   <meta property="og:description" content="Anote gastos em segundos, acompanhe orçamentos e receba dicas de uma IA que conhece o seu mês.">
   <meta property="og:image" content="https://economizze.tech/img/icon-192.png">
@@ -15,16 +15,19 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
   <style>
+    /* Paleta da marca (brand/README.md): tinta, mar, lima e névoa. */
     :root {
-      --brand: #00a86b; --brand-2: #00c27c; --brand-dark: #007a4d; --brand-edge: #00804f;
-      --gold: #ffc531; --gold-edge: #d99a00;
-      --bg: #ffffff; --bg-soft: #f2f8f5; --card: #ffffff; --text: #1a1f1d; --muted: #5b6662;
-      --border: #e3eae7; --expense: #e5484d; --income: #00a86b;
+      --tinta: #0b2b2e; --mar: #0c7a68; --lima: #c5f04a;
+      --brand: var(--mar); --brand-2: var(--mar); --brand-dark: var(--tinta); --brand-edge: #075447;
+      --gold: var(--lima); --gold-edge: #93b52c;
+      --accent: var(--mar); /* texto e links de destaque */
+      --bg: #ffffff; --bg-soft: #f2f6f4; --card: #ffffff; --text: #0b2b2e; --muted: #4f625f;
+      --border: #dde7e3; --expense: #d24148; --income: #13864d;
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #0f1312; --bg-soft: #151b19; --card: #1a201e; --text: #e7ecea; --muted: #a3aeaa;
-        --border: #2c3532; --income: #2fd08f;
+        --bg: #081e21; --bg-soft: #0b2629; --card: #11302f; --text: #e8f0ee; --muted: #a6b8b4;
+        --border: #24473b; --income: #2fd08f; --accent: var(--lima);
       }
     }
     * { box-sizing: border-box; }
@@ -43,6 +46,7 @@
     .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 72px; }
     .logo { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 900; font-size: 22px; }
     .logo img { width: 40px; height: 40px; }
+    .logo b { color: var(--lima); font-weight: inherit; }
     .nav a.link { color: #fff; font-weight: 800; text-decoration: none; opacity: .92; }
     .nav a.link:hover { opacity: 1; text-decoration: underline; }
 
@@ -55,7 +59,7 @@
     }
     .btn:active { transform: translateY(5px); box-shadow: none !important; }
     .btn svg { width: 22px; height: 22px; flex: none; }
-    .btn-gold { background: var(--gold); color: #1a1f1d; box-shadow: 0 5px 0 var(--gold-edge); }
+    .btn-gold { background: var(--gold); color: var(--tinta); box-shadow: 0 5px 0 var(--gold-edge); }
     .btn-white { background: #fff; color: var(--brand-dark); box-shadow: 0 5px 0 #c9d8d2; }
     .btn-green { background: var(--brand); color: #fff; box-shadow: 0 5px 0 var(--brand-edge); }
     .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
@@ -106,7 +110,7 @@
     /* ---------- Seções ---------- */
     section { padding: 80px 0; }
     .soft { background: var(--bg-soft); }
-    .kicker { color: var(--brand); font-weight: 900; letter-spacing: 1px; text-transform: uppercase; font-size: 14px; }
+    .kicker { color: var(--accent); font-weight: 900; letter-spacing: 1px; text-transform: uppercase; font-size: 14px; }
     h2 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.15; margin: 8px 0 12px; font-weight: 900; letter-spacing: -.3px; }
     .sub { color: var(--muted); font-size: 19px; max-width: 640px; margin: 0; }
     .center { text-align: center; }
@@ -140,12 +144,12 @@
       content: "✓"; position: absolute; left: 0; top: 1px; width: 24px; height: 24px; border-radius: 50%;
       background: var(--brand); color: #fff; font-weight: 900; font-size: 14px; display: grid; place-items: center;
     }
-    .privacy a { color: var(--brand); font-weight: 800; }
+    .privacy a { color: var(--accent); font-weight: 800; }
 
     details { background: var(--card); border: 2px solid var(--border); border-radius: 18px; padding: 16px 20px; margin: 12px 0; }
     summary { cursor: pointer; font-weight: 900; font-size: 18px; list-style: none; display: flex; justify-content: space-between; gap: 12px; }
     summary::-webkit-details-marker { display: none; }
-    summary::after { content: "+"; color: var(--brand); font-size: 24px; line-height: 1; }
+    summary::after { content: "+"; color: var(--accent); font-size: 24px; line-height: 1; }
     details[open] summary::after { content: "–"; }
     details p, details ol { color: var(--muted); margin: 10px 0 0; }
     .faq { max-width: 760px; margin: 40px auto 0; }
@@ -187,7 +191,7 @@
 
 <header class="nav">
   <div class="wrap">
-    <a class="logo" href="/"><img src="img/mascot.png" alt="" width="40" height="40">Economizze</a>
+    <a class="logo" href="/" aria-label="Economizze"><img src="img/simbolo.svg" alt="" width="40" height="40"><span>economi<b>zz</b>e</span></a>
     <a class="link" href="/app/">Entrar no navegador</a>
   </div>
 </header>
@@ -196,9 +200,9 @@
   <div class="hero">
     <div class="wrap">
       <div>
-        <span class="pill">🐷 Seu cofrinho inteligente</span>
+        <span class="pill">Pessoa física e MEI no mesmo app</span>
         <h1>Descubra para onde vai o seu dinheiro e comece a sobrar no fim do mês.</h1>
-        <p class="lead">Anote gastos em segundos, defina limites por categoria e receba dicas de uma inteligência artificial que entende o seu mês.</p>
+        <p class="lead">Anote gastos em segundos, separe o dinheiro da empresa do pessoal, veja como você está em relação a quem tem a sua idade e receba dicas curtas de uma IA que entende o seu mês.</p>
         <div class="ctas">
           <a class="btn btn-gold js-download" href="/download/economizze.apk" download>
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.38.38 0 00-.66-.38l-1.86 3.22a11.4 11.4 0 00-9.84 0L5.22 5.92a.38.38 0 00-.66.38L6.4 9.48A10.8 10.8 0 001 18h22a10.8 10.8 0 00-5.4-8.52zM7 15.25a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zm10 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z"/></svg>
@@ -217,7 +221,7 @@
                  alt="Tela inicial do app: saldo do mês, métricas, contas e cartão de crédito">
           </div>
         </div>
-        <div class="tip"><strong>DICA DA IA</strong>Lazer já usou 99% do limite. Que tal um programa em casa no fim de semana? 🍿</div>
+        <div class="tip"><strong>DICA DA IA</strong>Lazer passou do limite em R$ 20. Um programa em casa no sábado já resolve 🍿</div>
       </div>
     </div>
   </div>
@@ -239,14 +243,29 @@
           <p>Defina quanto quer gastar com mercado, lazer ou transporte e veja quanto ainda sobra no mês.</p>
         </div>
         <div class="feature">
+          <div class="ico" style="background:#e2f7ae">🏪</div>
+          <h3>Pessoal e empresa (MEI)</h3>
+          <p>Um perfil para você e outro para o CNPJ, com contas separadas. O app acompanha o teto de R$ 81 mil do MEI e lembra do DAS.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#dff1ff">📈</div>
+          <h3>Como você está</h3>
+          <p>Compare sua renda com a de quem tem a sua idade no Brasil, com dados do IBGE, e veja todo mês se fechou no azul.</p>
+        </div>
+        <div class="feature">
           <div class="ico" style="background:#f0e6ff">✨</div>
-          <h3>IA que dá dicas</h3>
-          <p>Receba uma análise do seu mês e pergunte coisas como "onde posso cortar gastos?".</p>
+          <h3>IA que fala sua língua</h3>
+          <p>Análise do mês e respostas curtas, como de um amigo que entende de dinheiro. Pergunte "onde posso cortar gastos?".</p>
         </div>
         <div class="feature">
           <div class="ico" style="background:#dff1ff">📊</div>
           <h3>Gráficos claros</h3>
           <p>Veja para onde vai o dinheiro por categoria e compare com o mês anterior.</p>
+        </div>
+        <div class="feature">
+          <div class="ico" style="background:#ffe9d6">📄</div>
+          <h3>Importe o extrato</h3>
+          <p>Traga o extrato ou a fatura do banco (OFX, CSV ou PDF): o app sugere as categorias e não repete o que você já lançou.</p>
         </div>
         <div class="feature">
           <div class="ico" style="background:#f0e6ff">💳</div>
@@ -297,8 +316,10 @@
       <div class="kicker">Veja por dentro</div>
       <h2>Simples de usar, bonito de ver</h2>
       <div class="shots">
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/situacao.webp" loading="lazy" width="540" height="1199" alt="Sua situação no mês e comparação da renda com quem tem a mesma idade, segundo o IBGE"></div></div><p>Sua situação<small>O mês e a comparação com a sua idade</small></p></figure>
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/empresa.webp" loading="lazy" width="540" height="1199" alt="Perfil da empresa com lucro do mês e o teto do MEI"></div></div><p>Perfil MEI<small>Lucro, teto e DAS</small></p></figure>
         <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/lancamentos.webp" loading="lazy" width="540" height="1199" alt="Lista de lançamentos do mês agrupada por dia"></div></div><p>Lançamentos<small>Tudo do mês, dia a dia</small></p></figure>
-        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/fatura.webp" loading="lazy" width="540" height="1199" alt="Fatura do cartão de crédito com limite livre"></div></div><p>Cartão de crédito<small>Fatura, limite e parcelas</small></p></figure>
+        <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/ia.webp" loading="lazy" width="540" height="1199" alt="Tela de IA com análise do mês e perguntas"></div></div><p>IA<small>Análise e respostas curtas</small></p></figure>
         <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/metas.webp" loading="lazy" width="540" height="1199" alt="Orçamentos por categoria e metas de economia"></div></div><p>Planejamento<small>Orçamentos e metas</small></p></figure>
         <figure class="shot"><div class="phone"><div class="screen"><img src="img/telas/conquistas.webp" loading="lazy" width="540" height="1199" alt="Sequência de dias e conquistas"></div></div><p>Conquistas<small>Economizar vira hábito</small></p></figure>
       </div>
@@ -311,7 +332,7 @@
       <h2>Três passos e seu mês está organizado</h2>
       <div class="steps">
         <div class="step"><h3>Baixe e crie a conta</h3><p>Só nome, e-mail e senha. Nenhum dado de banco ou cartão.</p></div>
-        <div class="step"><h3>Configure em 2 minutos</h3><p>Um passo a passo guiado cadastra suas contas e seus primeiros limites.</p></div>
+        <div class="step"><h3>Conte um pouco sobre você</h3><p>Idade, de onde vem a renda e seu objetivo. Em 2 minutos você vê como está em relação a quem tem a sua idade.</p></div>
         <div class="step"><h3>Anote e acompanhe</h3><p>Registre os gastos do dia a dia e veja o mês fechar no azul.</p></div>
       </div>
     </div>
@@ -353,11 +374,19 @@
         </details>
         <details id="nao-instala">
           <summary>Apareceu "App não instalado" ou "incompatível"?</summary>
-          <p>O download principal é otimizado para os celulares atuais (processador de 64 bits) e por isso é bem mais leve. Em aparelhos mais antigos ou de entrada, baixe a <a class="js-universal" href="/download/economizze-universal.apk" download style="color:var(--brand)">versão compatível com todos os celulares</a>, que é maior.</p>
+          <p>O download principal é otimizado para os celulares atuais (processador de 64 bits) e por isso é bem mais leve. Em aparelhos mais antigos ou de entrada, baixe a <a class="js-universal" href="/download/economizze-universal.apk" download style="color:var(--accent)">versão compatível com todos os celulares</a>, que é maior.</p>
         </details>
         <details>
           <summary>Tem para iPhone?</summary>
-          <p>Ainda não há app para iPhone, mas você pode usar o Economizze pelo navegador, em <a href="/app/" style="color:var(--brand)">economizze.tech/app</a>, com a mesma conta.</p>
+          <p>Ainda não há app para iPhone, mas você pode usar o Economizze pelo navegador, em <a href="/app/" style="color:var(--accent)">economizze.tech/app</a>, com a mesma conta.</p>
+        </details>
+        <details>
+          <summary>Serve para quem é MEI ou tem CNPJ?</summary>
+          <p>Sim. Crie um perfil de empresa e troque entre ele e o pessoal no topo do app. Cada perfil tem as próprias contas e categorias (vendas, DAS, fornecedores, pró-labore). Para o MEI, o app mostra quanto você já faturou no ano, a projeção até dezembro e quanto ainda dá para faturar por mês sem passar do teto.</p>
+        </details>
+        <details>
+          <summary>De onde vem a comparação com a minha idade?</summary>
+          <p>Dos dados públicos da PNAD Contínua, do IBGE: a renda de todos os trabalhos das pessoas ocupadas, por faixa de idade e região. As suas respostas ficam na sua conta; nada é enviado ao IBGE.</p>
         </details>
         <details>
           <summary>Preciso informar dados do meu banco?</summary>
@@ -365,7 +394,7 @@
         </details>
         <details>
           <summary>O que a inteligência artificial vê?</summary>
-          <p>Só quando você pede uma análise ou faz uma pergunta, um resumo do mês (totais, categorias e maiores gastos) é enviado ao serviço de IA. Seu nome e seu e-mail não são enviados. Os detalhes estão na <a href="privacidade.html" style="color:var(--brand)">política de privacidade</a>.</p>
+          <p>Só quando você pede uma análise ou faz uma pergunta, um resumo do mês (totais, categorias e maiores gastos) e, se você respondeu, sua idade, estado e fontes de renda vão para o serviço de IA. Seu nome, seu e-mail e o nome da sua empresa não são enviados. São até 20 perguntas por dia. Os detalhes estão na <a href="privacidade.html" style="color:var(--accent)">política de privacidade</a>.</p>
         </details>
         <details>
           <summary>Consigo levar meus dados para uma planilha?</summary>

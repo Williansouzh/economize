@@ -9,12 +9,12 @@
   <style>
     :root {
       --bg: #f3f6f5; --card: #ffffff; --text: #1a1f1d; --muted: #5b6662;
-      --brand: #00a86b; --border: #dfe6e3; --warn-bg: #fff7e6; --warn-border: #f5c56b;
+      --brand: #0c7a68; --border: #dfe6e3; --warn-bg: #fff7e6; --warn-border: #f5c56b;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #101413; --card: #1a201e; --text: #e7ecea; --muted: #a3aeaa;
-        --brand: #2fd08f; --border: #2c3532; --warn-bg: #2a2416; --warn-border: #8a6a28;
+        --brand: #c5f04a; --border: #2c3532; --warn-bg: #2a2416; --warn-border: #8a6a28;
       }
     }
     * { box-sizing: border-box; }
@@ -52,7 +52,7 @@
   <header>
     <a class="brand" href="/">Economizze</a>
     <h1>Política de Privacidade</h1>
-    <p class="updated">Última atualização: 20 de outubro de 2026</p>
+    <p class="updated">Última atualização: 24 de outubro de 2026</p>
   </header>
 
   <section>
@@ -103,6 +103,29 @@
       O app <strong>não</strong> se conecta ao seu banco e não pede dados bancários, de cartão ou senhas de
       banco. Tudo o que está no Economizze foi digitado, importado ou confirmado por você, ou enviado por você
       ao assistente.
+    </p>
+
+    <h3>Sobre você (opcional)</h3>
+    <p>
+      No início, e quando quiser em "Sobre você", o app pergunta o <strong>ano de nascimento, o estado onde você
+      mora, de onde vem sua renda</strong> (por exemplo, carteira assinada, autônomo, MEI, aposentadoria),
+      <strong>quantos trabalhos você tem, a renda mensal aproximada e o seu objetivo</strong>. Tudo é opcional.
+      Usamos essas respostas para comparar a sua renda com a de quem tem a mesma idade no Brasil (a partir de
+      dados públicos do IBGE, sem enviar nada seu ao IBGE) e para deixar as análises e dicas mais certeiras.
+    </p>
+
+    <h3>Perfil de empresa (opcional)</h3>
+    <p>
+      Se você criar um perfil de empresa (PJ ou MEI), guardamos o <strong>nome da empresa, o CNPJ, se você
+      informar, e se ela é MEI</strong>, além das contas, categorias e lançamentos desse perfil, separados dos
+      pessoais. Com eles calculamos, por exemplo, o faturamento do ano em relação ao teto do MEI.
+    </p>
+
+    <h3>Uso da inteligência artificial</h3>
+    <p>
+      Para limitar o uso diário da IA, contamos quantas perguntas e análises você fez em cada dia. Também
+      guardamos a última análise do mês gerada pela IA, para mostrá-la de novo sem chamar a IA enquanto seus
+      dados não mudarem. Ela é apagada junto com a conta ou o perfil.
     </p>
 
     <h3>Extratos importados (opcional)</h3>
@@ -191,8 +214,10 @@
     <ul>
       <li><strong>Insights e "Pergunte à IA", no app:</strong> um resumo do mês, com saldo, totais de receitas e
         despesas do mês e do mês anterior, gastos por categoria, orçamentos e as 10 maiores despesas do mês
-        (data, descrição, categoria e valor), além da sua pergunta. <strong>Seu nome, seu e-mail e os nomes das
-        suas contas não são enviados.</strong></li>
+        (data, descrição, categoria e valor), além da sua pergunta. Se você respondeu o "Sobre você", vão também
+        a sua idade, o estado, as fontes de renda, o número de trabalhos, o objetivo e a comparação da sua renda
+        com a da sua faixa de idade. No perfil de empresa, vão os números da empresa e o faturamento do ano.
+        <strong>Seu nome, seu e-mail, o nome e o CNPJ da empresa e os nomes das suas contas não são enviados.</strong></li>
       <li><strong>Importação de extrato em PDF:</strong> o texto extraído do PDF, para identificar os
         lançamentos. Arquivos OFX e CSV não são enviados à IA, e os avisos do banco no celular também não.</li>
       <li><strong>Assistente no WhatsApp:</strong> o texto das suas mensagens (incluindo o texto transcrito de
