@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/playful.dart';
 import 'transaction_form_screen.dart';
 
 const _goalIcons = <String, IconData>{
@@ -34,17 +37,14 @@ class GoalsSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(child: Text('Metas', style: Theme.of(context).textTheme.titleLarge)),
-            TextButton.icon(
-              onPressed: () => showGoalSheet(context),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Nova meta'),
-            ),
-          ],
+        SectionHeader(
+          'Suas metas',
+          action: TextButton.icon(
+            onPressed: () => showGoalSheet(context),
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: const Text('Nova meta'),
+          ),
         ),
-        const SizedBox(height: 8),
         FutureBuilder<List<Goal>>(
           // revision no key: depois de salvar, busca de novo.
           key: ValueKey(state.revision),
@@ -60,13 +60,15 @@ class GoalsSection extends StatelessWidget {
             }
             if (goals.isEmpty) {
               return Card(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: () => showGoalSheet(context),
-                  child: const EmptyState(
-                    icon: Icons.flag_outlined,
-                    title: 'Qual é o seu próximo sonho?',
-                    message: 'Crie uma meta, como "Viagem de férias: R\$ 5.000 até dezembro", e acompanhe quanto já guardou.',
+                child: EmptyState(
+                  icon: Icons.flag_outlined,
+                  mascot: true,
+                  title: 'Qual é o seu próximo sonho?',
+                  message: 'Crie uma meta, como "Viagem de férias: R\$ 5.000 até dezembro", e eu calculo quanto guardar por mês.',
+                  action: FilledButton.icon(
+                    onPressed: () => showGoalSheet(context),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Criar meta'),
                   ),
                 ),
               );
@@ -89,13 +91,13 @@ class _GoalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = hexColor(g.color);
+    final color = tintOf(context, g.color);
     final cs = Theme.of(context).colorScheme;
     final hint = g.reached
         ? 'Meta batida! 🎉'
         : g.monthlyNeeded != null
-        ? 'Guarde ${money(g.monthlyNeeded!)} por mês até ${DateFormat('MMM/yy', 'pt_BR').format(g.deadline!)}'
-        : 'Faltam ${money(g.target - g.saved)}';
+        ? 'Guarde ${perMonth(g.monthlyNeeded!)} até ${DateFormat('MMM/yy', 'pt_BR').format(g.deadline!)}'
+        : 'Faltam ${moneyShort(g.target - g.saved)}';
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -114,38 +116,23 @@ class _GoalCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(g.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                        Text(
-                          '${money(g.saved)} de ${money(g.target)}',
-                          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-                        ),
+                        Text('${moneyShort(g.saved)} de ${moneyShort(g.target)}', style: Theme.of(context).textTheme.bodySmall),
                       ],
                     ),
                   ),
-                  Text(
-                    '${(g.progress * 100).round()}%',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color),
-                  ),
+                  Text('${(g.progress * 100).round()}%', style: valueStyle.copyWith(fontSize: 18)),
                 ],
               ),
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: LinearProgressIndicator(
-                  value: g.progress,
-                  minHeight: 10,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: .14),
-                ),
-              ),
+              StatusBar(value: g.progress, color: g.reached ? context.colors.success : color, height: 10),
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Expanded(
-                    child: Text(hint, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                  ),
-                  FilledButton.tonalIcon(
+                  Expanded(child: Text(hint, style: Theme.of(context).textTheme.bodySmall)),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(0, 44), foregroundColor: cs.primary),
                     onPressed: () => _deposit(context, g),
-                    icon: const Icon(Icons.add, size: 18),
+                    icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('Guardar'),
                   ),
                 ],
@@ -158,61 +145,70 @@ class _GoalCard extends StatelessWidget {
   }
 }
 
-/// Guardar ou retirar dinheiro da meta.
+/// Guardar ou retirar dinheiro da meta, numa folha de baixo.
 Future<void> _deposit(BuildContext context, Goal g) async {
   final state = context.read<AppState>();
   final amount = TextEditingController();
   var withdraw = false;
-  final ok = await showDialog<bool>(
-    context: context,
+  final ok = await showAppSheet<bool>(
+    context,
     builder: (c) => StatefulBuilder(
-      builder: (c, setLocal) => AlertDialog(
-        title: Text(g.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: false, label: Text('Guardar')),
-                ButtonSegment(value: true, label: Text('Retirar')),
-              ],
-              selected: {withdraw},
-              onSelectionChanged: (s) => setLocal(() => withdraw = s.first),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: amount,
-              autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [MoneyInputFormatter()],
-              decoration: const InputDecoration(labelText: 'Valor', prefixText: 'R\$ '),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Isso só registra a meta: não mexe no saldo das suas contas.',
-              style: TextStyle(fontSize: 12, color: Theme.of(c).colorScheme.onSurfaceVariant),
-            ),
-          ],
+      builder: (c, setLocal) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SheetTitle(g.name),
+        PillSegments(
+          labels: const ['Guardar', 'Retirar'],
+          selected: withdraw ? 1 : 0,
+          onChanged: (i) => setLocal(() => withdraw = i == 1),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Confirmar')),
-        ],
-      ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: amount,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [MoneyInputFormatter()],
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+          decoration: const InputDecoration(labelText: 'Valor', prefixText: 'R\$ '),
+        ),
+        const SizedBox(height: 8),
+        Text('Isso só registra a meta: não mexe no saldo das suas contas.', style: Theme.of(c).textTheme.bodySmall),
+        const SizedBox(height: 16),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(withdraw ? 'Retirar da meta' : 'Guardar na meta')),
+      ]),
     ),
   );
   final value = parseAmount(amount.text);
   if (ok != true || value == null || value <= 0) return;
   try {
     final updated = await state.api.depositGoal(g.id, withdraw ? -value : value);
+    HapticFeedback.lightImpact();
     state.dataChanged();
-    if (updated.reached && !g.reached && context.mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('🎉 Parabéns! Você completou a meta "${g.name}"!')));
-    }
+    if (updated.reached && !g.reached && context.mounted) _celebrateGoal(context, g.name);
   } catch (e) {
     if (context.mounted) showError(context, e);
   }
+}
+
+/// Meta batida: o Cofrinho comemora.
+void _celebrateGoal(BuildContext context, String name) {
+  HapticFeedback.heavyImpact();
+  showModalBottomSheet(
+    context: context,
+    builder: (c) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const MascotAvatar(size: 120, pose: MascotPose.celebrating, bounce: true),
+          const SizedBox(height: 16),
+          Text('Meta batida! 🎉', style: Theme.of(c).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text('Você completou "$name". Que tal escolher o próximo sonho?',
+              textAlign: TextAlign.center, style: TextStyle(color: Theme.of(c).colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 20),
+          SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Uhul!'))),
+        ]),
+      ),
+    ),
+  );
 }
 
 /// Cria ou edita uma meta.
@@ -235,7 +231,7 @@ class _GoalSheetState extends State<_GoalSheet> {
   late final _target = TextEditingController(text: widget.editing == null ? null : amountText(widget.editing!.target));
   late DateTime? _deadline = widget.editing?.deadline;
   late String _icon = widget.editing?.icon ?? 'savings';
-  late String _color = widget.editing?.color ?? categoryColors.first;
+  late String _color = widget.editing?.color ?? categoryColors[3];
   bool _saving = false;
 
   Future<void> _save() async {
@@ -273,7 +269,7 @@ class _GoalSheetState extends State<_GoalSheet> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: expenseColor),
+            style: FilledButton.styleFrom(backgroundColor: c.colors.expense, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
             child: const Text('Excluir'),
           ),
@@ -293,7 +289,7 @@ class _GoalSheetState extends State<_GoalSheet> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final color = hexColor(_color);
+    final color = tintOf(context, _color);
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SingleChildScrollView(
@@ -306,7 +302,7 @@ class _GoalSheetState extends State<_GoalSheet> {
                 Expanded(child: Text(widget.editing == null ? 'Nova meta' : 'Editar meta', style: text.titleLarge)),
                 if (widget.editing != null)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, color: expenseColor),
+                    icon: Icon(Icons.delete_outline_rounded, color: context.colors.expense),
                     onPressed: _delete,
                   ),
               ],
@@ -354,35 +350,15 @@ class _GoalSheetState extends State<_GoalSheet> {
                   InkWell(
                     borderRadius: BorderRadius.circular(14),
                     onTap: () => setState(() => _icon = e.key),
-                    child: IconBadge(e.value, e.key == _icon ? color : Colors.grey, size: 46, solid: e.key == _icon),
+                    child: IconBadge(e.value, e.key == _icon ? color : Theme.of(context).colorScheme.onSurfaceVariant,
+                        size: 46, solid: e.key == _icon),
                   ),
               ],
             ),
             const SizedBox(height: 16),
             Text('Cor', style: text.labelLarge),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final c in categoryColors)
-                  GestureDetector(
-                    onTap: () => setState(() => _color = c),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: hexColor(c),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: c == _color ? Theme.of(context).colorScheme.onSurface : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            PaletteColorPicker(selected: _color, onChanged: (c) => setState(() => _color = c)),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _saving ? null : _save,

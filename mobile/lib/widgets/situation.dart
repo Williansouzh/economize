@@ -1,24 +1,28 @@
 import 'package:flutter/material.dart';
 
-import '../utils/format.dart';
+import '../theme.dart';
 
-/// Cor, ícone e rótulo de cada situação da análise (RN-46).
-({Color color, IconData icon, String label}) situationStyle(String status) => switch (status) {
-      'otimo' => (color: incomeColor, icon: Icons.rocket_launch_rounded, label: 'Ótimo'),
-      'bom' => (color: incomeColor, icon: Icons.thumb_up_alt_rounded, label: 'No azul'),
-      'atencao' => (color: warningColor, icon: Icons.error_outline_rounded, label: 'Atenção'),
-      'critico' => (color: expenseColor, icon: Icons.trending_down_rounded, label: 'No vermelho'),
-      'acima' => (color: incomeColor, icon: Icons.trending_up_rounded, label: 'Acima da média'),
-      'na_media' => (color: const Color(0xFF3B82F6), icon: Icons.balance_rounded, label: 'Na média'),
-      'abaixo' => (color: warningColor, icon: Icons.south_east_rounded, label: 'Abaixo da média'),
-      _ => (color: Colors.blueGrey, icon: Icons.hourglass_empty_rounded, label: 'Sem dados'),
-    };
+/// Cor, ícone e rótulo de cada situação da análise (RN-46). O ponto de partida não tem ranking
+/// negativo: quem ganha menos que a maioria vê "Seu ponto de partida", não "abaixo da média".
+({Color color, IconData icon, String label}) situationStyle(BuildContext context, String status) {
+  final c = context.colors;
+  return switch (status) {
+    'otimo' => (color: c.success, icon: Icons.rocket_launch_rounded, label: 'Ótimo'),
+    'bom' => (color: c.success, icon: Icons.thumb_up_alt_rounded, label: 'No azul'),
+    'atencao' => (color: c.warning, icon: Icons.error_outline_rounded, label: 'Atenção'),
+    'critico' => (color: c.expense, icon: Icons.trending_down_rounded, label: 'No vermelho'),
+    'acima' => (color: c.success, icon: Icons.trending_up_rounded, label: 'Acima da maioria'),
+    'na_media' => (color: c.info, icon: Icons.balance_rounded, label: 'No meio do caminho'),
+    'abaixo' => (color: c.info, icon: Icons.flag_rounded, label: 'Ponto de partida'),
+    _ => (color: Theme.of(context).colorScheme.onSurfaceVariant, icon: Icons.hourglass_empty_rounded, label: 'Sem dados'),
+  };
+}
 
-Color toneColor(String tone) => switch (tone) {
-      'good' => incomeColor,
-      'warn' => warningColor,
-      'bad' => expenseColor,
-      _ => const Color(0xFF3B82F6),
+Color toneColor(BuildContext context, String tone) => switch (tone) {
+      'good' => context.colors.success,
+      'warn' => context.colors.warning,
+      'bad' => context.colors.expense,
+      _ => context.colors.info,
     };
 
 /// Ícones usados pela API nos pontos da análise.

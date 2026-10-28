@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'transaction_form_screen.dart';
@@ -35,7 +36,7 @@ class _AccountSheetState extends State<_AccountSheet> {
     text: amountText(_tracksBalance ? widget.editing!.balance : widget.editing?.initialBalance ?? 0),
   );
   late String _icon = widget.editing?.icon ?? (widget.card ? 'credit_card' : 'account_balance');
-  late String _color = widget.editing?.color ?? accountColors.first;
+  late String _color = widget.editing?.color ?? accountColors[3];
   late bool _isCard = widget.editing?.isCard ?? widget.card;
   late final _limit = TextEditingController(text: widget.editing?.creditLimit == null ? null : amountText(widget.editing!.creditLimit!));
   late int _closingDay = widget.editing?.closingDay ?? 1;
@@ -88,14 +89,14 @@ class _AccountSheetState extends State<_AccountSheet> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        icon: const Icon(Icons.delete_outline, color: expenseColor),
+        icon: Icon(Icons.delete_outline_rounded, color: c.colors.expense),
         title: Text('Excluir "${widget.editing!.name}"?'),
         content: Text('Todos os lançamentos e transferências d$what também serão apagados. '
             'Isso não pode ser desfeito.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: expenseColor),
+            style: FilledButton.styleFrom(backgroundColor: c.colors.expense, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
             child: const Text('Excluir'),
           ),
@@ -117,8 +118,7 @@ class _AccountSheetState extends State<_AccountSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final color = hexColor(_color);
-    final fg = onColor(color);
+    final color = tintOf(context, _color);
     final text = Theme.of(context).textTheme;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -132,7 +132,7 @@ class _AccountSheetState extends State<_AccountSheet> {
               (true, true) => 'Novo cartão de crédito',
               (false, false) => 'Editar conta',
               (false, true) => 'Editar cartão',
-            }, style: text.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+            }, style: text.titleLarge),
             const SizedBox(height: 12),
             SegmentedButton<bool>(
               segments: const [
@@ -147,32 +147,16 @@ class _AccountSheetState extends State<_AccountSheet> {
               }),
             ),
             const SizedBox(height: 16),
-            // Prévia de como a conta aparece na tela inicial.
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  colors: [color, Color.lerp(color, Colors.black, .25)!],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            // Prévia de como a conta aparece no Início.
+            Card(
+              child: ListTile(
+                minTileHeight: 64,
+                leading: IconBadge(accountIcon(_icon), color),
+                title: ValueListenableBuilder(
+                  valueListenable: _name,
+                  builder: (_, v, _) => Text(v.text.isEmpty ? 'Nome da conta' : v.text),
                 ),
-              ),
-              child: Row(
-                children: [
-                  Icon(accountIcon(_icon), color: fg, size: 32),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: ValueListenableBuilder(
-                      valueListenable: _name,
-                      builder: (_, v, _) => Text(
-                        v.text.isEmpty ? 'Nome da conta' : v.text,
-                        style: text.titleMedium?.copyWith(color: fg, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ),
-                ],
+                subtitle: Text(_isCard ? 'Cartão de crédito' : 'Conta'),
               ),
             ),
             const SizedBox(height: 20),
@@ -210,10 +194,7 @@ class _AccountSheetState extends State<_AccountSheet> {
                 ],
               ),
               const SizedBox(height: 6),
-              Text(
-                'Compras a partir do dia do fechamento entram na fatura seguinte.',
-                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+              Text('Compras a partir do dia do fechamento entram na fatura seguinte.', style: text.bodySmall),
             ] else
               TextField(
                 controller: _balance,
@@ -244,30 +225,7 @@ class _AccountSheetState extends State<_AccountSheet> {
             const SizedBox(height: 20),
             Text('Cor', style: text.labelLarge),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final c in accountColors)
-                  GestureDetector(
-                    onTap: () => setState(() => _color = c),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: hexColor(c),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: c == _color ? Theme.of(context).colorScheme.onSurface : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                      child: c == _color ? Icon(Icons.check, color: onColor(hexColor(c)), size: 20) : null,
-                    ),
-                  ),
-              ],
-            ),
+            PaletteColorPicker(selected: _color, onChanged: (c) => setState(() => _color = c)),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _saving ? null : _save,
@@ -278,7 +236,7 @@ class _AccountSheetState extends State<_AccountSheet> {
             if (widget.editing != null) ...[
               const SizedBox(height: 8),
               TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: expenseColor),
+                style: TextButton.styleFrom(foregroundColor: context.colors.expense),
                 onPressed: _saving ? null : _delete,
                 icon: const Icon(Icons.delete_outline),
                 label: Text(_isCard ? 'Excluir cartão' : 'Excluir conta'),

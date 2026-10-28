@@ -76,6 +76,7 @@ class _FinancasAppState extends State<FinancasApp> {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
+      themeMode: state.themeMode,
       home: AnimatedSwitcher(duration: const Duration(milliseconds: 400), child: home),
     );
   }

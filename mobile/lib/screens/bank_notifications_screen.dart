@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../services/bank_notifications.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'import_screen.dart';
@@ -91,7 +92,7 @@ class _BankNotificationsScreenState extends State<BankNotificationsScreen> with 
               padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
               children: [
                 if (!_enabled!) ...[
-                  const Center(child: IconBadge(Icons.notifications_active_outlined, Color(0xFF00875A), size: 72)),
+                  Center(child: IconBadge(Icons.notifications_active_outlined, Theme.of(context).colorScheme.primary, size: 72)),
                   const SizedBox(height: 16),
                   Text(
                     'Lance seus gastos sem digitar',
@@ -145,7 +146,7 @@ class _BankNotificationsScreenState extends State<BankNotificationsScreen> with 
                 ] else ...[
                   Card(
                     child: ListTile(
-                      leading: const Icon(Icons.check_circle, color: incomeColor),
+                      leading: Icon(Icons.check_circle_rounded, color: context.colors.success),
                       title: const Text('Ativado'),
                       subtitle: const Text('Novas compras e Pix do banco aparecem aqui'),
                       trailing: TextButton(
@@ -215,7 +216,7 @@ class _BankGroup extends StatelessWidget {
                       '${d.line!.amount < 0 ? '-' : '+'}${money(d.line!.amount.abs())}',
                       style: TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: d.line!.amount < 0 ? expenseColor : incomeColor,
+                        color: d.line!.amount < 0 ? Theme.of(context).colorScheme.onSurface : context.colors.income,
                       ),
                     ),
                     const SizedBox(width: 8),

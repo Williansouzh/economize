@@ -1,40 +1,33 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../config.dart';
 import '../services/app_icon.dart';
 import '../services/bank_notifications.dart';
-import '../services/reminders.dart';
 import '../state/app_state.dart';
-import '../utils/save_file.dart';
-import '../widgets/common.dart';
-import 'achievements_screen.dart';
-import 'admin_screen.dart';
-import 'analysis_screen.dart';
+import '../theme.dart';
 import 'bank_notifications_screen.dart';
 import 'budgets_screen.dart';
-import 'categories_screen.dart';
 import 'dashboard_screen.dart';
-import 'delete_account_screen.dart';
-import 'import_screen.dart';
-import 'profiles_screen.dart';
 import 'insights_screen.dart';
-import 'reminders_screen.dart';
+import 'profile_screen.dart';
 import 'search_screen.dart';
 import 'transaction_form_screen.dart';
 import 'transactions_screen.dart';
-import 'whatsapp_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _index = 0;
+
+  /// Abre uma aba de fora da barra (ex.: "Ajustar orçamento" na IA leva para Planejar).
+  static void openTab(BuildContext context, int index) =>
+      context.findAncestorStateOfType<HomeScreenState>()?._select(index);
 
   @override
   void initState() {
@@ -63,10 +56,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // Android: o ícone troca quando o app sai da frente (RN-49).
     if (s == AppLifecycleState.paused && AppIcon.changeOnPause) context.read<AppState>().applyPendingIcon();
   }
+
   // As abas só são montadas (e carregam dados) na primeira vez em que são abertas.
   final _visited = {0};
 
-  static const _titles = ['Visão geral', 'Lançamentos', 'Insights IA', 'Planejamento'];
+  static const _titles = ['Início', 'Lançamentos', 'IA', 'Planejar'];
   static const _pages = [DashboardScreen(), TransactionsScreen(), InsightsScreen(), BudgetsScreen()];
 
   String get _greeting {
@@ -74,41 +68,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return h < 12 ? 'Bom dia' : (h < 18 ? 'Boa tarde' : 'Boa noite');
   }
 
-  Future<void> _logoutEverywhere() async {
-    final state = context.read<AppState>();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        icon: const Icon(Icons.devices_outlined),
-        title: const Text('Sair de todos os aparelhos?'),
-        content: const Text(
-            'Sua conta será desconectada em todos os celulares e navegadores, inclusive neste. '
-            'Use se perdeu um aparelho ou entrou em um computador de outra pessoa.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sair de todos')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await state.logoutEverywhere();
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
-  }
-
-  Future<void> _export() async {
-    final state = context.read<AppState>();
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(const SnackBar(content: Text('Gerando a planilha...')));
-    try {
-      final bytes = await state.api.exportCsv();
-      final today = DateTime.now().toIso8601String().substring(0, 10);
-      await saveFile(bytes, 'economizze-$today.csv', 'text/csv');
-    } catch (e) {
-      if (mounted) showError(context, e);
-    }
+  void _select(int i) {
+    if (i == _index) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _index = i;
+      _visited.add(i);
+    });
   }
 
   @override
@@ -120,173 +86,196 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 68,
-        title: _index == 0
-            ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('$_greeting${firstName.isEmpty ? '' : ','}',
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
-                Text(firstName.isEmpty ? 'Economizze' : firstName),
-              ])
-            : Text(_titles[_index]),
+        toolbarHeight: 64,
+        titleSpacing: 16,
+        title: Text(_index == 0 ? (firstName.isEmpty ? _greeting : '$_greeting, $firstName') : _titles[_index]),
         actions: [
-          // Com um perfil de empresa, o seletor fica no topo de todas as abas (RN-47).
-          if (state.profiles.length > 1) const ProfileSwitcher() else if (_index == 0) const StreakChip(),
+          if (_index == 0) const StreakPill(),
           if (_index == 1)
             IconButton(
               tooltip: 'Buscar',
-              icon: const Icon(Icons.search),
+              icon: const Icon(Icons.search_rounded),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
             ),
           const SizedBox(width: 8),
           Padding(
             padding: const EdgeInsets.only(right: 12),
-            child: PopupMenuButton<String>(
-              tooltip: 'Conta',
-              position: PopupMenuPosition.under,
-              onSelected: (v) => switch (v) {
-                'logout' => state.logout(),
-                'logout_all' => _logoutEverywhere(),
-                'whatsapp' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const WhatsAppScreen())),
-                'situation' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalysisScreen())),
-                'about' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen())),
-                'profiles' => showProfileSheet(context),
-                'icon' => state.setDynamicIcon(!state.dynamicIcon),
-                'categories' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const CategoriesScreen())),
-                'achievements' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const AchievementsScreen())),
-                'reminders' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const RemindersScreen())),
-                'export' => _export(),
-                'admin' => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminScreen())),
-                'import' => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImportScreen())),
-                'bank' => Navigator.push(context, MaterialPageRoute(builder: (_) => const BankNotificationsScreen())),
-                'privacy' => launchUrl(Uri.parse(privacyPolicyUrl), mode: LaunchMode.externalApplication),
-                'reset' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen(resetOnly: true))),
-                'delete' => Navigator.push(
-                    context, MaterialPageRoute(builder: (_) => const DeleteAccountScreen())),
-                _ => null,
-              },
-              itemBuilder: (_) => [
-                PopupMenuItem(enabled: false, child: Text(name.isEmpty ? 'Minha conta' : name)),
-                const PopupMenuDivider(),
-                if (state.isAdmin)
-                  const PopupMenuItem(
-                    value: 'admin',
-                    child: ListTile(leading: Icon(Icons.insights_outlined), title: Text('Painel do admin')),
-                  ),
-                const PopupMenuItem(
-                  value: 'situation',
-                  child: ListTile(leading: Icon(Icons.monitor_heart_outlined), title: Text('Minha situação')),
+            child: Semantics(
+              button: true,
+              label: 'Perfil e ajustes',
+              excludeSemantics: true,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: cs.primaryContainer,
+                  child: Text(name.isEmpty ? '?' : name[0].toUpperCase(),
+                      style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w800, fontSize: 18)),
                 ),
-                const PopupMenuItem(
-                  value: 'about',
-                  child: ListTile(leading: Icon(Icons.person_outline), title: Text('Sobre você')),
-                ),
-                PopupMenuItem(
-                  value: 'profiles',
-                  child: ListTile(
-                    leading: const Icon(Icons.storefront_outlined),
-                    title: Text(state.profiles.length > 1 ? 'Trocar de perfil' : 'Perfil de empresa (PJ/MEI)'),
-                  ),
-                ),
-                if (AppIcon.supported)
-                  CheckedPopupMenuItem(
-                    value: 'icon',
-                    checked: state.dynamicIcon,
-                    child: const Text('Ícone que muda com o mês'),
-                  ),
-                const PopupMenuItem(
-                  value: 'categories',
-                  child: ListTile(leading: Icon(Icons.category_outlined), title: Text('Categorias')),
-                ),
-                const PopupMenuItem(
-                  value: 'achievements',
-                  child: ListTile(leading: Icon(Icons.emoji_events_outlined), title: Text('Conquistas')),
-                ),
-                if (Reminders.supported)
-                  const PopupMenuItem(
-                    value: 'reminders',
-                    child: ListTile(leading: Icon(Icons.notifications_outlined), title: Text('Lembretes')),
-                  ),
-                const PopupMenuItem(
-                  value: 'import',
-                  child: ListTile(leading: Icon(Icons.upload_file_outlined), title: Text('Importar extrato')),
-                ),
-                if (BankNotifications.supported)
-                  const PopupMenuItem(
-                    value: 'bank',
-                    child: ListTile(leading: Icon(Icons.bolt_outlined), title: Text('Gastos do banco')),
-                  ),
-                const PopupMenuItem(
-                  value: 'export',
-                  child: ListTile(leading: Icon(Icons.table_view_outlined), title: Text('Exportar planilha')),
-                ),
-                const PopupMenuItem(
-                  value: 'whatsapp',
-                  child: ListTile(leading: Icon(Icons.chat_outlined), title: Text('Conectar WhatsApp')),
-                ),
-                const PopupMenuItem(
-                  value: 'privacy',
-                  child: ListTile(leading: Icon(Icons.shield_outlined), title: Text('Política de privacidade')),
-                ),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: ListTile(leading: Icon(Icons.logout), title: Text('Sair')),
-                ),
-                const PopupMenuItem(
-                  value: 'logout_all',
-                  child: ListTile(leading: Icon(Icons.devices_outlined), title: Text('Sair de todos os aparelhos')),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'reset',
-                  child: ListTile(leading: Icon(Icons.restart_alt), title: Text('Começar do zero')),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: ListTile(
-                    leading: Icon(Icons.delete_forever_outlined, color: Color(0xFFE5484D)),
-                    title: Text('Excluir minha conta', style: TextStyle(color: Color(0xFFE5484D))),
-                  ),
-                ),
-              ],
-              child: CircleAvatar(
-                radius: 20,
-                backgroundColor: cs.primaryContainer,
-                child: Text(name.isEmpty ? '?' : name[0].toUpperCase(),
-                    style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w700)),
               ),
             ),
           ),
         ],
       ),
       body: IndexedStack(index: _index, children: [
-        for (var i = 0; i < _pages.length; i++) _visited.contains(i) ? _pages[i] : const SizedBox.shrink(),
+        for (var i = 0; i < _pages.length; i++)
+          _visited.contains(i) ? _FadeThroughTab(active: i == _index, child: _pages[i]) : const SizedBox.shrink(),
       ]),
-      floatingActionButton: _index <= 1
-          ? FloatingActionButton.extended(
-              onPressed: () => Navigator.push(
-                  context, MaterialPageRoute(builder: (_) => const TransactionFormScreen())),
-              icon: const Icon(Icons.add),
-              label: const Text('Lançar'),
-            )
-          : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() {
-          _index = i;
-          _visited.add(i);
-        }),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard), label: 'Início'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Lançamentos'),
-          NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'IA'),
-          NavigationDestination(icon: Icon(Icons.savings_outlined), selectedIcon: Icon(Icons.savings), label: 'Planejar'),
-        ],
+      bottomNavigationBar: _BottomBar(index: _index, onSelect: _select),
+    );
+  }
+}
+
+/// Troca de aba no padrão fade-through do Material (210 ms, easeOutCubic): a aba que entra aparece
+/// com fade e uma leve escala. Fica dentro do IndexedStack para cada aba manter a rolagem e o estado.
+class _FadeThroughTab extends StatefulWidget {
+  final bool active;
+  final Widget child;
+  const _FadeThroughTab({required this.active, required this.child});
+  @override
+  State<_FadeThroughTab> createState() => _FadeThroughTabState();
+}
+
+class _FadeThroughTabState extends State<_FadeThroughTab> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 210), value: 1);
+
+  @override
+  void didUpdateWidget(_FadeThroughTab old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !old.active) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeThroughTransition(
+        animation: CurvedAnimation(parent: _c, curve: Curves.easeOutCubic),
+        secondaryAnimation: kAlwaysDismissedAnimation,
+        fillColor: Colors.transparent,
+        child: widget.child,
+      );
+}
+
+/// Barra inferior: Início · Lançamentos · [Lançar] · IA · Planejar. O Lançar fica no centro, em todas
+/// as abas e sem cobrir conteúdo.
+class _BottomBar extends StatelessWidget {
+  final int index;
+  final ValueChanged<int> onSelect;
+  const _BottomBar({required this.index, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Widget item(int i, IconData icon, IconData selectedIcon, String label) {
+      final selected = i == index;
+      return Expanded(
+        child: Semantics(
+          selected: selected,
+          button: true,
+          label: label,
+          excludeSemantics: true,
+          onTap: () => onSelect(i),
+          child: InkWell(
+            onTap: () => onSelect(i),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 210),
+                curve: Curves.easeOutCubic,
+                width: selected ? 56 : 40,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: selected ? cs.primaryContainer : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(selected ? selectedIcon : icon,
+                    size: 24, color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 4),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: selected ? cs.onSurface : cs.onSurfaceVariant)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: cs.surface,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 76,
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: cs.outlineVariant))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            item(0, Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Início'),
+            item(1, Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Lançamentos'),
+            const Expanded(child: LaunchButton()),
+            item(2, Icons.auto_awesome_outlined, Icons.auto_awesome, 'IA'),
+            item(3, Icons.track_changes_outlined, Icons.track_changes_rounded, 'Planejar'),
+          ]),
+        ),
       ),
     );
+  }
+}
+
+/// O botão "Lançar": moeda lima da marca. Ao tocar, cresce e vira a tela de lançamento
+/// (container transform, 300 ms).
+class LaunchButton extends StatelessWidget {
+  const LaunchButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: context.isDark ? null : brandShadow,
+        ),
+        child: OpenContainer(
+          transitionDuration: const Duration(milliseconds: 300),
+          transitionType: ContainerTransitionType.fadeThrough,
+          closedColor: lima,
+          openColor: bg,
+          middleColor: bg,
+          closedElevation: 0,
+          openElevation: 0,
+          closedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          openBuilder: (_, _) => const TransactionFormScreen(),
+          tappable: false,
+          closedBuilder: (context, open) => Semantics(
+            button: true,
+            label: 'Lançar',
+            excludeSemantics: true,
+            onTap: open,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                open();
+              },
+              child: const SizedBox(width: 60, height: 44, child: Icon(Icons.add_rounded, color: tinta, size: 30)),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 4),
+      ExcludeSemantics(
+        child: Text('Lançar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: cs.onSurface)),
+      ),
+    ]);
   }
 }

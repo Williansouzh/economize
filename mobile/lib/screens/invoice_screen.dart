@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'account_sheet.dart';
@@ -107,8 +108,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final state = context.watch<AppState>();
     final account = state.accounts.where((a) => a.id == widget.account.id).firstOrNull ?? widget.account;
     final cs = Theme.of(context).colorScheme;
-    final color = hexColor(account.color);
-    final fg = onColor(color);
     final df = DateFormat("d 'de' MMM", 'pt_BR');
 
     return Scaffold(
@@ -125,11 +124,6 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransactionFormScreen())),
-        icon: const Icon(Icons.add),
-        label: const Text('Lançar'),
-      ),
       body: FutureBuilder<Invoice>(
         future: _future,
         builder: (context, snap) {
@@ -144,86 +138,64 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
               : 'Fechada · vence em ${df.format(inv.dueDate)}';
           final month = DateTime.parse('${inv.month}-01');
           return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
             children: [
-              Card(
-                child: Row(
-                  children: [
-                    IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _shift(inv, -1)),
-                    Expanded(
-                      child: Text(
-                        'Fatura de ${monthLabel(month)}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => _shift(inv, 1)),
-                  ],
-                ),
+              Row(
+                children: [
+                  IconButton(
+                      tooltip: 'Fatura anterior', icon: const Icon(Icons.chevron_left_rounded), onPressed: () => _shift(inv, -1)),
+                  Expanded(
+                    child: Text('Fatura de ${monthLabel(month)}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  IconButton(
+                      tooltip: 'Próxima fatura', icon: const Icon(Icons.chevron_right_rounded), onPressed: () => _shift(inv, 1)),
+                ],
               ),
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: LinearGradient(
-                    colors: [color, Color.lerp(color, Colors.black, .3)!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      status,
-                      style: TextStyle(color: fg.withValues(alpha: .85), fontWeight: FontWeight.w700),
-                    ),
+              // Bloco da fatura (como no Nubank): fecha em / vence em e a ação de pagar sempre à vista.
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(Space.xl),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    Row(children: [
+                      Expanded(child: Text(status, style: Theme.of(context).textTheme.bodySmall)),
+                      if (paid) StatusBadge('paga', background: cs.primaryContainer, foreground: cs.onPrimaryContainer),
+                    ]),
                     const SizedBox(height: 4),
-                    Text(
-                      money(inv.total),
-                      style: TextStyle(color: fg, fontSize: 32, fontWeight: FontWeight.w900),
-                    ),
+                    Text(money(inv.total), style: Theme.of(context).textTheme.displaySmall),
                     const SizedBox(height: 4),
                     Text(
                       'Vence em ${df.format(inv.dueDate)} · compras de ${df.format(inv.periodStart)} '
                       'a ${df.format(inv.closingDate.subtract(const Duration(days: 1)))}',
-                      style: TextStyle(color: fg.withValues(alpha: .8), fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                     if (inv.paid > 0) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        'Pago: ${money(inv.paid)}',
-                        style: TextStyle(color: fg, fontWeight: FontWeight.w700),
-                      ),
+                      Text('Pago: ${money(inv.paid)}', style: const TextStyle(fontWeight: FontWeight.w800)),
                     ],
                     if (account.creditLimit case final limit? when limit > 0) ...[
-                      const SizedBox(height: 14),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: ((-account.balance) / limit).clamp(0, 1),
-                          minHeight: 8,
-                          color: fg,
-                          backgroundColor: fg.withValues(alpha: .25),
-                        ),
+                      const SizedBox(height: 16),
+                      StatusBar(
+                        value: (-account.balance) / limit,
+                        color: context.colors.forProgress((-account.balance) / limit),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Limite livre: ${money((limit + account.balance).clamp(0, limit))} de ${money(limit)}',
-                        style: TextStyle(color: fg.withValues(alpha: .85), fontSize: 12),
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
-                    if (!inv.isOpen && inv.remaining > 0) ...[
+                    if (!paid) ...[
                       const SizedBox(height: 16),
                       FilledButton.icon(
-                        style: FilledButton.styleFrom(backgroundColor: fg, foregroundColor: color),
-                        onPressed: () => _pay(inv),
-                        icon: const Icon(Icons.price_check),
-                        label: Text('Pagar ${money(inv.remaining)}'),
+                        onPressed: !inv.isOpen && inv.remaining > 0 ? () => _pay(inv) : null,
+                        icon: const Icon(Icons.price_check_rounded),
+                        label: Text(inv.isOpen
+                            ? 'Pagar fatura · fecha em ${df.format(inv.closingDate)}'
+                            : 'Pagar ${money(inv.remaining)}'),
                       ),
                     ],
-                  ],
+                  ]),
                 ),
               ),
               const SizedBox(height: 16),
@@ -231,7 +203,7 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                 const EmptyState(
                   icon: Icons.credit_card,
                   title: 'Nenhuma compra nesta fatura',
-                  message: 'Lance uma despesa escolhendo este cartão em "Pago com".',
+                  message: 'Lance uma despesa e escolha este cartão como forma de pagamento.',
                 )
               else
                 Card(
@@ -240,19 +212,11 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
                     children: [
                       for (final (i, t) in inv.items.indexed) ...[
                         if (i > 0) const Divider(height: 1, indent: 72),
-                        TransactionTile(t, showDate: true),
+                        TransactionTile(t, showDate: true, hideAccount: true),
                       ],
                     ],
                   ),
                 ),
-              if (inv.isOpen) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'O botão de pagar aparece quando a fatura fecha.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                ),
-              ],
             ],
           );
         },

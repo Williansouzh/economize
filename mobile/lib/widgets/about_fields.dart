@@ -57,10 +57,83 @@ const mainGoals = {
   'aposentadoria': ('Pensar na aposentadoria', Icons.elderly_rounded),
 };
 
-const brazilStates = [
-  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
-  'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
-];
+/// Estados pelo nome (a sigla é o que vai para a API).
+const brazilStates = {
+  'AC': 'Acre', 'AL': 'Alagoas', 'AP': 'Amapá', 'AM': 'Amazonas', 'BA': 'Bahia', 'CE': 'Ceará',
+  'DF': 'Distrito Federal', 'ES': 'Espírito Santo', 'GO': 'Goiás', 'MA': 'Maranhão', 'MT': 'Mato Grosso',
+  'MS': 'Mato Grosso do Sul', 'MG': 'Minas Gerais', 'PA': 'Pará', 'PB': 'Paraíba', 'PR': 'Paraná',
+  'PE': 'Pernambuco', 'PI': 'Piauí', 'RJ': 'Rio de Janeiro', 'RN': 'Rio Grande do Norte',
+  'RS': 'Rio Grande do Sul', 'RO': 'Rondônia', 'RR': 'Roraima', 'SC': 'Santa Catarina', 'SP': 'São Paulo',
+  'SE': 'Sergipe', 'TO': 'Tocantins',
+};
+
+String _plain(String s) => s
+    .toLowerCase()
+    .replaceAll(RegExp('[áàâã]'), 'a')
+    .replaceAll(RegExp('[éê]'), 'e')
+    .replaceAll('í', 'i')
+    .replaceAll(RegExp('[óôõ]'), 'o')
+    .replaceAll('ú', 'u')
+    .replaceAll('ç', 'c');
+
+/// Lista de estados com busca pelo nome ou pela sigla.
+Future<String?> pickState(BuildContext context, {String? current}) => showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (c) {
+        var query = '';
+        return StatefulBuilder(builder: (c, setSheet) {
+          final items = brazilStates.entries
+              .where((e) => query.isEmpty || _plain(e.value).contains(_plain(query)) || e.key.toLowerCase() == query.toLowerCase())
+              .toList();
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(c).bottom),
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: TextField(
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: 'Buscar estado', prefixIcon: Icon(Icons.search_rounded)),
+                  onChanged: (v) => setSheet(() => query = v.trim()),
+                ),
+              ),
+              Expanded(
+                child: ListView(children: [
+                  for (final e in items)
+                    ListTile(
+                      title: Text(e.value),
+                      trailing: e.key == current
+                          ? Icon(Icons.check_rounded, color: Theme.of(c).colorScheme.primary)
+                          : Text(e.key, style: Theme.of(c).textTheme.bodySmall),
+                      onTap: () => Navigator.pop(c, e.key),
+                    ),
+                ]),
+              ),
+            ]),
+          );
+        });
+      },
+    );
+
+/// Renda abaixo de R\$ 500 costuma ser erro de digitação (ex.: "58" no lugar de "5.800").
+/// Pergunta antes de salvar; devolve false se a pessoa quiser corrigir.
+Future<bool> confirmLowIncome(BuildContext context, AboutDraft draft) async {
+  final v = draft.monthlyIncome;
+  if (v == null || v <= 0 || v >= 500) return true;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (c) => AlertDialog(
+      title: const Text('Confere?'),
+      content: Text('Você digitou ${money(v)} por mês. Se for ${money(v * 100)}, é só corrigir.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Corrigir')),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Está certo')),
+      ],
+    ),
+  );
+  return ok == true;
+}
 
 /// Idade (pelo ano de nascimento) e estado.
 class AgeFields extends StatelessWidget {
@@ -87,14 +160,25 @@ class AgeFields extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 16),
-      DropdownButtonFormField<String>(
-        initialValue: draft.state,
-        decoration: const InputDecoration(labelText: 'Estado onde você mora', prefixIcon: Icon(Icons.place_outlined)),
-        items: [for (final uf in brazilStates) DropdownMenuItem(value: uf, child: Text(uf))],
-        onChanged: (v) {
-          draft.state = v;
-          onChanged();
+      InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () async {
+          final uf = await pickState(context, current: draft.state);
+          if (uf != null) {
+            draft.state = uf;
+            onChanged();
+          }
         },
+        child: InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Estado onde você mora',
+            prefixIcon: Icon(Icons.place_outlined),
+            suffixIcon: Icon(Icons.expand_more_rounded),
+          ),
+          isEmpty: draft.state == null,
+          child: Text(draft.state == null ? '' : brazilStates[draft.state] ?? draft.state!,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        ),
       ),
     ]);
   }
@@ -113,7 +197,7 @@ class SourcesFields extends StatelessWidget {
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final MapEntry(key: id, value: label) in incomeSources.entries)
           FilterChip(
-            label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            label: Text(label),
             selected: draft.sources.contains(id),
             onSelected: (on) {
               on ? draft.sources.add(id) : draft.sources.remove(id);
@@ -174,8 +258,8 @@ class IncomeGoalFields extends StatelessWidget {
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final MapEntry(key: id, value: (label, icon)) in mainGoals.entries)
           ChoiceChip(
-            avatar: Icon(icon, size: 18),
-            label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            avatar: draft.goal == id ? null : Icon(icon, size: 18),
+            label: Text(label),
             selected: draft.goal == id,
             onSelected: (on) {
               draft.goal = on ? id : null;

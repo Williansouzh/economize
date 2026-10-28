@@ -96,34 +96,34 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     /// <summary>Categorias padrão criadas no cadastro do usuário (estilo Organizze).</summary>
     public static IEnumerable<Category> DefaultCategories(Guid userId) =>
     [
-        new() { UserId = userId, Name = "Alimentação", Type = TransactionType.Expense, Icon = "restaurant", Color = "#F44336" },
-        new() { UserId = userId, Name = "Moradia", Type = TransactionType.Expense, Icon = "home", Color = "#795548" },
-        new() { UserId = userId, Name = "Transporte", Type = TransactionType.Expense, Icon = "directions_car", Color = "#2196F3" },
-        new() { UserId = userId, Name = "Saúde", Type = TransactionType.Expense, Icon = "local_hospital", Color = "#E91E63" },
-        new() { UserId = userId, Name = "Educação", Type = TransactionType.Expense, Icon = "school", Color = "#3F51B5" },
-        new() { UserId = userId, Name = "Lazer", Type = TransactionType.Expense, Icon = "celebration", Color = "#FF9800" },
-        new() { UserId = userId, Name = "Compras", Type = TransactionType.Expense, Icon = "shopping_bag", Color = "#9C27B0" },
-        new() { UserId = userId, Name = "Assinaturas", Type = TransactionType.Expense, Icon = "subscriptions", Color = "#607D8B" },
-        new() { UserId = userId, Name = "Outros", Type = TransactionType.Expense, Icon = "more_horiz", Color = "#9E9E9E" },
-        new() { UserId = userId, Name = "Salário", Type = TransactionType.Income, Icon = "payments", Color = "#4CAF50" },
-        new() { UserId = userId, Name = "Freelance", Type = TransactionType.Income, Icon = "work", Color = "#009688" },
-        new() { UserId = userId, Name = "Investimentos", Type = TransactionType.Income, Icon = "trending_up", Color = "#8BC34A" },
-        new() { UserId = userId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#CDDC39" },
+        new() { UserId = userId, Name = "Alimentação", Type = TransactionType.Expense, Icon = "restaurant", Color = "#B55E43" },
+        new() { UserId = userId, Name = "Moradia", Type = TransactionType.Expense, Icon = "home", Color = "#A86B16" },
+        new() { UserId = userId, Name = "Transporte", Type = TransactionType.Expense, Icon = "directions_car", Color = "#3080BC" },
+        new() { UserId = userId, Name = "Saúde", Type = TransactionType.Expense, Icon = "local_hospital", Color = "#008E96" },
+        new() { UserId = userId, Name = "Educação", Type = TransactionType.Expense, Icon = "school", Color = "#6673C1" },
+        new() { UserId = userId, Name = "Lazer", Type = TransactionType.Expense, Icon = "celebration", Color = "#8B66B3" },
+        new() { UserId = userId, Name = "Compras", Type = TransactionType.Expense, Icon = "shopping_bag", Color = "#A85C90" },
+        new() { UserId = userId, Name = "Assinaturas", Type = TransactionType.Expense, Icon = "subscriptions", Color = "#607089" },
+        new() { UserId = userId, Name = "Outros", Type = TransactionType.Expense, Icon = "more_horiz", Color = "#668E93" },
+        new() { UserId = userId, Name = "Salário", Type = TransactionType.Income, Icon = "payments", Color = "#728426" },
+        new() { UserId = userId, Name = "Freelance", Type = TransactionType.Income, Icon = "work", Color = "#008E96" },
+        new() { UserId = userId, Name = "Investimentos", Type = TransactionType.Income, Icon = "trending_up", Color = "#3080BC" },
+        new() { UserId = userId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#668E93" },
     ];
 
     /// <summary>Categorias de um perfil de empresa (RN-47). "Pró-labore" é o que vai da empresa para a pessoa.</summary>
     public static IEnumerable<Category> BusinessCategories(Guid profileId) =>
     [
-        new() { UserId = profileId, Name = "DAS (imposto do MEI)", Type = TransactionType.Expense, Icon = "receipt_long", Color = "#607D8B" },
-        new() { UserId = profileId, Name = "Mercadorias e fornecedores", Type = TransactionType.Expense, Icon = "inventory_2", Color = "#795548" },
-        new() { UserId = profileId, Name = "Pró-labore", Type = TransactionType.Expense, Icon = "person", Color = "#0C7A68" },
-        new() { UserId = profileId, Name = "Ferramentas e software", Type = TransactionType.Expense, Icon = "build", Color = "#3F51B5" },
-        new() { UserId = profileId, Name = "Marketing", Type = TransactionType.Expense, Icon = "campaign", Color = "#FF9800" },
-        new() { UserId = profileId, Name = "Taxas e maquininha", Type = TransactionType.Expense, Icon = "credit_card", Color = "#9C27B0" },
-        new() { UserId = profileId, Name = "Transporte e entregas", Type = TransactionType.Expense, Icon = "local_shipping", Color = "#2196F3" },
-        new() { UserId = profileId, Name = "Outras despesas", Type = TransactionType.Expense, Icon = "more_horiz", Color = "#9E9E9E" },
-        new() { UserId = profileId, Name = "Vendas", Type = TransactionType.Income, Icon = "storefront", Color = "#4CAF50" },
-        new() { UserId = profileId, Name = "Serviços prestados", Type = TransactionType.Income, Icon = "handyman", Color = "#009688" },
-        new() { UserId = profileId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#CDDC39" },
+        new() { UserId = profileId, Name = "DAS (imposto do MEI)", Type = TransactionType.Expense, Icon = "receipt_long", Color = "#607089" },
+        new() { UserId = profileId, Name = "Mercadorias e fornecedores", Type = TransactionType.Expense, Icon = "inventory_2", Color = "#A86B16" },
+        new() { UserId = profileId, Name = "Pró-labore", Type = TransactionType.Expense, Icon = "person", Color = "#008E96" },
+        new() { UserId = profileId, Name = "Ferramentas e software", Type = TransactionType.Expense, Icon = "build", Color = "#6673C1" },
+        new() { UserId = profileId, Name = "Marketing", Type = TransactionType.Expense, Icon = "campaign", Color = "#A85C90" },
+        new() { UserId = profileId, Name = "Taxas e maquininha", Type = TransactionType.Expense, Icon = "credit_card", Color = "#8B66B3" },
+        new() { UserId = profileId, Name = "Transporte e entregas", Type = TransactionType.Expense, Icon = "local_shipping", Color = "#3080BC" },
+        new() { UserId = profileId, Name = "Outras despesas", Type = TransactionType.Expense, Icon = "more_horiz", Color = "#668E93" },
+        new() { UserId = profileId, Name = "Vendas", Type = TransactionType.Income, Icon = "storefront", Color = "#728426" },
+        new() { UserId = profileId, Name = "Serviços prestados", Type = TransactionType.Income, Icon = "handyman", Color = "#008E96" },
+        new() { UserId = profileId, Name = "Outras receitas", Type = TransactionType.Income, Icon = "attach_money", Color = "#668E93" },
     ];
 }

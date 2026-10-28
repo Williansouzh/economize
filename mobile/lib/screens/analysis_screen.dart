@@ -7,12 +7,14 @@ import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/about_fields.dart';
 import '../widgets/common.dart';
-import '../widgets/count_up.dart';
+import '../widgets/month_loader.dart';
 import '../widgets/playful.dart';
 import '../widgets/situation.dart';
+import 'dashboard_screen.dart';
 
-/// Situação financeira: a do mês (lançamentos) e o ponto de partida (questionário), comparado com
-/// a renda de quem tem a mesma idade no Brasil (RN-46). No perfil de empresa, só o mês e o teto do MEI.
+/// "Seu mês": a situação do mês (lançamentos + ritmo + o resumo do Cofrinho, gerado em segundo plano)
+/// e o ponto de partida (questionário), comparado com quem tem a mesma idade no Brasil (RN-46).
+/// No perfil de empresa, só o mês e o teto do MEI.
 class AnalysisScreen extends StatelessWidget {
   final bool initialFirst;
   const AnalysisScreen({super.key, this.initialFirst = false});
@@ -20,10 +22,9 @@ class AnalysisScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final business = state.inBusinessProfile;
-    if (business) {
+    if (state.inBusinessProfile) {
       return Scaffold(
-        appBar: AppBar(title: Text('Situação de ${state.activeProfile?.name ?? 'empresa'}')),
+        appBar: AppBar(title: Text(state.activeProfile?.name ?? 'Sua empresa')),
         body: const _MonthTab(),
       );
     }
@@ -32,7 +33,7 @@ class AnalysisScreen extends StatelessWidget {
       initialIndex: initialFirst ? 1 : 0,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Sua situação'),
+          title: const Text('Seu mês'),
           bottom: const TabBar(tabs: [Tab(text: 'Este mês'), Tab(text: 'Ponto de partida')]),
         ),
         body: const TabBarView(children: [_MonthTab(), _InitialTab()]),
@@ -48,15 +49,45 @@ class _MonthTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     return Column(children: [
+      const SizedBox(height: 8),
       const MonthSelector(),
       Expanded(
-        child: FutureBuilder<Analysis>(
-          key: ValueKey('${state.monthKey}#${state.revision}'),
-          future: state.monthlyAnalysis(),
-          builder: (context, snap) {
-            if (snap.hasError) return ErrorView(error: snap.error!, onRetry: () => state.dataChanged());
-            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 32), children: [AnalysisView(snap.data!)]);
+        child: MonthLoader<(Analysis, Dashboard, List<Transaction>)>(
+          load: (s) async {
+            final r = await Future.wait([s.monthlyAnalysis(), s.dashboard(), s.monthEntries()]);
+            final txs = (r[2] as (List<Transaction>, List<Transfer>)).$1;
+            // Resumo da IA pronto ao abrir (uma vez por dia; só depois do consentimento).
+            if (!s.inBusinessProfile && txs.isNotEmpty) s.dailyInsights(entries: txs.length).ignore();
+            return (r[0] as Analysis, r[1] as Dashboard, txs);
+          },
+          builder: (context, data, _) {
+            final (a, d, txs) = data;
+            final insights = state.insightsFor(state.monthKey);
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 32), children: [
+              AnalysisView(a),
+              if (!state.inBusinessProfile && txs.isNotEmpty) ...[
+                const SizedBox(height: Space.lg),
+                PaceCard(d, txs),
+              ],
+              if (insights != null) ...[
+                const SizedBox(height: Space.lg),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.xl),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        const MascotAvatar(size: 32),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Resumo do Cofrinho', style: Theme.of(context).textTheme.titleMedium)),
+                        Text('${insights.healthScore}/100', style: valueStyle),
+                      ]),
+                      const SizedBox(height: 8),
+                      Text(insights.summary, style: const TextStyle(height: 1.45, fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              ],
+            ]);
           },
         ),
       ),
@@ -85,7 +116,7 @@ class _InitialTabState extends State<_InitialTab> {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           return ListView(padding: const EdgeInsets.all(16), children: [
             AnalysisView(snap.data!),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () async {
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutScreen()));
@@ -99,20 +130,20 @@ class _InitialTabState extends State<_InitialTab> {
       );
 }
 
-/// Análise completa: destaque com a situação, números do mês, comparação com o IBGE, teto do MEI e pontos.
+/// Análise: destaque com a situação, comparação com o IBGE, teto do MEI e pontos.
 class AnalysisView extends StatelessWidget {
   final Analysis a;
   const AnalysisView(this.a, {super.key});
 
   @override
   Widget build(BuildContext context) {
-    final style = situationStyle(a.status);
+    final style = situationStyle(context, a.status);
+    // O parágrafo da mediana já está no cartão do IBGE: não repete na lista de pontos.
+    final points = a.benchmark == null
+        ? a.points
+        : a.points.where((p) => !(p.icon == 'bar_chart' && p.text.contains('mediana'))).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       _Hero(a, style.color, style.icon, style.label),
-      if (a.kind == 'monthly' && (a.income ?? 0) + (a.expenses ?? 0) > 0) ...[
-        const SizedBox(height: 12),
-        _MonthNumbers(a),
-      ],
       if (a.benchmark != null && a.status != 'sem_dados') ...[
         const SizedBox(height: 12),
         BenchmarkCard(a.benchmark!, income: a.income),
@@ -121,17 +152,17 @@ class AnalysisView extends StatelessWidget {
         const SizedBox(height: 12),
         MeiCard(a.mei!),
       ],
-      if (a.points.isNotEmpty) ...[
+      if (points.isNotEmpty) ...[
         const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(children: [
-              for (final p in a.points)
+              for (final p in points)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    IconBadge(analysisIcon(p.icon), toneColor(p.tone), size: 34),
+                    IconBadge(analysisIcon(p.icon), toneColor(context, p.tone), size: 36),
                     const SizedBox(width: 12),
                     Expanded(child: Text(p.text, style: const TextStyle(height: 1.4, fontWeight: FontWeight.w600))),
                   ]),
@@ -154,35 +185,17 @@ class _Hero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeOutBack,
-      builder: (_, t, child) => Transform.scale(scale: .92 + .08 * t, child: Opacity(opacity: t.clamp(0, 1), child: child)),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: color.withValues(alpha: .35), width: 1.5),
-        ),
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.xl),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: Icon(icon, color: Colors.white, size: 22),
-            ),
+            IconBadge(icon, color, size: 40),
             const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
-              child: Text(label.toUpperCase(),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: .8)),
-            ),
+            StatusBadge(label, background: color.withValues(alpha: context.isDark ? .22 : .12), foreground: color),
           ]),
           const SizedBox(height: 14),
-          Text(a.headline, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, height: 1.2)),
+          Text(a.headline, style: Theme.of(context).textTheme.headlineSmall?.copyWith(height: 1.2)),
           const SizedBox(height: 6),
           Text(a.message, style: TextStyle(fontSize: 15, height: 1.45, color: cs.onSurface)),
         ]),
@@ -191,42 +204,8 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _MonthNumbers extends StatelessWidget {
-  final Analysis a;
-  const _MonthNumbers(this.a);
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    Widget cell(String label, double value, Color color, {bool pct = false}) => Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: CountUpMoney(value,
-                  format: pct ? percent : money,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: color)),
-            ),
-          ]),
-        );
-    final rate = a.savingsRate;
-    final business = context.watch<AppState>().inBusinessProfile;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          cell(business ? 'Vendeu' : 'Entrou', a.income ?? 0, incomeColor),
-          cell(business ? 'Custos' : 'Saiu', a.expenses ?? 0, expenseColor),
-          if (rate != null) cell(business ? 'Margem' : 'Guardou', rate, rate >= .2 ? incomeColor : rate >= 0 ? warningColor : expenseColor, pct: true),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Onde a renda fica em relação à mediana e à média de quem tem a mesma idade no Brasil.
+/// Onde a renda fica em relação a quem tem a mesma idade no Brasil, em linguagem de leigo:
+/// frase-título ("9 em cada 10"), bonecos e uma régua com R$ nos marcadores. Média só no "Saiba mais".
 class BenchmarkCard extends StatelessWidget {
   final Benchmark b;
   final double? income;
@@ -236,165 +215,133 @@ class BenchmarkCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final you = income ?? 0;
-    final max = [b.mean * 1.5, you * 1.15, b.median * 2.0].reduce((x, y) => x > y ? x : y);
+    final p = b.percentile;
+    final tenths = p == null ? null : (p / 10).round().clamp(0, 10);
+    // Sem ranking negativo: com menos de 3 em 10, a frase fala do ponto de partida, sem bonecos.
+    final showRank = tenths != null && tenths >= 3;
+    final title = showRank
+        ? 'Você ganha mais que $tenths em cada 10 pessoas de ${b.ageGroupLabel}.'
+        : 'Metade das pessoas de ${b.ageGroupLabel} ganha até ${moneyShort(b.median.toDouble())}.';
+    final max = [b.median * 2.0, you * 1.15, b.mean * 1.3].reduce((x, y) => x > y ? x : y);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Space.xl),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const IconBadge(Icons.groups_rounded, Color(0xFF3B82F6), size: 34),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('Você e quem tem ${b.ageGroupLabel}',
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            ),
-          ]),
-          if (b.percentile != null) ...[
+          Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(height: 1.25)),
+          if (showRank) ...[
             const SizedBox(height: 14),
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: b.percentile!.toDouble()),
-                duration: const Duration(milliseconds: 1100),
-                curve: Curves.easeOutCubic,
-                builder: (_, v, _) => Text('${v.round()}%',
-                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w900, height: 1, color: mar)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text('das pessoas dessa idade que trabalham ganham menos que você',
-                      style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w600, height: 1.3)),
-                ),
-              ),
-            ]),
+            Semantics(
+              label: '$tenths de 10 pessoas',
+              excludeSemantics: true,
+              child: Row(children: [
+                for (var i = 0; i < 10; i++)
+                  Expanded(
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: i < tenths ? 1 : 0),
+                      duration: Duration(milliseconds: 250 + 40 * i),
+                      builder: (_, v, _) => Icon(Icons.person_rounded,
+                          size: 28, color: Color.lerp(cs.surfaceContainerHighest, cs.primary, v)),
+                    ),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            Text('$p% das pessoas dessa idade que trabalham ganham menos que você', style: Theme.of(context).textTheme.bodySmall),
           ],
           const SizedBox(height: 18),
-          _Scale(max: max, marks: [
-            ('Mediana', b.median.toDouble(), cs.onSurfaceVariant),
-            ('Média', b.mean.toDouble(), const Color(0xFF3B82F6)),
-            if (you > 0) ('Você', you, mar),
-          ]),
-          const SizedBox(height: 12),
-          Text(
-            'Metade das pessoas de ${b.ageGroupLabel} ganha até ${money(b.median.toDouble())}. '
-            'A média (${money(b.mean.toDouble())}) é maior porque poucas pessoas ganham muito.'
-            '${b.hasRegion ? ' No ${b.regionName}, a média é ${money(b.regionMean.toDouble())}.' : ''}',
-            style: TextStyle(fontSize: 13, height: 1.4, color: cs.onSurfaceVariant),
+          _Scale(max: max, median: b.median.toDouble(), you: you),
+          const SizedBox(height: 4),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              title: Text('Saiba mais', style: TextStyle(fontWeight: FontWeight.w800, color: cs.primary, fontSize: 15)),
+              children: [
+                Text(
+                  'Metade das pessoas de ${b.ageGroupLabel} ganha até ${money(b.median.toDouble())} (a mediana). '
+                  'A média é ${money(b.mean.toDouble())}: ela é maior porque poucas pessoas ganham muito.'
+                  '${b.hasRegion ? ' No ${b.regionName}, a média é ${money(b.regionMean.toDouble())}.' : ''}',
+                  style: const TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 6),
+                Text('Fonte: ${b.source}.', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Text('Fonte: ${b.source}.', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
         ]),
       ),
     );
   }
 }
 
-/// Régua horizontal com marcadores que deslizam até o lugar.
+/// Régua com R$ nos marcadores: "Metade ganha até R$ 2.500" embaixo e "Você: R$ 7.200" em cima.
 class _Scale extends StatelessWidget {
-  final double max;
-  final List<(String, double, Color)> marks;
-  const _Scale({required this.max, required this.marks});
+  final double max, median, you;
+  const _Scale({required this.max, required this.median, required this.you});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return LayoutBuilder(builder: (context, c) {
       final w = c.maxWidth;
+      Widget marker(double value, Widget label, {required bool above}) => TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: (value / max).clamp(0, 1)),
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutCubic,
+            builder: (_, t, _) {
+              final x = t * w;
+              const width = 150.0;
+              return Positioned(
+                left: (x - width / 2).clamp(0.0, w - width),
+                top: above ? 0 : 40,
+                width: width,
+                child: Column(children: [
+                  if (above) label,
+                  Container(width: 2, height: 12, color: above ? cs.primary : cs.onSurfaceVariant),
+                  if (!above) label,
+                ]),
+              );
+            },
+          );
       return SizedBox(
-        height: 80,
+        height: 84,
         child: Stack(clipBehavior: Clip.none, children: [
           Positioned(
             left: 0,
             right: 0,
-            top: 28,
+            top: 34,
             child: Container(
               height: 8,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                gradient: LinearGradient(colors: [cs.surfaceContainerHighest, mar.withValues(alpha: .5)]),
-              ),
+              decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)),
             ),
           ),
-          for (final (i, (label, value, color)) in marks.indexed)
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: (value / max).clamp(0, 1)),
-              duration: Duration(milliseconds: 900 + 150 * i),
-              curve: Curves.easeOutCubic,
-              builder: (_, t, _) {
-                final x = (t * w).clamp(0.0, w);
-                final above = label == 'Você';
-                // Mediana e média costumam ficar perto: a média desce uma linha para os rótulos não se encostarem.
-                final low = label == 'Média';
-                return Positioned(
-                  left: (x - 40).clamp(-8.0, w - 72),
-                  top: above ? 0 : 38,
-                  width: 80,
-                  child: Column(children: [
-                    if (!above) Container(width: 3, height: low ? 24 : 10, color: color),
-                    Text(label,
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: color)),
-                    if (above) Container(width: 14, height: 14, margin: const EdgeInsets.only(top: 6),
-                        decoration: BoxDecoration(color: color, shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2.5))),
-                  ]),
-                );
-              },
-            ),
+          marker(median,
+              Text('Metade ganha até ${moneyShort(median)}',
+                  textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+              above: false),
+          if (you > 0)
+            marker(
+                you,
+                Text('Você: ${moneyShort(you)}',
+                    textAlign: TextAlign.center, style: valueStyle.copyWith(fontSize: 14, color: cs.primary)),
+                above: true),
         ]),
       );
     });
   }
 }
 
-/// Faturamento do ano do MEI em relação ao teto.
+/// Faturamento do ano do MEI em relação ao teto (mesma barra do Início).
 class MeiCard extends StatelessWidget {
   final MeiSummary m;
   const MeiCard(this.m, {super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final color = switch (m.status) { 'estourou' => expenseColor, 'atencao' => warningColor, _ => incomeColor };
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            IconBadge(Icons.speed_rounded, color, size: 34),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('Teto do MEI em ${m.year}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-            ),
-            Text('${m.percent.toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.w900, color: color)),
-          ]),
-          const SizedBox(height: 12),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0, end: (m.revenue / m.limit).clamp(0, 1)),
-            duration: const Duration(milliseconds: 1000),
-            curve: Curves.easeOutCubic,
-            builder: (_, v, _) => ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: LinearProgressIndicator(value: v, minHeight: 14, color: color, backgroundColor: color.withValues(alpha: .14)),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: Text('Faturado: ${money(m.revenue)}', style: const TextStyle(fontWeight: FontWeight.w700))),
-            Text('de ${money(m.limit)}', style: TextStyle(color: cs.onSurfaceVariant)),
-          ]),
-          const SizedBox(height: 8),
-          Text(
-            m.status == 'estourou'
-                ? 'Passou do teto. Até 20% acima (R\$ 97.200) você paga a diferença e vira microempresa no ano que vem; fale com um contador.'
-                : 'No ritmo atual, o ano fecha em ${money(m.projectedRevenue)}. '
-                    '${m.monthsLeft > 0 ? 'Para ficar no teto, fature até ${money(m.monthlyRoom)} por mês até dezembro.' : ''}',
-            style: TextStyle(fontSize: 13, height: 1.4, color: cs.onSurfaceVariant),
-          ),
-        ]),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Card(
+        child: Padding(padding: const EdgeInsets.all(Space.xl), child: MeiCeilingBar(m)),
+      );
 }
 
 /// Editar as respostas do questionário (quem já passou do onboarding).
@@ -416,6 +363,7 @@ class _AboutScreenState extends State<AboutScreen> {
 
   Future<void> _save() async {
     if (!_draft.validYear) return;
+    if (!await confirmLowIncome(context, _draft) || !mounted) return;
     setState(() => _busy = true);
     try {
       await context.read<AppState>().saveAbout(
@@ -438,9 +386,9 @@ class _AboutScreenState extends State<AboutScreen> {
   Widget build(BuildContext context) {
     void changed() => setState(() {});
     Widget section(String title, Widget child) => Padding(
-          padding: const EdgeInsets.only(bottom: 28),
+          padding: const EdgeInsets.only(bottom: Space.section),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             child,
           ]),
@@ -462,74 +410,8 @@ class _AboutScreenState extends State<AboutScreen> {
         section('Idade e estado', AgeFields(_draft, onChanged: changed)),
         section('De onde vem o seu dinheiro', SourcesFields(_draft, onChanged: changed)),
         section('Renda e objetivo', IncomeGoalFields(_draft, onChanged: changed)),
-        ChunkyButton(label: 'Salvar', busy: _busy, onPressed: _draft.validYear ? _save : null),
+        FilledButton(onPressed: _draft.validYear && !_busy ? _save : null, child: const Text('Salvar')),
       ]),
-    );
-  }
-}
-
-/// Resumo da situação do mês no Início, com toque para a análise completa.
-class SituationCard extends StatelessWidget {
-  const SituationCard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final state = context.watch<AppState>();
-    return FutureBuilder<Analysis>(
-      key: ValueKey('${state.monthKey}#${state.revision}#${state.api.profileId}'),
-      future: state.monthlyAnalysis(),
-      builder: (context, snap) {
-        final a = snap.data;
-        if (a == null) return const SizedBox.shrink();
-        final style = situationStyle(a.status);
-        final cs = Theme.of(context).colorScheme;
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AnalysisScreen())),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: style.color.withValues(alpha: .14), shape: BoxShape.circle),
-                  child: Icon(style.icon, color: style.color),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(a.headline, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-                    const SizedBox(height: 2),
-                    Text(a.message,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.3)),
-                    if (a.mei case final mei?) ...[
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
-                            child: LinearProgressIndicator(
-                              value: (mei.revenue / mei.limit).clamp(0, 1),
-                              minHeight: 6,
-                              color: mei.status == 'ok' ? mar : warningColor,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text('${mei.percent.toStringAsFixed(0)}% do teto do MEI',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                      ]),
-                    ],
-                  ]),
-                ),
-                Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
-              ]),
-            ),
-          ),
-        );
-      },
     );
   }
 }

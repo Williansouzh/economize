@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<circle cx="132" cy="262" r="15" fill="none" stroke="#FFFFFF" stroke-width="9"/>
+<rect x="196" y="318" width="38" height="66" rx="14" fill="#FFFFFF"/>
+<rect x="284" y="318" width="38" height="66" rx="14" fill="#FFFFFF"/>
+<ellipse cx="258" cy="282" rx="128" ry="82" fill="#FFFFFF"/>
+<ellipse cx="320" cy="214" rx="20" ry="34" transform="rotate(28 320 214)" fill="#FFFFFF"/>
+<rect x="348" y="266" width="52" height="60" rx="18" fill="#FFFFFF"/>
+<rect x="364" y="285" width="7" height="18" rx="3.5" fill="#0C7A68"/>
+<rect x="380" y="285" width="7" height="18" rx="3.5" fill="#0C7A68"/>
+<circle cx="324" cy="254" r="9" fill="#0B2B2E"/>
+<rect x="222" y="226" width="68" height="13" rx="6.5" fill="#0C7A68"/><circle cx="362" cy="190" r="9" fill="#C5F04A"/><circle cx="386" cy="152" r="14" fill="#C5F04A"/><ellipse cx="430" cy="96" rx="58" ry="42" fill="#C5F04A"/><circle cx="408" cy="96" r="7" fill="#0B2B2E"/><circle cx="430" cy="96" r="7" fill="#0B2B2E"/><circle cx="452" cy="96" r="7" fill="#0B2B2E"/></svg>

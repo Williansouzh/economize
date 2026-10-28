@@ -37,4 +37,27 @@ void main() {
   test('mês por extenso', () {
     expect(monthLabel(DateTime(2026, 10)), 'Outubro 2026');
   });
+
+  test('cores antigas de categoria viram a cor mais próxima da paleta nova, com versão escura', () {
+    expect(paletteColor('#F44336'), hexColor('#B55E43'));
+    expect(paletteColor('#9e9e9e'), hexColor('#668E93'));
+    expect(paletteColor('#B55E43', dark: true), hexColor('#ED987D'));
+    expect(paletteColor('#ED987D'), hexColor('#B55E43'));
+  });
+
+  test('sugestão de categoria pela descrição', () {
+    expect(suggestCategoryName('Uber pro trabalho'), 'Transporte');
+    expect(suggestCategoryName('almoço com a equipe'), 'Alimentação');
+    expect(suggestCategoryName('Netflix'), 'Assinaturas');
+    expect(suggestCategoryName('presente da Ana'), 'Compras');
+    expect(suggestCategoryName('qualquer coisa'), isNull);
+    // "99" só como palavra: não pega "R\$ 199".
+    expect(suggestCategoryName('compra 199'), isNull);
+  });
+
+  test('plural e valor por mês', () {
+    expect(plural(1, 'conta', 'contas'), '1 conta');
+    expect(plural(3, 'conta', 'contas'), '3 contas');
+    expect(perMonth(350), '${moneyShort(350)}/mês');
+  });
 }

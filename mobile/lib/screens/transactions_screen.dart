@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import '../widgets/month_loader.dart';
@@ -29,8 +30,9 @@ class TransactionsScreen extends StatelessWidget {
                     SizedBox(height: 60),
                     EmptyState(
                       icon: Icons.receipt_long,
+                      mascot: true,
                       title: 'Nenhum lançamento neste mês',
-                      message: 'Toque em + para registrar uma receita ou despesa.',
+                      message: 'Toque em Lançar, no meio da barra de baixo, para registrar uma receita ou despesa.',
                     ),
                   ],
                 );
@@ -50,7 +52,7 @@ class TransactionsScreen extends StatelessWidget {
               final income = sum(txs, TxType.income), expenses = sum(txs, TxType.expense);
 
               return ListView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                 children: [
                   _MonthSummary(income: income, expenses: expenses),
                   for (final day in days) ...[
@@ -81,6 +83,7 @@ class TransactionsScreen extends StatelessWidget {
   }
 }
 
+/// Entrou · Saiu · Resultado do mês (Resultado, não "Saldo": saldo é o dinheiro nas contas).
 class _MonthSummary extends StatelessWidget {
   final double income, expenses;
   const _MonthSummary({required this.income, required this.expenses});
@@ -88,36 +91,26 @@ class _MonthSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    Widget item(String label, double v, Color color) => Expanded(
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              money(v),
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color),
-            ),
-          ),
-        ],
-      ),
-    );
+    final colors = context.colors;
+    Widget item(String label, String value, Color color) => Expanded(
+          child: Column(children: [
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 2),
+            FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: valueStyle.copyWith(color: color))),
+          ]),
+        );
     Widget divider() => Container(width: 1, height: 32, color: cs.outlineVariant);
-    final balance = income - expenses;
+    final result = income - expenses;
     return Card(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
         child: Row(
           children: [
-            item('Entradas', income, incomeColor),
+            item('Entrou', '+ ${money(income)}', colors.income),
             divider(),
-            item('Saídas', expenses, expenseColor),
+            item('Saiu', '− ${money(expenses)}', cs.onSurface),
             divider(),
-            item('Saldo', balance, balance >= 0 ? incomeColor : expenseColor),
+            item('Resultado', '${result < 0 ? '−' : '+'} ${money(result.abs())}', result < 0 ? colors.expense : cs.onSurface),
           ],
         ),
       ),
@@ -140,10 +133,9 @@ class _DayHeader extends StatelessWidget {
       1 => 'Ontem',
       _ => DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(day),
     };
-    final style = Theme.of(context).textTheme.labelLarge
-        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w700);
+    final style = TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Theme.of(context).colorScheme.onSurfaceVariant);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+      padding: const EdgeInsets.fromLTRB(4, 24, 4, 8),
       child: Row(
         children: [
           Expanded(child: Text(label[0].toUpperCase() + label.substring(1), style: style)),
@@ -154,67 +146,59 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
-/// Linha de um lançamento; toque edita, arrastar para a esquerda exclui. Usada também na busca e na fatura.
+/// Linha de um lançamento: valor à direita em 16/800; despesa em tinta com "−", receita na cor de
+/// receita com "+" (só o que entra ganha cor). Toque edita; arrastar para a esquerda exclui e para a
+/// direita lança de novo. Usada também na busca e na fatura.
 class TransactionTile extends StatelessWidget {
   final Transaction t;
 
-  /// Mostra a data no lugar da conta (busca e fatura, em que os lançamentos não estão agrupados por dia).
+  /// Mostra a data no lugar do agrupamento por dia (busca e fatura).
   final bool showDate;
-  const TransactionTile(this.t, {super.key, this.showDate = false});
+
+  /// Esconde a conta (na fatura, todas são do mesmo cartão).
+  final bool hideAccount;
+  const TransactionTile(this.t, {super.key, this.showDate = false, this.hideAccount = false});
 
   @override
   Widget build(BuildContext context) {
     final isIncome = t.type == TxType.income;
     final cs = Theme.of(context).colorScheme;
-    final account = context.watch<AppState>().accounts.where((a) => a.id == t.accountId).firstOrNull;
+    final colors = context.colors;
+    final meta = [
+      if (showDate) DateFormat('dd/MM/yy').format(t.date),
+      t.categoryName,
+      if (!hideAccount) t.accountName,
+    ].join(' · ');
     return _Deletable(
       id: t.id,
       title: 'Excluir lançamento?',
       content: t.description.isEmpty ? t.categoryName : t.description,
       series: t.inSeries,
       onDelete: (api, future) => api.deleteTransaction(t.id, future: future),
+      onRepeat: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionFormScreen(duplicate: t))),
       child: ListTile(
+        minTileHeight: 64,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editing: t))),
-        leading: IconBadge(categoryIcon(t.categoryIcon), hexColor(t.categoryColor)),
-        title: Text(
-          t.description.isEmpty ? t.categoryName : t.description,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-        subtitle: Row(
-          children: [
-            Icon(accountIcon(account?.icon ?? ''), size: 13, color: cs.onSurfaceVariant),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                showDate
-                    ? '${DateFormat('dd/MM/yy').format(t.date)} · ${t.categoryName} · ${t.accountName}'
-                    : '${t.categoryName} · ${t.accountName}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-            if (t.installmentCount case final n?) ...[
-              const SizedBox(width: 6),
-              _SmallBadge('${t.installmentNumber}/$n'),
-            ] else if (t.inSeries) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.repeat, size: 13, color: cs.onSurfaceVariant),
-            ],
+        leading: IconBadge(categoryIcon(t.categoryIcon), tintOf(context, t.categoryColor)),
+        title: Text(t.description.isEmpty ? t.categoryName : t.description, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Row(children: [
+          Flexible(child: Text(meta, maxLines: 1, overflow: TextOverflow.ellipsis)),
+          if (t.installmentCount case final n?) ...[
+            const SizedBox(width: 6),
+            Text('${t.installmentNumber}/$n', style: TextStyle(fontWeight: FontWeight.w800, color: cs.onSurface)),
+          ] else if (t.inSeries) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.repeat_rounded, size: 14, color: cs.onSurfaceVariant, semanticLabel: 'fixo'),
           ],
-        ),
+        ]),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              '${isIncome ? '+' : '−'} ${money(t.amount)}',
-              style: TextStyle(fontWeight: FontWeight.w700, color: isIncome ? incomeColor : expenseColor),
-            ),
-            if (!t.isPaid) const _PendingBadge(),
+            Text('${isIncome ? '+' : '−'} ${money(t.amount)}',
+                style: valueStyle.copyWith(color: isIncome ? colors.income : cs.onSurface)),
+            if (!t.isPaid) ...[const SizedBox(height: 4), const _PendingBadge()],
           ],
         ),
       ),
@@ -235,31 +219,23 @@ class _TransferTile extends StatelessWidget {
       content: '${t.fromAccountName} → ${t.toAccountName}: ${money(t.amount)}',
       onDelete: (api, _) => api.deleteTransfer(t.id),
       child: ListTile(
+        minTileHeight: 64,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         onTap: () =>
             Navigator.push(context, MaterialPageRoute(builder: (_) => TransactionFormScreen(editingTransfer: t))),
-        leading: const IconBadge(Icons.swap_horiz, transferColor),
+        leading: IconBadge(Icons.swap_horiz_rounded, context.colors.info),
         title: Text(
           t.description.isEmpty ? 'Transferência' : t.description,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: Text(
-          '${t.fromAccountName} → ${t.toAccountName}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12),
-        ),
+        subtitle: Text('${t.fromAccountName} → ${t.toAccountName}', maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              money(t.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
-            ),
-            if (!t.isPaid) const _PendingBadge(),
+            Text(money(t.amount), style: valueStyle.copyWith(color: cs.onSurfaceVariant)),
+            if (!t.isPaid) ...[const SizedBox(height: 4), const _PendingBadge()],
           ],
         ),
       ),
@@ -267,45 +243,21 @@ class _TransferTile extends StatelessWidget {
   }
 }
 
-class _SmallBadge extends StatelessWidget {
-  final String text;
-  const _SmallBadge(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(5)),
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: cs.onSurfaceVariant),
-      ),
-    );
-  }
-}
-
+/// Pendente: ícone de relógio + texto escuro sobre âmbar claro (6,8:1), não só cor.
 class _PendingBadge extends StatelessWidget {
   const _PendingBadge();
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(top: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(color: warningColor.withValues(alpha: .15), borderRadius: BorderRadius.circular(6)),
-    child: const Text(
-      'pendente',
-      style: TextStyle(fontSize: 10, color: Color(0xFFB7791F), fontWeight: FontWeight.w700),
-    ),
-  );
+  Widget build(BuildContext context) => StatusBadge.warning(context, 'pendente', icon: Icons.schedule_rounded);
 }
 
 /// Arrastar para a esquerda pede confirmação e exclui. Em série (fixo ou parcelado), pergunta se
-/// exclui só este ou também os próximos.
+/// exclui só este ou também os próximos. Com [onRepeat], arrastar para a direita lança de novo.
 class _Deletable extends StatelessWidget {
   final String id, title, content;
   final bool series;
   final Future<void> Function(ApiClient api, bool future) onDelete;
+  final VoidCallback? onRepeat;
   final Widget child;
   const _Deletable({
     required this.id,
@@ -313,32 +265,46 @@ class _Deletable extends StatelessWidget {
     required this.content,
     required this.onDelete,
     required this.child,
+    this.onRepeat,
     this.series = false,
   });
 
   @override
   Widget build(BuildContext context) {
     var future = false;
+    final colors = context.colors;
+    final cs = Theme.of(context).colorScheme;
     return Dismissible(
       key: ValueKey(id),
-      direction: DismissDirection.endToStart,
+      direction: onRepeat == null ? DismissDirection.endToStart : DismissDirection.horizontal,
       background: Container(
-        color: expenseColor,
+        color: cs.primaryContainer,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 24),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.replay_rounded, color: cs.onPrimaryContainer),
+          const SizedBox(width: 8),
+          Text('Lançar de novo', style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.w800)),
+        ]),
+      ),
+      secondaryBackground: Container(
+        color: colors.expense,
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Excluir',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-            ),
+            Text('Excluir', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
             SizedBox(width: 8),
-            Icon(Icons.delete_outline, color: Colors.white),
+            Icon(Icons.delete_outline_rounded, color: Colors.white),
           ],
         ),
       ),
-      confirmDismiss: (_) async {
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          onRepeat?.call();
+          return false;
+        }
         if (series) {
           final choice = await askSeriesScope(context, editing: false);
           future = choice ?? false;
@@ -347,13 +313,13 @@ class _Deletable extends StatelessWidget {
         return showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
-            icon: const Icon(Icons.delete_outline, color: expenseColor),
+            icon: Icon(Icons.delete_outline_rounded, color: colors.expense),
             title: Text(title),
             content: Text(content),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: expenseColor),
+                style: FilledButton.styleFrom(backgroundColor: colors.expense, foregroundColor: Colors.white),
                 onPressed: () => Navigator.pop(c, true),
                 child: const Text('Excluir'),
               ),

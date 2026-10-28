@@ -64,7 +64,7 @@ public static class FinanceEndpoints
         {
             var uid = user.ProfileId();
             if (await ValidateCategory(req, uid, null, db) is { } error) return error;
-            var c = new Category { UserId = uid, Name = req.Name.Trim(), Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#9E9E9E" };
+            var c = new Category { UserId = uid, Name = req.Name.Trim(), Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#668E93" };
             db.Categories.Add(c);
             await db.SaveChangesAsync();
             return Results.Created($"/api/categories/{c.Id}", new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color));

@@ -76,7 +76,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                     ),
                   const Divider(height: 1),
                   SwitchListTile(
-                    secondary: const IconBadge(Icons.event_available, Color(0xFFF5A524), size: 40),
+                    secondary: IconBadge(Icons.event_available_rounded, context.colors.warning, size: 40),
                     title: const Text('Contas a vencer'),
                     subtitle: const Text('Na véspera de cada despesa pendente, às 9h'),
                     value: _bills,

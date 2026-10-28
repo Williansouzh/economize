@@ -101,7 +101,9 @@ public record GoalDepositRequest(decimal Amount);
 public record GoalDto(Guid Id, string Name, decimal Target, decimal Saved, DateOnly? Deadline, string Icon, string Color,
     double Progress, decimal? MonthlyNeeded);
 
-public record AchievementDto(string Id, string Title, string Description, string Icon, bool Unlocked);
+/// <param name="Current">Progresso até desbloquear ("3 de 7 dias"); nulo nas conquistas de sim ou não.</param>
+public record AchievementDto(string Id, string Title, string Description, string Icon, bool Unlocked,
+    int? Current = null, int? Target = null);
 /// <param name="Streak">Dias seguidos, até hoje ou ontem, com pelo menos um lançamento registrado (RN-37).</param>
 public record ProgressDto(int Streak, int BestStreak, bool RegisteredToday, IReadOnlyList<AchievementDto> Achievements);
 

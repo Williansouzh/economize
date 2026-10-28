@@ -125,8 +125,9 @@ def logo_horizontal(text_color, accent, coin, zz):
 
 
 # ---------- Mascote: o cofrinho recebendo a moeda Economizze ----------
-def mascot_body(shadow=False):
-    """Cofrinho em 512x512, no mesmo enquadramento do mascote anterior (folga embaixo)."""
+def mascot_body(shadow=False, eye=None):
+    """Cofrinho em 512x512, no mesmo enquadramento do mascote anterior (folga embaixo).
+    eye: SVG do olho no lugar do círculo padrão (poses)."""
     white = "#BFC9C7" if shadow else BRANCO
     detail = "#BFC9C7" if shadow else TINTA
     slot = "#BFC9C7" if shadow else MAR
@@ -139,19 +140,70 @@ def mascot_body(shadow=False):
 <rect x="348" y="266" width="52" height="60" rx="18" fill="{white}"/>
 <rect x="364" y="285" width="7" height="18" rx="3.5" fill="{slot}"/>
 <rect x="380" y="285" width="7" height="18" rx="3.5" fill="{slot}"/>
-<circle cx="318" cy="262" r="9" fill="{detail}"/>
+{eye if eye and not shadow else f'<circle cx="318" cy="262" r="9" fill="{detail}"/>'}
 <rect x="222" y="226" width="68" height="13" rx="6.5" fill="{slot}"/>'''
 
 
-def mascot_png(path, size=512):
-    """Corpo com sombra suave (como antes) e a moeda caindo no cofre."""
+def _zletter(x, y, s, color, width=7):
+    return (f'<path d="M{x},{y} h{s} l-{s},{s} h{s}" fill="none" stroke="{color}" stroke-width="{width}" '
+            f'stroke-linecap="round" stroke-linejoin="round"/>')
+
+
+# Poses do Cofrinho (direção de arte, out/2026): só em momentos, nunca em telas de dados.
+# Cada pose: (olho, desenho na frente do corpo, centro y da moeda ou None).
+_EYE_HAPPY = f'<path d="M306,266 q12,-16 24,0" fill="none" stroke="{TINTA}" stroke-width="7" stroke-linecap="round"/>'
+_EYE_CLOSED = f'<path d="M306,260 q12,12 24,0" fill="none" stroke="{TINTA}" stroke-width="7" stroke-linecap="round"/>'
+MASCOT_POSES = {
+    # acenando: apresentação
+    "acenando": (None,
+        f'<rect x="354" y="215" width="38" height="112" rx="19" transform="rotate(39 373 325)" fill="{BRANCO}"/>'
+        f'<path d="M462,196 q18,14 16,38 M482,172 q28,24 24,62" fill="none" stroke="{LIMA}" stroke-width="9" stroke-linecap="round"/>',
+        158),
+    # pensando: IA carregando
+    "pensando": (f'<circle cx="324" cy="254" r="9" fill="{TINTA}"/>',
+        f'<circle cx="362" cy="190" r="9" fill="{LIMA}"/><circle cx="386" cy="152" r="14" fill="{LIMA}"/>'
+        f'<ellipse cx="430" cy="96" rx="58" ry="42" fill="{LIMA}"/>'
+        f'<circle cx="408" cy="96" r="7" fill="{TINTA}"/><circle cx="430" cy="96" r="7" fill="{TINTA}"/><circle cx="452" cy="96" r="7" fill="{TINTA}"/>',
+        None),
+    # comemorando: meta batida, primeiro lançamento
+    "comemorando": (_EYE_HAPPY,
+        f'<rect x="120" y="120" width="16" height="30" rx="5" transform="rotate(-25 128 135)" fill="{LIMA}"/>'
+        f'<rect x="400" y="110" width="16" height="30" rx="5" transform="rotate(30 408 125)" fill="{LIMA}"/>'
+        f'<circle cx="170" cy="190" r="9" fill="{BRANCO}"/><circle cx="430" cy="200" r="8" fill="{BRANCO}"/>'
+        f'<rect x="352" y="72" width="14" height="26" rx="5" transform="rotate(-40 359 85)" fill="{BRANCO}"/>'
+        f'<rect x="150" y="70" width="14" height="26" rx="5" transform="rotate(20 157 83)" fill="{BRANCO}"/>',
+        112),
+    # dormindo: estados vazios (o "zz" da marca saindo do sono)
+    "dormindo": (_EYE_CLOSED,
+        _zletter(372, 176, 26, LIMA) + _zletter(410, 120, 36, LIMA, 8),
+        None),
+    # segurando o celular: WhatsApp
+    "celular": (f'<circle cx="312" cy="258" r="9" fill="{TINTA}"/>',
+        f'<rect x="352" y="196" width="78" height="134" rx="14" fill="{TINTA}"/>'
+        f'<rect x="361" y="210" width="60" height="100" rx="6" fill="{BRANCO}"/>'
+        f'<rect x="368" y="220" width="40" height="16" rx="8" fill="{LIMA}"/>'
+        f'<rect x="374" y="244" width="40" height="16" rx="8" fill="{MAR}"/>'
+        f'<rect x="368" y="268" width="30" height="16" rx="8" fill="{LIMA}"/>'
+        f'<rect x="334" y="290" width="40" height="30" rx="14" fill="{BRANCO}"/>',
+        None),
+    # preocupado-gentil: orçamento estourado
+    "preocupado": (f'<circle cx="318" cy="264" r="10" fill="{TINTA}"/>'
+        f'<path d="M300,240 l30,-6" fill="none" stroke="{TINTA}" stroke-width="7" stroke-linecap="round"/>',
+        f'<path d="M372,176 q-14,22 0,30 q14,-8 0,-30 z" fill="#7CB8FF"/>',
+        None),
+}
+
+
+def mascot_png(path, size=512, pose=None):
+    """Corpo com sombra suave (como antes) e a moeda caindo no cofre. pose: uma de MASCOT_POSES."""
+    eye, front, coin_y = MASCOT_POSES[pose] if pose else (None, "", 158)
     shadow = render(svg(512, 512, mascot_body(shadow=True)), size)
     shadow = shadow.filter(ImageFilter.GaussianBlur(size / 64))
     shadow.putalpha(shadow.getchannel("A").point(lambda a: int(a * 0.45)))
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     out.alpha_composite(shadow, (0, round(size * 0.012)))
-    coin = placed(symbol_solid(LIMA, TINTA), 512, 76, cx=256, cy=158)
-    out.alpha_composite(render(svg(512, 512, mascot_body() + coin), size))
+    coin = placed(symbol_solid(LIMA, TINTA), 512, 76, cx=256, cy=coin_y) if coin_y else ""
+    out.alpha_composite(render(svg(512, 512, mascot_body(eye=eye) + coin + front), size))
     out.save(path)
 
 
@@ -235,6 +287,10 @@ def main():
 
     # Mascote do app (mesmo arquivo e enquadramento de antes)
     mascot_png(MOBILE / "assets/mascot.png")
+    for pose, (eye, front, coin_y) in MASCOT_POSES.items():
+        mascot_png(MOBILE / f"assets/mascot_{pose}.png", pose=pose)
+        coin = placed(symbol_solid(LIMA, TINTA), 512, 76, cx=256, cy=coin_y) if coin_y else ""
+        (BRAND / f"svg/mascote-{pose}.svg").write_text(svg(512, 512, mascot_body(eye=eye) + coin + front))
     print("ok")
 
 

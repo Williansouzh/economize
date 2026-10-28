@@ -94,10 +94,37 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: ListView(children: [AnalysisView(a)]))));
     await tester.pumpAndSettle();
     expect(find.text('Sua renda está acima da maioria'), findsOneWidget);
-    expect(find.text('ACIMA DA MÉDIA'), findsOneWidget);
-    expect(find.text('91%'), findsOneWidget);
-    expect(find.textContaining('No Nordeste'), findsOneWidget);
+    expect(find.text('ACIMA DA MAIORIA'), findsOneWidget);
+    // Linguagem de leigo: "9 em cada 10" e R$ nos marcadores da régua.
+    expect(find.text('Você ganha mais que 9 em cada 10 pessoas de 25 a 29 anos.'), findsOneWidget);
+    expect(find.text('Metade ganha até ${moneyShort(2200)}'), findsOneWidget);
+    expect(find.text('Você: ${moneyShort(6000)}'), findsOneWidget);
     expect(find.textContaining('R\$ 18.000 de reserva'), findsOneWidget);
+    // Média e região ficam no "Saiba mais".
+    expect(find.textContaining('No Nordeste'), findsNothing);
+    await tester.tap(find.text('Saiba mais'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No Nordeste'), findsOneWidget);
+  });
+
+  testWidgets('quem ganha menos que a maioria vê o ponto de partida, sem ranking', (tester) async {
+    final a = Analysis.fromJson({
+      'kind': 'initial',
+      'status': 'abaixo',
+      'headline': 'Seu ponto de partida',
+      'message': 'Metade das pessoas de 30 a 39 anos ganha até R\$ 2.500.',
+      'income': 1200,
+      'benchmark': {
+        'ageGroup': '30-39', 'ageGroupLabel': '30 a 39 anos', 'mean': 4020, 'median': 2500, 'region': 'BR',
+        'regionName': 'Brasil', 'regionMean': 4020, 'percentile': 12, 'source': 'IBGE, PNAD Contínua',
+      },
+      'points': [],
+    });
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: ListView(children: [AnalysisView(a)]))));
+    await tester.pumpAndSettle();
+    expect(find.text('PONTO DE PARTIDA'), findsOneWidget);
+    expect(find.textContaining('em cada 10'), findsNothing);
+    expect(find.textContaining('ganham menos que você'), findsNothing);
   });
 
   testWidgets('teto do MEI no ritmo de estourar avisa quanto faturar por mês', (tester) async {
@@ -108,7 +135,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Scaffold(body: MeiCard(m))));
     await tester.pumpAndSettle();
     expect(find.text('86%'), findsOneWidget);
-    expect(find.textContaining(money(84000)), findsOneWidget);
-    expect(find.textContaining('${money(3666.67)} por mês'), findsOneWidget);
+    expect(find.text('Em dez.: ${moneyShort(84000)}'), findsOneWidget);
+    expect(find.text('Pode faturar até ${perMonth(3666.67)} até dezembro sem passar do teto.'), findsOneWidget);
   });
 }

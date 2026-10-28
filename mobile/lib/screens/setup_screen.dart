@@ -1,21 +1,21 @@
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/about_fields.dart';
 import '../widgets/common.dart';
 import '../widgets/playful.dart';
-import 'analysis_screen.dart';
-import 'profiles_screen.dart';
 import 'transaction_form_screen.dart';
 import 'whatsapp_screen.dart';
 
-/// Configuração guiada logo depois de criar a conta: quem é a pessoa (idade, fontes de renda,
-/// trabalhos, renda e objetivo, RN-46), perfil da empresa para quem tem CNPJ (RN-47), a análise
-/// inicial e depois carteira, bancos, orçamentos e WhatsApp.
-/// Cada passo salva ao continuar, então dá para fechar no meio sem perder o que já foi feito.
+/// Configuração guiada logo depois de criar a conta, em 5 passos: (1) idade e estado, (2) renda e
+/// objetivo (RN-46), (3) contas com saldo, (4) WhatsApp (opcional) e (5) o primeiro gasto, com o
+/// mesmo teclado do lançamento. Perfil de empresa, orçamentos e o comparativo ficam para depois
+/// (checklist do Início e "Seu mês"). Cada passo salva ao continuar: dá para fechar no meio.
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
   @override
@@ -27,6 +27,7 @@ class _Bank {
   const _Bank(this.name, this.color);
 }
 
+// A cor do banco fica salva na conta (é como a pessoa reconhece); na tela ela aparece só no ícone.
 const _banks = [
   _Bank('Nubank', '#8A05BE'),
   _Bank('Itaú', '#EC7000'),
@@ -40,43 +41,33 @@ const _banks = [
   _Bank('Mercado Pago', '#00B1EA'),
 ];
 
-/// Categorias padrão sugeridas para o primeiro orçamento.
-const _budgetCategories = ['Alimentação', 'Transporte', 'Lazer', 'Compras'];
-
 class _SetupScreenState extends State<SetupScreen> {
+  static const _steps = 5;
   int _step = 0;
   bool _busy = false;
+  bool _back = false;
 
   final _about = AboutDraft();
-  final _business = GlobalKey<BusinessProfileFormState>();
-  Future<Analysis>? _analysis;
-  bool _businessCreated = false;
-
-  /// O passo da empresa só aparece para quem marcou MEI/CNPJ nas fontes de renda.
-  List<String> get _flow => [
-        'intro', 'age', 'sources', 'income',
-        if (_about.sources.contains('mei') || _businessCreated) 'business',
-        'analysis', 'wallet', 'banks', 'budgets', 'whatsapp', 'done',
-      ];
-
-  void _next() => setState(() => _step++);
-
   final _wallet = TextEditingController();
   final _selectedBanks = <String>{};
   final _bankBalances = <String, TextEditingController>{};
-  final _budgets = {for (final c in _budgetCategories) c: TextEditingController()};
-
-  // Resumo para a tela final.
-  int _accountsCreated = 0, _budgetsCreated = 0;
 
   AppState get _state => context.read<AppState>();
+
+  void _go(int step) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _back = step < _step;
+      _step = step;
+    });
+  }
 
   Future<void> _run(Future<void> Function() save) async {
     setState(() => _busy = true);
     try {
       await save();
       _state.dataChanged();
-      if (mounted) setState(() => _step++);
+      if (mounted) _go(_step + 1);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -85,41 +76,24 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Future<void> _saveAbout() async {
-    await _state.saveAbout(
-      birthYear: _about.validYear ? _about.year : null,
-      state: _about.state,
-      sources: _about.sources.toList(),
-      jobCount: _about.jobCount,
-      monthlyIncome: _about.monthlyIncome,
-      mainGoal: _about.goal,
-    );
-    _analysis = _state.api.initialAnalysis();
+    if (!await confirmLowIncome(context, _about) || !mounted) return;
+    await _run(() => _state.saveAbout(
+          birthYear: _about.validYear ? _about.year : null,
+          state: _about.state,
+          sources: _about.sources.toList(),
+          jobCount: _about.jobCount,
+          monthlyIncome: _about.monthlyIncome,
+          mainGoal: _about.goal,
+        ));
   }
 
-  Future<void> _createBusiness() async {
-    final form = _business.currentState;
-    if (form == null || !form.valid) return;
-    setState(() => _busy = true);
-    final p = await form.save();
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      if (p != null) {
-        _businessCreated = true;
-        _step++;
-      }
-    });
-  }
-
-  Future<void> _saveWallet() async {
+  Future<void> _saveAccounts() async {
     final value = parseAmount(_wallet.text) ?? 0;
     final wallet = _state.accounts.where((a) => a.name == 'Carteira').firstOrNull ?? _state.accounts.firstOrNull;
-    if (wallet == null || value == wallet.initialBalance) return;
-    await _state.api.saveAccount(
-        id: wallet.id, name: wallet.name, initialBalance: value, color: wallet.color, icon: wallet.icon);
-  }
-
-  Future<void> _saveBanks() async {
+    if (wallet != null && value != wallet.initialBalance) {
+      await _state.api.saveAccount(
+          id: wallet.id, name: wallet.name, initialBalance: value, color: wallet.color, icon: wallet.icon);
+    }
     final existing = _state.accounts.map((a) => a.name.toLowerCase()).toSet();
     for (final bank in _banks.where((b) => _selectedBanks.contains(b.name))) {
       if (existing.contains(bank.name.toLowerCase())) continue;
@@ -129,23 +103,12 @@ class _SetupScreenState extends State<SetupScreen> {
         color: bank.color,
         icon: 'account_balance',
       );
-      _accountsCreated++;
-    }
-  }
-
-  Future<void> _saveBudgets() async {
-    for (final MapEntry(key: name, value: field) in _budgets.entries) {
-      final value = parseAmount(field.text);
-      final cat = _state.categories.where((c) => c.type == TxType.expense && c.name == name).firstOrNull;
-      if (value == null || value <= 0 || cat == null) continue;
-      await _state.api.saveBudget(cat.id, _state.monthKey, value, recurring: true);
-      _budgetsCreated++;
     }
   }
 
   @override
   void dispose() {
-    for (final c in [_wallet, ..._bankBalances.values, ..._budgets.values]) {
+    for (final c in [_wallet, ..._bankBalances.values]) {
       c.dispose();
     }
     _about.dispose();
@@ -156,170 +119,183 @@ class _SetupScreenState extends State<SetupScreen> {
   Widget build(BuildContext context) {
     final firstName = (context.watch<AppState>().userName ?? '').trim().split(' ').first;
     void changed() => setState(() {});
-    final flow = _flow;
-    final id = flow[_step.clamp(0, flow.length - 1)];
-    final (bubble, content, primary, secondary) = switch (id) {
-      'intro' => (
-          'Oi${firstName.isEmpty ? '' : ', $firstName'}! 🎉 Em 2 minutinhos a gente deixa o Economizze com a sua cara. Bora?',
-          const SizedBox.shrink(),
-          ('Bora!', _next),
-          null,
-        ),
-      'age' => (
-          'Primeiro, me conta um pouco de você. Em que ano você nasceu, e onde mora? 🎂',
+    final hi = firstName.isEmpty ? 'Oi!' : 'Oi, $firstName!';
+
+    final (bubble, content, primary, secondary) = switch (_step) {
+      0 => (
+          '$hi 🎉 Em 2 minutinhos o Economizze fica com a sua cara. Primeiro: em que ano você nasceu e onde mora?',
           AgeFields(_about, onChanged: changed),
-          ('Continuar', _about.validYear ? _next : null),
-          ('Prefiro não dizer', _next),
+          ('Continuar', _about.validYear ? () => _go(1) : null),
+          ('Prefiro não dizer', () => _go(1)),
         ),
-      'sources' => (
-          'De onde vem o seu dinheiro? Pode marcar mais de uma opção. 💼',
-          SourcesFields(_about, onChanged: changed),
-          ('Continuar', _next),
-          ('Pular', _next),
+      1 => (
+          'De onde vem o seu dinheiro, quanto entra por mês e o que você mais quer agora? 🎯',
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SourcesFields(_about, onChanged: changed),
+            const SizedBox(height: Space.xxl),
+            IncomeGoalFields(_about, onChanged: changed),
+          ]),
+          ('Continuar', _saveAbout),
+          ('Pular', () => _run(() async {})),
         ),
-      'income' => (
-          'Quanto entra por mês, mais ou menos? E qual é o seu objetivo agora? 🎯',
-          IncomeGoalFields(_about, onChanged: changed),
-          ('Continuar', () => _run(_saveAbout)),
-          ('Pular', () => _run(_saveAbout)),
+      2 => (
+          'Onde está o seu dinheiro hoje? Assim eu separo o saldo de cada lugar. 🏦',
+          _accountsStep(),
+          ('Continuar', () => _run(_saveAccounts)),
+          ('Agora não', () => _go(3)),
         ),
-      'business' => (
-          'Você tem CNPJ! Vamos criar um perfil só para a empresa? Assim o dinheiro dela não se mistura com o seu. 🏪',
-          _businessCreated
-              ? const Text('Perfil da empresa criado! Troque de perfil no topo do app.',
-                  style: TextStyle(fontWeight: FontWeight.w700))
-              : BusinessProfileScreen(key: _business, embedded: true),
-          ('Criar perfil da empresa', _businessCreated ? _next : _createBusiness),
-          ('Agora não', _next),
-        ),
-      'analysis' => (
-          'Olha como você está em relação a quem tem a sua idade no Brasil 👇',
-          FutureBuilder<Analysis>(
-            future: _analysis ??= _state.api.initialAnalysis(),
-            builder: (context, snap) => snap.hasData
-                ? AnalysisView(snap.data!)
-                : snap.hasError
-                    ? const Text('Não consegui carregar a análise agora. Ela fica em Menu → Minha situação.')
-                    : const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
-          ),
-          ('Continuar', _next),
-          null,
-        ),
-      'wallet' => (
-          'Quanto dinheiro você tem na carteira agora? Só o dinheiro vivo, em espécie. 💵',
-          _AmountField(controller: _wallet, label: 'Na carteira'),
-          ('Continuar', () => _run(_saveWallet)),
-          ('Não ando com dinheiro', _next),
-        ),
-      'banks' => (
-          'Em quais bancos você tem conta? Assim eu separo o saldo de cada um. 🏦',
-          _banksStep(),
-          ('Continuar', () => _run(_saveBanks)),
-          ('Agora não', _next),
-        ),
-      'budgets' => (
-          'Quanto você quer gastar por mês com cada coisa? Eu aviso antes de você estourar! 🎯',
-          _budgetsStep(),
-          ('Continuar', () => _run(_saveBudgets)),
-          ('Deixo para depois', _next),
-        ),
-      'whatsapp' => (
-          'Sabia que dá para anotar gastos pelo WhatsApp? Manda "gastei 30 no almoço", um áudio ou o print do PIX. 📱',
+      3 => (
+          'Dá para anotar gastos pelo WhatsApp: "gastei 30 no almoço", um áudio ou o print do Pix. 📱',
           const _WhatsAppArt(),
           (
-            'Conectar agora',
+            'Conectar o WhatsApp',
             () async {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppScreen()));
-              if (mounted) setState(() => _step++);
+              if (mounted) _go(4);
             }
           ),
-          ('Depois', _next),
+          ('Depois', () => _go(4)),
         ),
-      _ => (
-          'Tudo pronto! 🚀 Agora é só registrar seus gastos. Quanto mais você anota, melhor eu te ajudo a economizar.',
-          _DoneSummary(accounts: _accountsCreated, budgets: _budgetsCreated),
-          ('Começar a usar', () => _state.completeSetup()),
-          null,
-        ),
+      _ => ('Por último: qual foi o seu último gasto? Pode ser o café de hoje. ☕', const SizedBox.shrink(), null, null),
     };
+
+    final header = Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
+      child: Row(children: [
+        IconButton(
+          tooltip: _step == 0 ? 'Pular configuração' : 'Voltar',
+          icon: Icon(_step == 0 ? Icons.close_rounded : Icons.arrow_back_rounded),
+          onPressed: () => _step == 0 ? _state.completeSetup() : _go(_step - 1),
+        ),
+        Expanded(child: ChunkyProgress(value: (_step + 1) / _steps)),
+        const SizedBox(width: 12),
+        Text('${_step + 1} de $_steps', style: Theme.of(context).textTheme.bodySmall),
+        if (_step == _steps - 1)
+          TextButton(onPressed: () => _state.completeSetup(), child: const Text('Pular')),
+        const SizedBox(width: 8),
+      ]),
+    );
+
+    final speech = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      MascotAvatar(size: 64, pose: _step == 0 ? MascotPose.waving : (_step == 3 ? MascotPose.phone : MascotPose.normal)),
+      Expanded(
+        child: SpeechBubble(
+          tailLeft: true,
+          child: Text(bubble, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.4)),
+        ),
+      ),
+    ]);
+
+    final Widget page;
+    if (_step == _steps - 1) {
+      // O primeiro gasto com o teclado do lançamento: o Início já abre com ele e a conquista.
+      page = Column(key: const ValueKey('first'), children: [
+        Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: speech),
+        Expanded(
+          child: TransactionFormScreen(
+            prompt: 'Quanto foi?',
+            onSaved: () async {
+              HapticFeedback.heavyImpact();
+              await showModalBottomSheet(
+                context: context,
+                builder: (c) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const MascotAvatar(size: 120, pose: MascotPose.celebrating, bounce: true),
+                      const SizedBox(height: 16),
+                      Text('Primeiro passo! 🎉', style: Theme.of(c).textTheme.headlineSmall),
+                      const SizedBox(height: 8),
+                      Text('Tudo pronto. Quanto mais você anota, melhor eu te ajudo a economizar.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Theme.of(c).colorScheme.onSurfaceVariant, height: 1.4)),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Começar a usar')),
+                      ),
+                    ]),
+                  ),
+                ),
+              );
+              _state.completeSetup();
+            },
+          ),
+        ),
+      ]);
+    } else {
+      // Conteúdo ancorado perto do botão: sem buracos de 400 px entre a pergunta e o Continuar.
+      page = LayoutBuilder(
+        key: ValueKey(_step),
+        builder: (context, c) => SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: c.maxHeight - 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [speech, const SizedBox(height: Space.xxl), content],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 20, 0),
-            child: Row(children: [
-              IconButton(
-                tooltip: 'Pular configuração',
-                icon: const Icon(Icons.close),
-                onPressed: () => _state.completeSetup(),
-              ),
-              Expanded(child: ChunkyProgress(value: (_step + 1) / flow.length)),
-            ]),
-          ),
+          header,
           Expanded(
-            child: AnimatedSwitcher(
+            child: PageTransitionSwitcher(
               duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween(begin: const Offset(.08, 0), end: Offset.zero).animate(anim),
-                  child: child,
-                ),
+              reverse: _back,
+              transitionBuilder: (child, a, b) => SharedAxisTransition(
+                animation: a,
+                secondaryAnimation: b,
+                transitionType: SharedAxisTransitionType.horizontal,
+                fillColor: Colors.transparent,
+                child: child,
               ),
-              child: ListView(
-                key: ValueKey(_step),
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                children: [
-                  if (id == 'intro' || id == 'done') ...[
-                    SpeechBubble(child: Text(bubble, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, height: 1.4))),
-                    const SizedBox(height: 4),
-                    const Center(child: MascotAvatar(size: 170, bounce: true)),
-                  ] else
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const MascotAvatar(size: 64),
-                      Expanded(
-                        child: SpeechBubble(
-                          tailLeft: true,
-                          child: Text(bubble, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, height: 1.4)),
-                        ),
-                      ),
-                    ]),
-                  const SizedBox(height: 24),
-                  content,
-                ],
-              ),
+              child: page,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: Column(children: [
-              ChunkyButton(label: primary.$1, onPressed: primary.$2, busy: _busy),
-              SizedBox(
-                height: 48,
-                child: secondary == null
-                    ? null
-                    : TextButton(
-                        onPressed: _busy ? null : secondary.$2,
-                        child: Text(secondary.$1.toUpperCase(),
-                            style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: .8)),
-                      ),
-              ),
-            ]),
-          ),
+          if (primary != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Column(children: [
+                ChunkyButton(label: primary.$1, onPressed: primary.$2, busy: _busy),
+                SizedBox(
+                  height: 48,
+                  child: secondary == null
+                      ? null
+                      : TextButton(onPressed: _busy ? null : secondary.$2, child: Text(secondary.$1)),
+                ),
+              ]),
+            ),
         ]),
       ),
     );
   }
 
-  Widget _banksStep() {
+  Widget _accountsStep() {
     final cs = Theme.of(context).colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Wrap(spacing: 10, runSpacing: 10, children: [
+      _AmountField(
+        controller: _wallet,
+        label: 'Dinheiro vivo, na carteira',
+        icon: IconBadge(Icons.account_balance_wallet_rounded, cs.primary, size: 32),
+      ),
+      const SizedBox(height: Space.xl),
+      Text('Bancos', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: Space.sm),
+      Wrap(spacing: 8, runSpacing: 8, children: [
         for (final b in _banks)
           FilterChip(
-            avatar: CircleAvatar(backgroundColor: hexColor(b.color), radius: 9),
-            label: Text(b.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+            // Bolinha do banco só quando não está marcado: marcado mostra o check (sem desenhar um sobre o outro).
+            avatar: _selectedBanks.contains(b.name)
+                ? null
+                : CircleAvatar(backgroundColor: tintOf(context, b.color), radius: 8),
+            label: Text(b.name),
             selected: _selectedBanks.contains(b.name),
             onSelected: (on) => setState(() {
               if (on) {
@@ -332,9 +308,8 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
       ]),
       if (_selectedBanks.isNotEmpty) ...[
-        const SizedBox(height: 20),
-        Text('Quanto tem em cada um? (pode deixar em branco)',
-            style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+        const SizedBox(height: Space.lg),
+        Text('Quanto tem em cada um? Pode deixar em branco.', style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         for (final b in _banks.where((b) => _selectedBanks.contains(b.name)))
           Padding(
@@ -342,30 +317,10 @@ class _SetupScreenState extends State<SetupScreen> {
             child: _AmountField(
               controller: _bankBalances[b.name]!,
               label: b.name,
-              icon: IconBadge(Icons.account_balance, hexColor(b.color), size: 32),
-              compact: true,
+              icon: IconBadge(Icons.account_balance_rounded, tintOf(context, b.color), size: 32),
             ),
           ),
       ],
-    ]);
-  }
-
-  Widget _budgetsStep() {
-    final categories = context.watch<AppState>().categories;
-    return Column(children: [
-      for (final name in _budgetCategories)
-        if (categories.where((c) => c.type == TxType.expense && c.name == name).firstOrNull case final cat?)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _AmountField(
-              controller: _budgets[name]!,
-              label: name,
-              icon: IconBadge(categoryIcon(cat.icon), hexColor(cat.color), size: 32),
-              compact: true,
-            ),
-          ),
-      Text('Os limites se repetem todo mês. Dá para mudar quando quiser na aba Orçamentos.',
-          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
     ]);
   }
 }
@@ -374,15 +329,14 @@ class _AmountField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final Widget? icon;
-  final bool compact;
-  const _AmountField({required this.controller, required this.label, this.icon, this.compact = false});
+  const _AmountField({required this.controller, required this.label, this.icon});
 
   @override
   Widget build(BuildContext context) => TextField(
         controller: controller,
         keyboardType: TextInputType.number,
         inputFormatters: [MoneyInputFormatter()],
-        style: TextStyle(fontSize: compact ? 18 : 30, fontWeight: FontWeight.w800),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         decoration: InputDecoration(
           labelText: label,
           prefixText: 'R\$ ',
@@ -397,6 +351,7 @@ class _WhatsAppArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     Widget msg(String text, {bool me = true}) => Align(
           alignment: me ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
@@ -404,42 +359,23 @@ class _WhatsAppArt extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             constraints: const BoxConstraints(maxWidth: 280),
             decoration: BoxDecoration(
-              color: me ? const Color(0xFFD9FDD3) : Colors.white,
+              color: me ? cs.primaryContainer : cs.surface,
               borderRadius: BorderRadius.circular(14),
-              boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 4, offset: Offset(0, 1))],
+              border: me ? null : Border.all(color: cs.outlineVariant),
             ),
-            child: Text(text, style: const TextStyle(color: Color(0xFF1A1F1D), fontSize: 15)),
+            child: Text(text, style: TextStyle(fontSize: 15, color: me ? cs.onPrimaryContainer : cs.onSurface)),
           ),
         );
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: const Color(0xFFEFE7DE), borderRadius: BorderRadius.circular(20)),
-      child: Column(children: [
-        msg('gastei 32 no uber'),
-        msg('✅ Despesa de R\$ 32,00 em Transporte — hoje, Carteira.', me: false),
-        msg('🎤 recebi 2 mil do freela ontem'),
-        msg('✅ Receita de R\$ 2.000,00 em Freelance — ontem.', me: false),
-      ]),
-    );
-  }
-}
-
-class _DoneSummary extends StatelessWidget {
-  final int accounts, budgets;
-  const _DoneSummary({required this.accounts, required this.budgets});
-
-  @override
-  Widget build(BuildContext context) {
-    Widget row(IconData icon, String text) => ListTile(
-          leading: IconBadge(icon, incomeColor, size: 40),
-          title: Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
-        );
     return Card(
-      child: Column(children: [
-        row(Icons.account_balance_wallet, accounts == 0 ? 'Carteira pronta' : 'Carteira e mais $accounts conta(s)'),
-        row(Icons.savings, budgets == 0 ? 'Orçamentos: quando quiser' : '$budgets orçamento(s) definidos'),
-        row(Icons.add_circle, 'Toque em "Lançar" para registrar o primeiro gasto'),
-      ]),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(children: [
+          msg('gastei 32 no uber'),
+          msg('✅ Despesa de R\$ 32,00 em Transporte, hoje.', me: false),
+          msg('🎤 recebi 2 mil do freela ontem'),
+          msg('✅ Receita de R\$ 2.000,00 em Freelance, ontem.', me: false),
+        ]),
+      ),
     );
   }
 }

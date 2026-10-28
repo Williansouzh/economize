@@ -111,7 +111,7 @@ public class Category
     public string Name { get; set; } = "";
     public TransactionType Type { get; set; }
     public string Icon { get; set; } = "category";
-    public string Color { get; set; } = "#9E9E9E";
+    public string Color { get; set; } = "#668E93";
 }
 
 public class Transaction

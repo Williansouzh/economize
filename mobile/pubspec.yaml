@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.4.0+13
+version: 1.5.0+14
 
 environment:
   sdk: ^3.13.5
@@ -45,6 +45,7 @@ dependencies:
   timezone: ^0.11.2
   flutter_timezone: ^5.1.1
   file_picker: ^13.1.0
+  animations: ^3.0.0
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +71,13 @@ flutter:
 
   assets:
     - assets/mascot.png
+    # Poses do Cofrinho (brand/gerar.py)
+    - assets/mascot_acenando.png
+    - assets/mascot_pensando.png
+    - assets/mascot_comemorando.png
+    - assets/mascot_dormindo.png
+    - assets/mascot_celular.png
+    - assets/mascot_preocupado.png
 
   # Nunito (SIL Open Font License, assets/fonts/Nunito-OFL.txt), só com os caracteres latinos.
   fonts:

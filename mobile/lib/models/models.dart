@@ -158,7 +158,21 @@ class Insights {
         tips = List<String>.from(j['tips'] ?? []),
         potentialSavings = _d(j['potentialSavings'] ?? 0),
         healthScore = (j['healthScore'] as num? ?? 0).toInt(),
-        cached = j['cached'] == true;
+        cached = j['cached'] == true,
+        generatedAt = DateTime.tryParse(j['generatedAt'] ?? '') ?? DateTime.now();
+
+  /// Quando o app recebeu esta análise ("atualizado hoje, 10:12").
+  final DateTime generatedAt;
+
+  Map<String, dynamic> toJson() => {
+        'summary': summary,
+        'alerts': alerts,
+        'tips': tips,
+        'potentialSavings': potentialSavings,
+        'healthScore': healthScore,
+        'cached': true,
+        'generatedAt': generatedAt.toIso8601String(),
+      };
 }
 
 /// Perfil pessoal ou de empresa (PJ/MEI), com dados separados (RN-47).
@@ -298,12 +312,18 @@ class Goal {
 class Achievement {
   final String id, title, description, icon;
   final bool unlocked;
+
+  /// Progresso até desbloquear ("3 de 7 dias"); nulo nas conquistas de sim ou não.
+  final int? current, target;
+  double? get progress => target == null || target == 0 ? null : ((current ?? 0) / target!).clamp(0, 1).toDouble();
   Achievement.fromJson(Map<String, dynamic> j)
       : id = j['id'],
         title = j['title'],
         description = j['description'],
         icon = j['icon'],
-        unlocked = j['unlocked'];
+        unlocked = j['unlocked'],
+        current = j['current'],
+        target = j['target'];
 }
 
 /// Sequência de dias registrando e conquistas.

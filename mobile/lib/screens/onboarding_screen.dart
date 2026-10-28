@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
 import '../theme.dart';
 import '../widgets/playful.dart';
 
-/// Apresentação do app na primeira vez que ele é aberto, antes do login.
+/// Apresentação do app na primeira vez que ele é aberto, antes do login: 3 páginas com o Cofrinho
+/// em todas, nos fundos da marca (tinta, mar e lima). O fundo muda junto com o arraste.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
   @override
@@ -14,38 +16,47 @@ class OnboardingScreen extends StatefulWidget {
 
 class _Page {
   final String title, text;
-  final Widget art;
-  const _Page(this.title, this.text, this.art);
+  final MascotPose pose;
+  final Color background, foreground;
+  const _Page(this.title, this.text, this.pose, this.background, this.foreground);
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _controller = PageController();
-  int _page = 0;
+  double _position = 0;
 
-  static final _pages = [
-    const _Page(
+  static const _pages = [
+    _Page(
       'Oi! Eu sou o Cofrinho 👋',
-      'Vou te ajudar a entender para onde vai o seu dinheiro e a guardar mais todo mês.',
-      _Art(child: Mascot(size: 190)),
+      'Vou te ajudar a entender para onde vai o seu dinheiro e a guardar um pouco mais todo mês.',
+      MascotPose.waving,
+      tinta,
+      Colors.white,
     ),
-    const _Page(
-      'Registre tudo em segundos',
-      'Lance gastos e receitas pelo app ou mande uma mensagem, um áudio ou o print do comprovante no WhatsApp.',
-      _Art(icon: Icons.chat_rounded, color: Color(0xFF25D366), badges: [Icons.mic_rounded, Icons.receipt_long]),
+    _Page(
+      'Anote em segundos',
+      'Lance pelo app em 3 toques ou mande "gastei 30 no almoço", um áudio ou o print do Pix no WhatsApp.',
+      MascotPose.phone,
+      mar,
+      Colors.white,
     ),
-    const _Page(
-      'Veja para onde vai o dinheiro',
-      'Saldo de cada conta, gastos por categoria e orçamentos que avisam antes de você estourar o limite.',
-      _Art(icon: Icons.pie_chart_rounded, color: Color(0xFF3B82F6), badges: [Icons.savings, Icons.trending_up]),
-    ),
-    const _Page(
+    _Page(
       'Uma IA do seu lado',
-      'Peça uma análise do mês, receba uma nota de saúde financeira e dicas do que dá para economizar.',
-      _Art(icon: Icons.auto_awesome, color: Color(0xFF8B5CF6), badges: [Icons.lightbulb, Icons.emoji_events]),
+      'Uma nota do mês, dicas do que dá para economizar e aviso antes de você passar do limite.',
+      MascotPose.thinking,
+      lima,
+      tinta,
     ),
   ];
 
+  int get _page => _position.round();
   bool get _last => _page == _pages.length - 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() => _position = _controller.page ?? 0));
+  }
 
   void _next() {
     if (_last) {
@@ -63,123 +74,106 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Column(children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: AnimatedOpacity(
-              opacity: _last ? 0 : 1,
-              duration: const Duration(milliseconds: 200),
-              child: TextButton(
-                onPressed: _last ? null : () => context.read<AppState>().completeOnboarding(),
-                child: const Text('PULAR', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: .8)),
+    // Cor de fundo e do texto interpoladas entre as páginas durante o arraste.
+    final i = _position.floor().clamp(0, _pages.length - 1);
+    final j = (i + 1).clamp(0, _pages.length - 1);
+    final t = (_position - i).clamp(0.0, 1.0);
+    final bg = Color.lerp(_pages[i].background, _pages[j].background, t)!;
+    final fg = Color.lerp(_pages[i].foreground, _pages[j].foreground, t)!;
+    final onLima = _pages[_page].background == lima;
+    final buttonColor = onLima ? tinta : lima;
+    final buttonText = onLima ? Colors.white : tinta;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: onLima ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: bg,
+        body: SafeArea(
+          child: Column(children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: AnimatedOpacity(
+                opacity: _last ? 0 : 1,
+                duration: const Duration(milliseconds: 200),
+                child: TextButton(
+                  style: TextButton.styleFrom(foregroundColor: fg),
+                  onPressed: _last ? null : () => context.read<AppState>().completeOnboarding(),
+                  child: const Text('Pular'),
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: PageView(
-              controller: _controller,
-              onPageChanged: (p) => setState(() => _page = p),
-              children: [
-                for (final p in _pages)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 28),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      p.art,
-                      const SizedBox(height: 36),
-                      Text(p.title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, height: 1.2)),
-                      const SizedBox(height: 12),
-                      Text(p.text,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 16, height: 1.5, color: cs.onSurfaceVariant)),
-                    ]),
+            Expanded(
+              child: PageView(
+                controller: _controller,
+                children: [
+                  for (final p in _pages)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        // O Cofrinho é branco: fica num círculo escuro para não sumir no fundo lima.
+                        Container(
+                          width: 240,
+                          height: 240,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: p.background == tinta ? mar.withValues(alpha: .35) : tinta.withValues(alpha: p.background == lima ? 1 : .35),
+                          ),
+                          child: Mascot(size: 220, pose: p.pose),
+                        ),
+                        const SizedBox(height: 32),
+                        Text(p.title,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, height: 1.2, color: p.foreground)),
+                        const SizedBox(height: 12),
+                        Text(p.text,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 17, height: 1.5, fontWeight: FontWeight.w600, color: p.foreground.withValues(alpha: .85))),
+                      ]),
+                    ),
+                ],
+              ),
+            ),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              for (var k = 0; k < _pages.length; k++)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: k == _page ? 26 : 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: k == _page ? fg : fg.withValues(alpha: .3),
+                    borderRadius: BorderRadius.circular(5),
                   ),
-              ],
-            ),
-          ),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (var i = 0; i < _pages.length; i++)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: i == _page ? 26 : 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: i == _page ? brandColor : cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(5),
                 ),
+            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(children: [
+                  ChunkyButton(
+                    label: _last ? 'Começar' : 'Continuar',
+                    onPressed: _next,
+                    color: buttonColor,
+                    textColor: buttonText,
+                  ),
+                  SizedBox(
+                    height: 48,
+                    child: _last
+                        ? TextButton(
+                            style: TextButton.styleFrom(foregroundColor: fg),
+                            onPressed: () => context.read<AppState>().completeOnboarding(signIn: true),
+                            child: const Text('Já tenho conta'),
+                          )
+                        : null,
+                  ),
+                ]),
               ),
+            ),
           ]),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(children: [
-                ChunkyButton(label: _last ? 'Começar' : 'Continuar', onPressed: _next),
-                SizedBox(
-                  height: 48,
-                  child: _last
-                      ? TextButton(
-                          onPressed: () => context.read<AppState>().completeOnboarding(signIn: true),
-                          child: const Text('JÁ TENHO CONTA',
-                              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: .8)),
-                        )
-                      : null,
-                ),
-              ]),
-            ),
-          ),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Ilustração: círculo colorido com um ícone grande e dois "selos" flutuando.
-class _Art extends StatelessWidget {
-  final IconData? icon;
-  final Color color;
-  final List<IconData> badges;
-  final Widget? child;
-  const _Art({this.icon, this.color = brandColor, this.badges = const [], this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    Widget badge(IconData i) => Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardTheme.color,
-            shape: BoxShape.circle,
-            boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 4))],
-          ),
-          child: Icon(i, color: color, size: 26),
-        );
-    return SizedBox(
-      width: 240,
-      height: 240,
-      child: Stack(alignment: Alignment.center, children: [
-        Container(
-          width: 210,
-          height: 210,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: child != null
-                  ? const [mar, tinta]
-                  : [color.withValues(alpha: .9), Color.lerp(color, Colors.black, .2)!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: child ?? Icon(icon, size: 96, color: Colors.white),
         ),
-        if (badges.isNotEmpty) Positioned(top: 8, right: 4, child: badge(badges[0])),
-        if (badges.length > 1) Positioned(bottom: 10, left: 0, child: badge(badges[1])),
-      ]),
+      ),
     );
   }
 }

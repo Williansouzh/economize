@@ -79,12 +79,15 @@ public static class PlanningEndpoints
             var hasCard = await db.Accounts.AnyAsync(a => a.UserId == uid && a.Kind == AccountKind.CreditCard);
 
             AchievementDto A(string id, string title, string desc, string icon, bool ok) => new(id, title, desc, icon, ok);
+            // Conquistas de contagem mostram quanto falta (o app desenha um anel de progresso).
+            AchievementDto N(string id, string title, string desc, string icon, int current, int target) =>
+                new(id, title, desc, icon, current >= target, Math.Min(current, target), target);
             var achievements = new List<AchievementDto>
             {
                 A("first_entry", "Primeiro passo", "Registre seu primeiro lançamento.", "flag", created.Count >= 1),
-                A("entries_50", "Organizado", "Registre 50 lançamentos.", "receipt_long", created.Count >= 50),
-                A("streak_7", "Uma semana firme", "Registre algo 7 dias seguidos.", "local_fire_department", best >= 7),
-                A("streak_30", "Hábito formado", "Registre algo 30 dias seguidos.", "whatshot", best >= 30),
+                N("entries_50", "Organizado", "Registre 50 lançamentos.", "receipt_long", created.Count, 50),
+                N("streak_7", "Uma semana firme", "Registre algo 7 dias seguidos.", "local_fire_department", best, 7),
+                N("streak_30", "Hábito formado", "Registre algo 30 dias seguidos.", "whatshot", best, 30),
                 A("budget_set", "Com limite", "Crie seu primeiro orçamento.", "savings", hasBudget),
                 A("under_budget", "Dentro do combinado",
                     "Termine um mês dentro de todos os orçamentos.", "verified",

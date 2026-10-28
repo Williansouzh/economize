@@ -19,7 +19,7 @@ public class PlanejamentoTests
     private record Invoice(string Month, DateOnly PeriodStart, DateOnly ClosingDate, DateOnly DueDate,
         decimal Total, decimal Paid, bool IsOpen, List<Tx> Items);
     private record Goal(Guid Id, string Name, decimal Target, decimal Saved, double Progress, decimal? MonthlyNeeded);
-    private record Achievement(string Id, bool Unlocked);
+    private record Achievement(string Id, bool Unlocked, int? Current = null, int? Target = null);
     private record Progress(int Streak, int BestStreak, bool RegisteredToday, List<Achievement> Achievements);
     private record ErrorBody(string Error);
 
@@ -252,7 +252,12 @@ public class PlanejamentoTests
         Assert.Equal(3, p.Streak);
         Assert.True(p.RegisteredToday);
         Assert.True(p.Achievements.Single(a => a.Id == "first_entry").Unlocked);
-        Assert.False(p.Achievements.Single(a => a.Id == "streak_7").Unlocked);
+        var week = p.Achievements.Single(a => a.Id == "streak_7");
+        Assert.False(week.Unlocked);
+        // Conquista de contagem mostra o progresso ("3 de 7 dias"); as de sim ou não, não.
+        Assert.Equal((3, 7), (week.Current, week.Target));
+        Assert.Equal((3, 50), (p.Achievements.Single(a => a.Id == "entries_50").Current, p.Achievements.Single(a => a.Id == "entries_50").Target));
+        Assert.Null(p.Achievements.Single(a => a.Id == "first_entry").Target);
         Assert.False(p.Achievements.Single(a => a.Id == "goal_created").Unlocked);
 
         await c.PostAsJsonAsync("/api/goals", new { name = "Reserva", target = 100 });

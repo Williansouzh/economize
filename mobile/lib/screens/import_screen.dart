@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'account_sheet.dart';
@@ -89,7 +90,7 @@ class _ImportScreenState extends State<ImportScreen> {
       body: ListView(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
         children: [
-          const Center(child: IconBadge(Icons.upload_file, Color(0xFF3E7BFA), size: 72)),
+          Center(child: IconBadge(Icons.upload_file_rounded, Theme.of(context).colorScheme.primary, size: 72)),
           const SizedBox(height: 16),
           Card(
             child: Padding(
@@ -355,7 +356,7 @@ class _ImportReviewScreenState extends State<ImportReviewScreen> {
                             if (warning != null)
                               Text(
                                 warning,
-                                style: const TextStyle(color: warningColor, fontWeight: FontWeight.w700, fontSize: 12),
+                                style: TextStyle(color: context.colors.warning, fontWeight: FontWeight.w700, fontSize: 13),
                               ),
                           ],
                         ),
@@ -363,7 +364,7 @@ class _ImportReviewScreenState extends State<ImportReviewScreen> {
                           '${item.type == TxType.expense ? '-' : '+'}${money(item.amount)}',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            color: item.type == TxType.expense ? expenseColor : incomeColor,
+                            color: item.type == TxType.expense ? Theme.of(context).colorScheme.onSurface : context.colors.income,
                           ),
                         ),
                       );

@@ -135,7 +135,8 @@ class ApiClient {
 
   /// [repeat]: só na criação. 'monthly' repete o valor por [repeatCount] meses; 'installments'
   /// divide [amount] (total) em [repeatCount] parcelas. [future]: na edição, vale também para os próximos da série.
-  Future<void> saveTransaction({
+  /// Devolve o id do lançamento criado (o primeiro, numa série); na edição, o próprio [id].
+  Future<String?> saveTransaction({
     String? id,
     required String accountId,
     required String categoryId,
@@ -158,9 +159,12 @@ class ApiClient {
       'isPaid': isPaid,
       if (repeat != null) 'repeat': {'kind': repeat, 'count': repeatCount},
     };
-    id == null
-        ? await post('/transactions', body)
-        : await put('/transactions/$id${future ? '?scope=future' : ''}', body);
+    if (id != null) {
+      await put('/transactions/$id${future ? '?scope=future' : ''}', body);
+      return id;
+    }
+    final created = await post('/transactions', body);
+    return created is Map ? created['id'] as String? : null;
   }
 
   Future<void> deleteTransaction(String id, {bool future = false}) =>
@@ -348,6 +352,8 @@ class ApiClient {
   Future<List<Profile>> profiles() async => [for (final j in await get('/profiles') as List) Profile.fromJson(j)];
   Future<Profile> createProfile(String name, {String? cnpj, bool isMei = true}) async =>
       Profile.fromJson(await post('/profiles', {'name': name, 'cnpj': cnpj, 'isMei': isMei}));
+  Future<Profile> updateProfile(String id, String name, {String? cnpj, bool isMei = true}) async =>
+      Profile.fromJson(await put('/profiles/$id', {'name': name, 'cnpj': cnpj, 'isMei': isMei}));
   Future<void> deleteProfile(String id, String password) => _send(
       _http.delete(_uri('/profiles/$id'), headers: _headers, body: jsonEncode({'password': password})));
 
@@ -369,6 +375,9 @@ class ApiClient {
         'mainGoal': mainGoal,
       }));
 
+  /// Faturamento do ano do MEI e o teto (só no perfil de empresa).
+  Future<MeiSummary> meiSummary({int? year}) async =>
+      MeiSummary.fromJson(await get('/analysis/mei', {if (year != null) 'year': '$year'}));
   Future<Analysis> initialAnalysis() async => Analysis.fromJson(await get('/analysis/initial'));
   Future<Analysis> monthlyAnalysis(String month) async =>
       Analysis.fromJson(await get('/analysis/monthly', {'month': month}));

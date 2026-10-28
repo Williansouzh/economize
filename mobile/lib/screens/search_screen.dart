@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'transactions_screen.dart';
@@ -113,6 +114,8 @@ class _SearchScreenState extends State<SearchScreen> {
     _search();
   }
 
+  bool get _hasFilters => _type != null || _categoryId != null || _accountId != null;
+
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
@@ -151,9 +154,16 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
       body: Column(
         children: [
-          SingleChildScrollView(
+          // Filtros roláveis: a borda direita esmaece para mostrar que tem mais.
+          ShaderMask(
+            shaderCallback: (r) => const LinearGradient(
+              colors: [Colors.black, Colors.black, Colors.transparent],
+              stops: [0, .88, 1],
+            ).createShader(r),
+            blendMode: BlendMode.dstIn,
+            child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 0, 40, 8),
             child: Row(
               children: [
                 FilterChip(
@@ -182,7 +192,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     'Categoria',
                     [
                       for (final c in state.categories.where((c) => _type == null || c.type == _type))
-                        (c.id, c.name, categoryIcon(c.icon), hexColor(c.color)),
+                        (c.id, c.name, categoryIcon(c.icon), tintOf(context, c.color)),
                     ],
                     _categoryId,
                     (id) => setState(() => _categoryId = id),
@@ -195,13 +205,14 @@ class _SearchScreenState extends State<SearchScreen> {
                   selected: account != null,
                   onSelected: (_) => _pick(
                     'Conta',
-                    [for (final a in state.accounts) (a.id, a.name, accountIcon(a.icon), hexColor(a.color))],
+                    [for (final a in state.accounts) (a.id, a.name, accountIcon(a.icon), tintOf(context, a.color))],
                     _accountId,
                     (id) => setState(() => _accountId = id),
                   ),
                 ),
               ],
             ),
+          ),
           ),
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           Expanded(
@@ -212,10 +223,24 @@ class _SearchScreenState extends State<SearchScreen> {
                 title: 'Busque em todos os meses',
                 message: 'Digite parte da descrição ou da categoria, ou use os filtros acima.',
               ),
-              (final r?, _) when r.isEmpty && !_loading => const EmptyState(
+              (final r?, _) when r.isEmpty && !_loading => EmptyState(
                 icon: Icons.search_off,
                 title: 'Nada encontrado',
-                message: 'Tente outra palavra ou tire algum filtro.',
+                message: _hasFilters ? 'Os filtros podem estar escondendo o que você procura.' : 'Tente outra palavra.',
+                action: _hasFilters
+                    ? OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _type = null;
+                            _categoryId = null;
+                            _accountId = null;
+                          });
+                          _search();
+                        },
+                        icon: const Icon(Icons.filter_alt_off_outlined),
+                        label: const Text('Tirar os filtros'),
+                      )
+                    : null,
               ),
               (final r?, _) => ListView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -226,13 +251,13 @@ class _SearchScreenState extends State<SearchScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            r.length >= 100 ? 'Mostrando os 100 mais recentes' : '${r.length} lançamento(s)',
+                            r.length >= 100 ? 'Mostrando os 100 mais recentes' : plural(r.length, 'lançamento', 'lançamentos'),
                             style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
                           ),
                         ),
                         Text(
-                          money(total!),
-                          style: TextStyle(fontWeight: FontWeight.w800, color: total >= 0 ? incomeColor : expenseColor),
+                          '${total! < 0 ? '−' : '+'} ${money(total.abs())}',
+                          style: valueStyle.copyWith(color: total >= 0 ? context.colors.income : cs.onSurface),
                         ),
                       ],
                     ),

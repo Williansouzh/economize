@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
-import '../utils/format.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 /// Painel do super admin (RN-44): quantas pessoas se cadastraram e quantas estão usando o app.
@@ -44,7 +44,7 @@ class _AdminScreenState extends State<AdminScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _Metric('Ativos hoje', s.activeToday, Icons.bolt, warningColor),
+                  _Metric('Ativos hoje', s.activeToday, Icons.bolt, context.colors.warning),
                   const SizedBox(width: 12),
                   _Metric('Ativos em 7 dias', s.active7Days, Icons.today, _blue),
                 ],
@@ -52,9 +52,9 @@ class _AdminScreenState extends State<AdminScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _Metric('Ativos em 30 dias', s.active30Days, Icons.calendar_month, incomeColor),
+                  _Metric('Ativos em 30 dias', s.active30Days, Icons.calendar_month, context.colors.success),
                   const SizedBox(width: 12),
-                  _Metric('Com WhatsApp', s.whatsAppLinked, Icons.chat, const Color(0xFF25D366)),
+                  _Metric('Com WhatsApp', s.whatsAppLinked, Icons.chat, mar),
                 ],
               ),
               const SizedBox(height: 12),
@@ -76,7 +76,7 @@ class _AdminScreenState extends State<AdminScreen> {
   );
 }
 
-const _blue = Color(0xFF3B82F6);
+const _blue = Color(0xFF2E69B2); // info da paleta
 
 class _Hero extends StatelessWidget {
   final AdminStats stats;
@@ -283,7 +283,7 @@ class _UserTile extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
-          if (user.whatsApp) ...[const SizedBox(width: 6), const Icon(Icons.chat, size: 14, color: Color(0xFF25D366))],
+          if (user.whatsApp) ...[const SizedBox(width: 6), const Icon(Icons.chat, size: 14, color: mar)],
         ],
       ),
       subtitle: Text(

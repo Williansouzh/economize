@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../utils/format.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 /// RN-30: exclusão definitiva da conta e de todos os dados, confirmada com a senha.
@@ -28,7 +28,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded, color: expenseColor),
+        icon: Icon(Icons.warning_amber_rounded, color: c.colors.expense),
         title: Text(_reset ? 'Apagar tudo e recomeçar?' : 'Excluir para sempre?'),
         content: Text(_reset
             ? 'Seus lançamentos, contas, orçamentos e metas serão apagados agora. Isso não pode ser desfeito.'
@@ -36,7 +36,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: expenseColor),
+            style: FilledButton.styleFrom(backgroundColor: c.colors.expense, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
             child: Text(_reset ? 'Apagar' : 'Excluir'),
           ),
@@ -82,7 +82,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(_reset ? 'Começar do zero' : 'Excluir minha conta')),
       body: ListView(padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom), children: [
-        Center(child: IconBadge(_reset ? Icons.restart_alt : Icons.delete_forever_outlined, expenseColor, size: 72)),
+        Center(child: IconBadge(_reset ? Icons.restart_alt_rounded : Icons.delete_forever_outlined, context.colors.expense, size: 72)),
         const SizedBox(height: 16),
         Text('Isso apaga definitivamente:',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
@@ -119,7 +119,7 @@ class _DeleteAccountScreenState extends State<DeleteAccountScreen> {
         ),
         const SizedBox(height: 20),
         FilledButton.icon(
-          style: FilledButton.styleFrom(backgroundColor: expenseColor, foregroundColor: Colors.white),
+          style: FilledButton.styleFrom(backgroundColor: context.colors.expense, foregroundColor: Colors.white),
           onPressed: _deleting ? null : _delete,
           icon: _deleting
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))

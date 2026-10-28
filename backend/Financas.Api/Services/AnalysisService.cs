@@ -56,16 +56,13 @@ public class AnalysisService(AppDbContext db, FinanceService finance, AppClock c
                 $"Você ganha mais que cerca de {p}% das pessoas de {bench.AgeGroupLabel} que trabalham no Brasil."),
             >= 40 => ("na_media", "Você está no meio do caminho",
                 $"Sua renda é parecida com a da maioria das pessoas de {bench.AgeGroupLabel}: metade delas ganha até {Money(bench.Median)}."),
-            _ => ("abaixo", "Sua renda está abaixo da média da sua idade",
-                $"Metade das pessoas de {bench.AgeGroupLabel} ganha até {Money(bench.Median)}. Aqui o jogo é fazer cada real render, e eu te ajudo nisso."),
+            // Sem ranking negativo: quem ganha menos que a maioria vê o ponto de partida, não "abaixo da média".
+            _ => ("abaixo", "Seu ponto de partida",
+                $"Metade das pessoas de {bench.AgeGroupLabel} ganha até {Money(bench.Median)}. A partir de {Money(income)}, o jogo é fazer cada real render, e eu te ajudo nisso."),
         };
 
-        var points = new List<AnalysisPointDto>
-        {
-            new("bar_chart", "info", $"Média de {bench.AgeGroupLabel} no Brasil: {Money(bench.Mean)}. Ela é puxada para cima por quem ganha muito, por isso a mediana ({Money(bench.Median)}) diz mais."),
-        };
-        if (bench.Region != "BR")
-            points.Add(new("place", "info", $"No {bench.RegionName}, a média para a sua idade é {Money(bench.RegionMean)}."));
+        // Média, mediana e região ficam no cartão do IBGE do app ("Saiba mais"): aqui não repetem.
+        var points = new List<AnalysisPointDto>();
 
         var sources = SourceList(u);
         if (u.JobCount >= 2)

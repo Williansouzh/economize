@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 
@@ -15,51 +16,50 @@ class CategoriesScreen extends StatelessWidget {
     final categories = context.watch<AppState>().categories;
     return DefaultTabController(
       length: 2,
-      child: Builder(builder: (context) {
-        final tabs = DefaultTabController.of(context);
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Categorias'),
-            bottom: const TabBar(tabs: [Tab(text: 'Despesas'), Tab(text: 'Receitas')]),
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => showCategorySheet(context,
-                type: tabs.index == 0 ? TxType.expense : TxType.income),
-            icon: const Icon(Icons.add),
-            label: const Text('Nova categoria'),
-          ),
-          body: TabBarView(children: [
-            for (final type in [TxType.expense, TxType.income])
-              _CategoryList(categories.where((c) => c.type == type).toList()),
-          ]),
-        );
-      }),
+      // O lima é só do Lançar: "Nova categoria" é o último item da lista, não um botão flutuante.
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Categorias'),
+          bottom: const TabBar(tabs: [Tab(text: 'Despesas'), Tab(text: 'Receitas')]),
+        ),
+        body: TabBarView(children: [
+          for (final type in [TxType.expense, TxType.income])
+            _CategoryList(categories.where((c) => c.type == type).toList(), type),
+        ]),
+      ),
     );
   }
 }
 
 class _CategoryList extends StatelessWidget {
   final List<TxCategory> items;
-  const _CategoryList(this.items);
+  final TxType type;
+  const _CategoryList(this.items, this.type);
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const EmptyState(icon: Icons.category_outlined, title: 'Nenhuma categoria ainda');
-    }
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 104), children: [
+    final cs = Theme.of(context).colorScheme;
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 32), children: [
       Card(
         clipBehavior: Clip.antiAlias,
         child: Column(children: [
           for (final (i, c) in items.indexed) ...[
             if (i > 0) const Divider(height: 1, indent: 72),
             ListTile(
-              leading: IconBadge(categoryIcon(c.icon), hexColor(c.color)),
-              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-              trailing: const Icon(Icons.chevron_right),
+              minTileHeight: 60,
+              leading: IconBadge(categoryIcon(c.icon), tintOf(context, c.color)),
+              title: Text(c.name),
+              trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => showCategorySheet(context, editing: c),
             ),
           ],
+          if (items.isNotEmpty) const Divider(height: 1, indent: 72),
+          ListTile(
+            minTileHeight: 60,
+            leading: SizedBox(width: 40, child: Icon(Icons.add_rounded, color: cs.primary)),
+            title: Text('Nova categoria', style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
+            onTap: () => showCategorySheet(context, type: type),
+          ),
         ]),
       ),
     ]);
@@ -90,7 +90,7 @@ class _CategorySheetState extends State<_CategorySheet> {
   late final _name = TextEditingController(text: widget.editing?.name);
   late TxType _type = widget.type;
   late String _icon = widget.editing?.icon ?? 'category';
-  late String _color = widget.editing?.color ?? categoryColors.first;
+  late String _color = widget.editing?.color ?? categoryColors[4];
   bool _busy = false;
 
   Future<void> _save() async {
@@ -118,13 +118,13 @@ class _CategorySheetState extends State<_CategorySheet> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        icon: const Icon(Icons.delete_outline, color: expenseColor),
+        icon: Icon(Icons.delete_outline_rounded, color: c.colors.expense),
         title: Text('Excluir "${widget.editing!.name}"?'),
         content: const Text('Os orçamentos dessa categoria também serão excluídos.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: expenseColor),
+            style: FilledButton.styleFrom(backgroundColor: c.colors.expense, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(c, true),
             child: const Text('Excluir'),
           ),
@@ -146,7 +146,7 @@ class _CategorySheetState extends State<_CategorySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final color = hexColor(_color);
+    final color = tintOf(context, _color);
     final text = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     return Padding(
@@ -210,23 +210,7 @@ class _CategorySheetState extends State<_CategorySheet> {
           const SizedBox(height: 20),
           Text('Cor', style: text.labelLarge),
           const SizedBox(height: 8),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            for (final c in categoryColors)
-              GestureDetector(
-                onTap: () => setState(() => _color = c),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: hexColor(c),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: c == _color ? cs.onSurface : Colors.transparent, width: 3),
-                  ),
-                  child: c == _color ? Icon(Icons.check, size: 18, color: onColor(hexColor(c))) : null,
-                ),
-              ),
-          ]),
+          PaletteColorPicker(selected: _color, onChanged: (c) => setState(() => _color = c)),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _busy ? null : _save,
@@ -237,7 +221,7 @@ class _CategorySheetState extends State<_CategorySheet> {
           if (widget.editing != null) ...[
             const SizedBox(height: 8),
             TextButton.icon(
-              style: TextButton.styleFrom(foregroundColor: expenseColor),
+              style: TextButton.styleFrom(foregroundColor: context.colors.expense),
               onPressed: _busy ? null : _delete,
               icon: const Icon(Icons.delete_outline),
               label: const Text('Excluir categoria'),
