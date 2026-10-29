@@ -198,7 +198,7 @@ Com o domínio no ar, siga [`agent/README.md`](../agent/README.md#configurando-o
 Na Meta, a URL do webhook é `https://SEU-DOMINIO/webhook`.
 
 - Preencha `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` e **`WHATSAPP_APP_SECRET`**
-  no `.env`. Sem o App Secret, o agente aceita webhooks que não vieram da Meta.
+  no `.env`. Sem o App Secret, o agente recusa todos os webhooks (resposta 503).
 - O token temporário dura 24h. Em produção, gere um **token permanente** com um *Usuário do sistema* no
   Business Manager.
 - Depois de mudar o `.env`: `docker compose -f docker-compose.prod.yml up -d agent`.

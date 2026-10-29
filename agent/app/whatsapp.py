@@ -43,9 +43,9 @@ def mask_phone(phone: str) -> str:
     return phone[:4] + "*" * (len(phone) - 8) + phone[-4:]
 
 
-def verify_signature(app_secret: str, body: bytes, header: str | None) -> bool:
+def verify_signature(app_secret: str, body: bytes, header: str | None, allow_unsigned: bool = False) -> bool:
     if not app_secret:
-        return True  # validação desligada (apenas para desenvolvimento)
+        return allow_unsigned  # sem App Secret só passa com ALLOW_UNSIGNED_WEBHOOKS (desenvolvimento)
     expected = "sha256=" + hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, header or "")
 

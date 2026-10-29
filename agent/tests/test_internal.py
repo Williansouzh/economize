@@ -43,3 +43,35 @@ async def test_forget_recusa_tudo_sem_chave_configurada(monkeypatch):
 def test_mask_phone_mostra_so_o_inicio_e_o_final_do_numero():
     assert mask_phone("5511987654321") == "5511*****4321"
     assert mask_phone("1234") == "****"
+
+
+async def post_webhook(headers: dict | None = None):
+    transport = httpx.ASGITransport(app=main.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://agente") as client:
+        return await client.post("/webhook", content=b'{"entry": []}', headers=headers or {})
+
+
+async def test_webhook_sem_app_secret_recusa_tudo(monkeypatch):
+    # Sem o App Secret não dá para saber se a mensagem veio da Meta: ninguém pode se passar por um número.
+    monkeypatch.setattr(main.settings, "whatsapp_app_secret", "")
+    monkeypatch.setattr(main.settings, "allow_unsigned_webhooks", False)
+    assert (await post_webhook()).status_code == 503
+
+
+async def test_webhook_com_app_secret_exige_assinatura_valida(monkeypatch):
+    import hashlib
+    import hmac
+
+    monkeypatch.setattr(main.settings, "whatsapp_app_secret", "segredo")
+    main.app.state.coordinator = None  # o corpo não tem mensagens: o coordenador não é chamado
+    assert (await post_webhook()).status_code == 401
+    assert (await post_webhook({"X-Hub-Signature-256": "sha256=errado"})).status_code == 401
+    sig = "sha256=" + hmac.new(b"segredo", b'{"entry": []}', hashlib.sha256).hexdigest()
+    assert (await post_webhook({"X-Hub-Signature-256": sig})).status_code == 200
+
+
+async def test_webhook_sem_assinatura_so_com_a_opcao_de_desenvolvimento(monkeypatch):
+    monkeypatch.setattr(main.settings, "whatsapp_app_secret", "")
+    monkeypatch.setattr(main.settings, "allow_unsigned_webhooks", True)
+    main.app.state.coordinator = None
+    assert (await post_webhook()).status_code == 200

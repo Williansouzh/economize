@@ -119,6 +119,35 @@ public class RegrasTests
         Assert.Equal(HttpStatusCode.OK, (await LinkAsync(agent, phone, await NewCodeAsync(user))).StatusCode);
     }
 
+    [Fact]
+    public async Task Varios_numeros_errando_somam_no_teto_geral()
+    {
+        // Quem tenta adivinhar o código de muitos números diferentes não ganha 5 tentativas por número.
+        using var factory = new ApiFactory { Settings = { ["Agent:LinkGlobalMaxFailures"] = "3" } };
+        var user = await factory.CreateUserClientAsync();
+        var agent = factory.CreateAgentClient();
+        var code = await NewCodeAsync(user);
+        var wrong = code == "111111" ? "222222" : "111111";
+
+        for (var i = 0; i < 3; i++)
+            Assert.Equal(HttpStatusCode.BadRequest, (await LinkAsync(agent, $"551190000010{i}", wrong)).StatusCode);
+
+        // Um número que nunca errou também fica bloqueado, mesmo com o código certo.
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await LinkAsync(agent, "5511900000199", code)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("*")]
+    [InlineData("+55 11 9999")]
+    [InlineData("")]
+    public async Task Numero_que_nao_e_so_digitos_e_recusado(string phone)
+    {
+        using var factory = new ApiFactory();
+        var user = await factory.CreateUserClientAsync();
+        var res = await LinkAsync(factory.CreateAgentClient(), phone, await NewCodeAsync(user));
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
     // ---------- Ícone da conta ----------
 
     private record AccountWithIcon(Guid Id, string Name, string Icon);

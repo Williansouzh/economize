@@ -166,6 +166,8 @@ def test_parse_webhook_e_assinatura():
     sig = "sha256=" + hmac.new(b"segredo", body, hashlib.sha256).hexdigest()
     assert verify_signature("segredo", body, sig)
     assert not verify_signature("segredo", body, "sha256=errado")
+    assert not verify_signature("", body, None)  # sem App Secret, recusa
+    assert verify_signature("", body, None, allow_unsigned=True)
 
 
 def test_formatacao_whatsapp():

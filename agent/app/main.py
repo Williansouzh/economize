@@ -86,7 +86,12 @@ async def verify_webhook(
 @app.post("/webhook")
 async def receive_webhook(request: Request, background: BackgroundTasks):
     body = await request.body()
-    if not verify_signature(settings.whatsapp_app_secret, body, request.headers.get("X-Hub-Signature-256")):
+    if not settings.whatsapp_app_secret and not settings.allow_unsigned_webhooks:
+        # Sem o App Secret não dá para saber se a mensagem veio da Meta: recusa tudo.
+        log.error("Webhook recusado: WHATSAPP_APP_SECRET não configurado")
+        raise HTTPException(status_code=503, detail="Webhook sem App Secret configurado")
+    if not verify_signature(settings.whatsapp_app_secret, body, request.headers.get("X-Hub-Signature-256"),
+                            settings.allow_unsigned_webhooks):
         raise HTTPException(status_code=401, detail="Assinatura inválida")
 
     for msg in parse_webhook(await request.json()):

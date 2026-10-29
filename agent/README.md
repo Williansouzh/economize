@@ -92,7 +92,7 @@ pytest
    - Token de verificação: o mesmo valor de `WHATSAPP_VERIFY_TOKEN`
    - Assine o campo **messages**.
 5. Em **Configurações do app → Básico**, copie a **Chave secreta do app** para `WHATSAPP_APP_SECRET`.
-   Com ela, o agente rejeita webhooks que não vierem da Meta.
+   É obrigatória: sem ela o agente recusa todos os webhooks. Para testar localmente sem a Meta, use `ALLOW_UNSIGNED_WEBHOOKS=true`.
 
 > Mensagens que o usuário inicia abrem uma janela de atendimento de 24h, gratuita na Cloud API.
 > O bot só responde, então não precisa de templates.

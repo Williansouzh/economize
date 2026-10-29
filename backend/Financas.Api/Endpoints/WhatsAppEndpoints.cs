@@ -124,6 +124,9 @@ public static class WhatsAppEndpoints
 
         agent.MapPost("/link", async (AgentLinkRequest req, AppDbContext db, LinkAttemptLimiter limiter) =>
         {
+            // O número vem da Meta, só com dígitos (e não pode colidir com a linha do teto geral).
+            if (req.Phone is not { Length: > 0 and <= 20 } || !req.Phone.All(char.IsAsciiDigit))
+                return Results.BadRequest(new { error = "Número inválido." });
             if (await limiter.IsBlockedAsync(req.Phone))
                 return Results.Json(new { error = "Muitas tentativas erradas. Aguarde 30 minutos e gere um novo código no app." },
                     statusCode: StatusCodes.Status429TooManyRequests);

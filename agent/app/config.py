@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     whatsapp_verify_token: str = ""
     whatsapp_app_secret: str = ""
+    # Só para testar localmente sem a Meta: aceita webhook sem assinatura quando não há App Secret.
+    # Em produção fica desligado, e sem App Secret o webhook recusa tudo.
+    allow_unsigned_webhooks: bool = False
     graph_api_version: str = "v21.0"
 
     whisper_model: str = "small"
