@@ -216,6 +216,35 @@ As migrations do banco rodam sozinhas quando a API sobe. O app web atualiza no p
 o app Android precisa de um APK/AAB novo só quando o código do app muda (e de `deploy/publish-apk.sh`
 para atualizar o download da landing page). Mudanças na pasta `site/` também pedem `--build`.
 
+### Usuários do banco
+
+A API entra no Postgres como `api_user`, dona só do banco `financas`, e o agente como `agente_user`,
+dono só do banco `agente`. Nenhum dos dois consegue abrir o banco do outro. O `postgres` fica para
+o backup e emergências. Numa instalação nova, `infra/postgres/roles.sh` roda sozinho na primeira subida.
+
+**Banco que já existia antes desta mudança** (feito uma vez):
+
+```bash
+cd ~/economize && git pull
+# 1. Duas senhas novas no .env:
+echo "API_DB_PASSWORD=$(openssl rand -hex 32)" >> .env
+echo "AGENT_DB_PASSWORD=$(openssl rand -hex 32)" >> .env
+# 2. O banco lê as senhas novas (reinicia só ele, alguns segundos):
+docker compose -f docker-compose.prod.yml up -d db
+# 3. Cria os usuários e passa a eles a posse das tabelas (não apaga nada; pode rodar de novo):
+docker compose -f docker-compose.prod.yml exec db sh /docker-entrypoint-initdb.d/roles.sh
+# 4. API e agente passam a usar os usuários novos:
+docker compose -f docker-compose.prod.yml up -d --build api agent
+docker compose -f docker-compose.prod.yml logs --tail 30 api agent
+```
+
+Para trocar uma das senhas: mude no `.env` e repita os passos 2 a 4.
+
+**Se algo der errado**, volte API e agente para o `postgres` sem desfazer o resto. Troque no
+`docker-compose.prod.yml` `api_user`/`${API_DB_PASSWORD}` e `agente_user`/`${AGENT_DB_PASSWORD}` por
+`postgres`/`${POSTGRES_PASSWORD}` (ou `git checkout` da versão anterior desse arquivo) e rode
+`up -d api agent`. O superusuário continua acessando tudo, então nada fica de fora.
+
 ## 8. Backups
 
 O serviço `backup` faz um `pg_dump` dos bancos `financas` e `agente` uma vez por dia em `~/economize/backups/`

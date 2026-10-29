@@ -14,9 +14,15 @@ services:
     environment:
       POSTGRES_DB: financas
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      # Senhas dos usuários de cada serviço, lidas pelo infra/postgres/roles.sh.
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?defina API_DB_PASSWORD no .env}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:?defina AGENT_DB_PASSWORD no .env}
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Um usuário por serviço (api_user e agente_user). Roda sozinho só na primeira subida;
+      # num banco que já existe, rode uma vez à mão (docs/DEPLOY.md, "Usuários do banco").
+      - ./infra/postgres/roles.sh:/docker-entrypoint-initdb.d/roles.sh:ro
     healthcheck:
       # Por TCP: na primeira subida o Postgres roda os scripts de init num servidor
       # temporário só com socket local, e o check por socket passaria cedo demais.
@@ -30,7 +36,7 @@ services:
     restart: unless-stopped
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Default: Host=db;Database=financas;Username=postgres;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__Default: Host=db;Database=financas;Username=api_user;Password=${API_DB_PASSWORD}
       DeepSeek__ApiKey: ${DEEPSEEK_API_KEY:?defina DEEPSEEK_API_KEY no .env}
       Agent__ApiKey: ${AGENT_API_KEY:?defina AGENT_API_KEY no .env}
       # Rede interna: a API pede ao agente para apagar o histórico de um número (RN-30).
@@ -55,7 +61,7 @@ services:
     restart: unless-stopped
     environment:
       FINANCE_API_URL: http://api:5000
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/agente
+      DATABASE_URL: postgresql://agente_user:${AGENT_DB_PASSWORD}@db:5432/agente
       AGENT_API_KEY: ${AGENT_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
