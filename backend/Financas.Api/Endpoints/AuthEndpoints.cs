@@ -90,30 +90,37 @@ public static class AuthEndpoints
             return Results.Accepted();
         });
 
+        // Cada tentativa é reservada no banco antes de conferir o código, e o código é gasto num UPDATE só:
+        // com N pedidos ao mesmo tempo, continuam valendo 5 tentativas e o código troca a senha uma vez.
         g.MapPost("/reset-password", async (ResetPasswordRequest req, AppDbContext db, TokenService tokens, AppClock clock) =>
         {
-            var address = (req.Email ?? "").Trim().ToLowerInvariant();
-            var user = await db.Users.FirstOrDefaultAsync(u => u.Email == address);
-            // A mesma mensagem em todos os casos, para não revelar se o e-mail tem conta.
-            var invalid = Results.BadRequest(new { error = "Código inválido ou vencido. Se errou várias vezes, espere 15 minutos e peça um novo." });
-            if (user?.ResetCodeHash is null || user.ResetCodeExpiresAt < clock.UtcNow || user.ResetAttempts >= MaxResetAttempts)
-                return invalid;
-            if (!CryptographicOperations.FixedTimeEquals(
-                    Encoding.ASCII.GetBytes(HashCode(user.Id, (req.Code ?? "").Trim())), Encoding.ASCII.GetBytes(user.ResetCodeHash)))
-            {
-                user.ResetAttempts++;
-                await db.SaveChangesAsync();
-                return invalid;
-            }
             if ((req.NewPassword ?? "").Length < MinPasswordLength)
                 return Results.BadRequest(new { error = $"A senha precisa ter pelo menos {MinPasswordLength} caracteres." });
+            var address = (req.Email ?? "").Trim().ToLowerInvariant();
+            var userId = await db.Users.Where(u => u.Email == address).Select(u => (Guid?)u.Id).FirstOrDefaultAsync();
+            // A mesma mensagem em todos os casos, para não revelar se o e-mail tem conta.
+            var invalid = Results.BadRequest(new { error = "Código inválido ou vencido. Se errou várias vezes, espere 15 minutos e peça um novo." });
+            if (userId is not { } id) return invalid;
 
-            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
-            user.ResetCodeHash = null;
-            user.ResetCodeExpiresAt = null;
-            user.ResetAttempts = 0;
-            user.TokenVersion++; // quem estava com a senha antiga é desconectado (RN-32)
-            await db.SaveChangesAsync();
+            var now = clock.UtcNow;
+            var reserved = await db.Users
+                .Where(u => u.Id == id && u.ResetCodeHash != null && u.ResetCodeExpiresAt > now && u.ResetAttempts < MaxResetAttempts)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.ResetAttempts, u => u.ResetAttempts + 1));
+            if (reserved == 0) return invalid;
+
+            var hash = HashCode(id, (req.Code ?? "").Trim());
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
+            var used = await db.Users
+                .Where(u => u.Id == id && u.ResetCodeHash == hash && u.ResetCodeExpiresAt > now)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(u => u.PasswordHash, passwordHash)
+                    .SetProperty(u => u.ResetCodeHash, (string?)null)
+                    .SetProperty(u => u.ResetCodeExpiresAt, (DateTime?)null)
+                    .SetProperty(u => u.ResetAttempts, 0)
+                    .SetProperty(u => u.TokenVersion, u => u.TokenVersion + 1)); // quem estava com a senha antiga sai (RN-32)
+            if (used == 0) return invalid;
+
+            var user = await db.Users.AsNoTracking().FirstAsync(u => u.Id == id);
             return Results.Ok(new AuthResponse(tokens.Create(user), user.Name, user.Email));
         });
     }
