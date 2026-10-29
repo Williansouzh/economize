@@ -120,6 +120,10 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
 
   KeyEventResult _onKey(FocusNode _, KeyEvent e) {
     if (e is! KeyDownEvent && e is! KeyRepeatEvent) return KeyEventResult.ignored;
+    // Teclas digitadas num campo de texto (descrição, observação) sobem até aqui: são do campo, não do valor.
+    if (FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>() != null) {
+      return KeyEventResult.ignored;
+    }
     final ch = e.character;
     if (ch != null && RegExp(r'^[0-9]$').hasMatch(ch)) {
       _digit(ch);

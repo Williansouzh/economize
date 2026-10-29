@@ -2,10 +2,14 @@
 <resources>
     <!-- Android 12+: a splash do sistema usa estes atributos em vez do windowBackground. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- O app tem tema claro e escuro próprios: não deixa o sistema (ex.: HyperOS) inverter as cores. -->
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
         <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- O app tem tema claro e escuro próprios: não deixa o sistema (ex.: HyperOS) inverter as cores. -->
+        <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
 </resources>
