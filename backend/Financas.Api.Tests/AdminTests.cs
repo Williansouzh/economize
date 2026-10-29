@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using Financas.Api.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Financas.Api.Tests;
 
@@ -12,13 +16,22 @@ public class AdminTests
     private record Stats(int TotalUsers, int NewToday, int New7Days, int ActiveToday, int Active7Days, int Active30Days,
         List<DayRow> Days, List<UserRow> RecentUsers);
 
-    private static ApiFactory Factory() => new() { Settings = { ["Admin:Emails"] = "dono@teste.com, outro@teste.com" } };
+    /// <summary>Cria a conta e coloca o id dela em Admin:UserIds (o id só existe depois do cadastro).</summary>
+    private static async Task<HttpClient> AdminClientAsync(ApiFactory factory, string email = "dono@teste.com")
+    {
+        var client = await factory.CreateUserClientAsync(email);
+        using var scope = factory.Services.CreateScope();
+        var id = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Users
+            .Where(u => u.Email == email).Select(u => u.Id).SingleAsync();
+        factory.Services.GetRequiredService<IConfiguration>()["Admin:UserIds"] = $"{Guid.NewGuid()}, {id}";
+        return client;
+    }
 
     [Fact]
-    public async Task So_o_email_configurado_ve_o_painel_e_os_outros_recebem_404()
+    public async Task So_o_id_configurado_ve_o_painel_e_os_outros_recebem_404()
     {
-        using var factory = Factory();
-        var admin = await factory.CreateUserClientAsync("Dono@Teste.com");
+        using var factory = new ApiFactory();
+        var admin = await AdminClientAsync(factory);
         var user = await factory.CreateUserClientAsync("ana@teste.com");
 
         Assert.True((await admin.GetFromJsonAsync<Me>("/api/me"))!.IsAdmin);
@@ -31,8 +44,8 @@ public class AdminTests
     [Fact]
     public async Task Conta_cadastros_e_ativos_por_dia_no_fuso_do_app()
     {
-        using var factory = Factory();
-        var admin = await factory.CreateUserClientAsync("dono@teste.com");
+        using var factory = new ApiFactory();
+        var admin = await AdminClientAsync(factory);
         var ana = await factory.CreateUserClientAsync("ana@teste.com");
         await factory.CreateUserClientAsync("bia@teste.com"); // cadastrou e não voltou
 
@@ -58,5 +71,16 @@ public class AdminTests
         Assert.Equal(1, stats.Days[^2].Active);
         Assert.Equal(2, hoje.Active);
         Assert.Contains(stats.RecentUsers, u => u.Email == "ana@teste.com" && u.LastSeenAt != null);
+    }
+
+    [Fact]
+    public async Task Email_antigo_da_lista_nao_da_mais_acesso()
+    {
+        // Antes valia o e-mail: quem criasse a conta com um endereço da lista, sem confirmar, virava admin.
+        using var factory = new ApiFactory { Settings = { ["Admin:Emails"] = "dono@teste.com" } };
+        var intruso = await factory.CreateUserClientAsync("dono@teste.com");
+
+        Assert.False((await intruso.GetFromJsonAsync<Me>("/api/me"))!.IsAdmin);
+        Assert.Equal(HttpStatusCode.NotFound, (await intruso.GetAsync("/api/admin/stats")).StatusCode);
     }
 }

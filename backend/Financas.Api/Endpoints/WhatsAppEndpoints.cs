@@ -24,7 +24,7 @@ public static class WhatsAppEndpoints
         me.MapGet("/", async (ClaimsPrincipal user, AppDbContext db, AdminAccess admin) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
-            return u is null ? Results.NotFound() : Results.Ok(new MeDto(u.Name, u.Email, u.WhatsAppPhone, admin.IsAdmin(u.Email)));
+            return u is null ? Results.NotFound() : Results.Ok(new MeDto(u.Name, u.Email, u.WhatsAppPhone, admin.IsAdmin(u.Id)));
         });
 
         // RN-32: o app troca o token por um novo ao abrir, para quem usa não precisar entrar de novo.

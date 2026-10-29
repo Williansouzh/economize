@@ -44,8 +44,8 @@ services:
       Email__Username: ${SMTP_USERNAME:-}
       Email__Password: ${SMTP_PASSWORD:-}
       Email__From: ${SMTP_FROM:-}
-      # RN-44: e-mails do super admin, separados por vírgula.
-      Admin__Emails: ${ADMIN_EMAILS:-}
+      # RN-44: ids de usuário do super admin, separados por vírgula.
+      Admin__UserIds: ${ADMIN_USER_IDS:-}
     depends_on:
       db: { condition: service_healthy }
     logging: *logging

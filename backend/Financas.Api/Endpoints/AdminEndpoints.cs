@@ -13,14 +13,9 @@ public static class AdminEndpoints
     {
         var admin = app.MapGroup("/api/admin").RequireAuthorization().WithTags("Admin")
             .AddEndpointFilter(async (ctx, next) =>
-            {
-                // Confere o e-mail atual no banco, não o do token. Quem não é admin recebe 404: a rota "não existe".
-                var services = ctx.HttpContext.RequestServices;
-                var userId = ctx.HttpContext.User.UserId();
-                var email = await services.GetRequiredService<AppDbContext>().Users
-                    .Where(u => u.Id == userId).Select(u => u.Email).FirstOrDefaultAsync();
-                return services.GetRequiredService<AdminAccess>().IsAdmin(email) ? await next(ctx) : Results.NotFound();
-            });
+                // Quem não é admin recebe 404: a rota "não existe". O token de conta excluída já é recusado na autenticação.
+                ctx.HttpContext.RequestServices.GetRequiredService<AdminAccess>().IsAdmin(ctx.HttpContext.User.UserId())
+                    ? await next(ctx) : Results.NotFound());
 
         admin.MapGet("/stats", async (AppDbContext db, AppClock clock) =>
         {

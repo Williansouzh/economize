@@ -85,6 +85,9 @@ builder.Services.AddHttpClient<DeepSeekClient>(c =>
 
 var app = builder.Build();
 
+if (!string.IsNullOrWhiteSpace(app.Configuration["Admin:Emails"]))
+    app.Logger.LogWarning("Admin:Emails (ADMIN_EMAILS) não é mais usado: o painel do admin agora usa Admin:UserIds (ADMIN_USER_IDS).");
+
 // Aplica as migrations pendentes na subida, uma réplica por vez (veja DatabaseMigrator).
 // Para aplicar fora da API (pipeline de deploy), use Database:MigrateOnStartup=false e "dotnet ef database update".
 if (app.Configuration.GetValue("Database:MigrateOnStartup", true))

@@ -1,14 +1,14 @@
 namespace Financas.Api.Services;
 
 /// <summary>
-/// Super admin (RN-44): e-mails em Admin:Emails, separados por vírgula (ADMIN_EMAILS no .env do servidor).
-/// Ficam fora do repositório, que é público.
+/// Super admin (RN-44): ids de usuário em Admin:UserIds, separados por vírgula (ADMIN_USER_IDS no .env do servidor).
+/// É o id e não o e-mail porque o cadastro não confirma o e-mail: quem criasse a conta com um endereço
+/// da lista antes do dono viraria admin. Ficam fora do repositório, que é público.
 /// </summary>
 public class AdminAccess(IConfiguration config)
 {
-    private readonly HashSet<string> _emails = (config["Admin:Emails"] ?? "")
+    // Lido a cada chamada (é barato): mudar a configuração não exige recriar o serviço.
+    public bool IsAdmin(Guid userId) => (config["Admin:UserIds"] ?? "")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    public bool IsAdmin(string? email) => email is not null && _emails.Contains(email.Trim());
+        .Any(s => Guid.TryParse(s, out var id) && id == userId);
 }
