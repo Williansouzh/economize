@@ -144,10 +144,16 @@ public static class PlanningEndpoints
             static string Cut(string? s, int max) => s is null ? "" : s.Length <= max ? s : s[..max];
             logs.CreateLogger("ClientErrors").LogWarning(
                 "Erro no app ({Platform} {Version}): {Message}\n{Stack}",
-                Cut(req.Platform, 20), Cut(req.Version, 20), Cut(req.Message, 500), Cut(req.Stack, 4000));
+                OneLine(Cut(req.Platform, 20)), OneLine(Cut(req.Version, 20)), OneLine(Cut(req.Message, 500)),
+                Indented(Cut(req.Stack, 4000)));
             return Results.NoContent();
         }).WithTags("Erros do app");
     }
+
+    // Rota de erros do app, sem login: sem quebras de linha e caracteres de controle, ninguém forja
+    // linhas falsas no log. A pilha mantém as quebras (é texto de várias linhas), com recuo em cada uma.
+    public static string OneLine(string s) => new(s.Select(c => char.IsControl(c) ? ' ' : c).ToArray());
+    public static string Indented(string s) => "  " + string.Join("\n  ", s.Replace("\r", "").Split('\n').Select(OneLine));
 
     /// <summary>
     /// Sequência atual: dias seguidos com registro terminando hoje (ou ontem, se hoje ainda não teve

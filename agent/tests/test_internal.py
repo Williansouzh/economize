@@ -75,3 +75,22 @@ async def test_webhook_sem_assinatura_so_com_a_opcao_de_desenvolvimento(monkeypa
     monkeypatch.setattr(main.settings, "allow_unsigned_webhooks", True)
     main.app.state.coordinator = None
     assert (await post_webhook()).status_code == 200
+
+
+async def verify(token: str):
+    transport = httpx.ASGITransport(app=main.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://agente") as client:
+        return await client.get("/webhook", params={"hub.mode": "subscribe", "hub.verify_token": token, "hub.challenge": "123"})
+
+
+async def test_cadastro_do_webhook_exige_o_verify_token(monkeypatch):
+    monkeypatch.setattr(main.settings, "whatsapp_verify_token", "meu-token")
+    assert (await verify("errado")).status_code == 403
+    res = await verify("meu-token")
+    assert res.status_code == 200 and res.text == "123"
+
+
+async def test_cadastro_do_webhook_sem_token_configurado_recusa(monkeypatch):
+    # Antes, com o token vazio, um hub.verify_token vazio passava.
+    monkeypatch.setattr(main.settings, "whatsapp_verify_token", "")
+    assert (await verify("")).status_code == 403

@@ -78,7 +78,9 @@ async def verify_webhook(
     challenge: str = Query(alias="hub.challenge"),
 ):
     """Handshake feito pela Meta ao cadastrar o webhook."""
-    if mode == "subscribe" and token == settings.whatsapp_verify_token:
+    expected = settings.whatsapp_verify_token
+    # Sem token configurado, ninguém cadastra o webhook; a comparação é em tempo constante.
+    if mode == "subscribe" and expected and hmac.compare_digest(token.encode(), expected.encode()):
         return challenge
     raise HTTPException(status_code=403)
 
