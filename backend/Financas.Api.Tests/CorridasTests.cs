@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Financas.Api.Data;
+using Financas.Api.Endpoints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -68,5 +69,82 @@ public class CorridasTests
             var login = await anon.PostAsJsonAsync("/api/auth/login", new { email = "ana@teste.com", password = senha });
             Assert.Equal(senha == vencedora ? HttpStatusCode.OK : HttpStatusCode.Unauthorized, login.StatusCode);
         }
+    }
+
+    // ---------- Índices únicos (migration SemDuplicados) ----------
+
+    private record Category(Guid Id, string Name, string Type);
+    private record Account(Guid Id, string Name);
+    private record Imported(int Created);
+
+    [Fact]
+    public async Task Duas_categorias_com_o_mesmo_nome_ao_mesmo_tempo_criam_uma()
+    {
+        using var factory = new ApiFactory();
+        var client = await factory.CreateUserClientAsync();
+
+        // Maiúsculas diferentes também contam como o mesmo nome.
+        string[] nomes = ["Pets", "PETS"];
+        var res = await AllAtOnce(2, i => client.PostAsJsonAsync("/api/categories", new { name = nomes[i], type = "Expense" }));
+
+        Assert.Single(res, r => r.StatusCode == HttpStatusCode.Created);
+        Assert.Single(res, r => r.StatusCode == HttpStatusCode.Conflict);
+        var all = (await client.GetFromJsonAsync<List<Category>>("/api/categories"))!;
+        Assert.Single(all, c => c.Name.Equals("pets", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Renomear_para_um_nome_que_outra_categoria_acabou_de_ganhar_da_409()
+    {
+        using var factory = new ApiFactory();
+        var client = await factory.CreateUserClientAsync();
+        var ids = new List<Guid>();
+        foreach (var n in new[] { "Cachorro", "Gato" })
+            ids.Add((await (await client.PostAsJsonAsync("/api/categories", new { name = n, type = "Expense" })).Content.ReadFromJsonAsync<Category>())!.Id);
+
+        var res = await AllAtOnce(2, i => client.PutAsJsonAsync($"/api/categories/{ids[i]}", new { name = "Pets", type = "Expense" }));
+
+        Assert.Single(res, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.Single(res, r => r.StatusCode == HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task O_mesmo_extrato_confirmado_duas_vezes_ao_mesmo_tempo_entra_uma_vez()
+    {
+        using var factory = new ApiFactory();
+        var client = await factory.CreateUserClientAsync();
+        var account = (await client.GetFromJsonAsync<List<Account>>("/api/accounts"))![0];
+        var food = (await client.GetFromJsonAsync<List<Category>>("/api/categories"))!.First(c => c.Type == "Expense");
+        var items = Enumerable.Range(1, 30).Select(i => new
+        {
+            date = "2026-10-10", description = $"Compra {i}", amount = 10m + i, type = "Expense", categoryId = food.Id, externalId = $"b:FIT{i}",
+        }).ToList();
+
+        var res = await AllAtOnce(2, _ => client.PostAsJsonAsync("/api/import/commit", new { accountId = account.Id, items }));
+
+        Assert.All(res, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        var created = await Task.WhenAll(res.Select(async r => (await r.Content.ReadFromJsonAsync<Imported>())!.Created));
+        Assert.Equal(30, created.Sum()); // a segunda vê que já entraram (ou entra só o que faltava)
+        using var scope = factory.Services.CreateScope();
+        Assert.Equal(30, await scope.ServiceProvider.GetRequiredService<AppDbContext>().Transactions.CountAsync(t => t.ExternalId != null));
+    }
+
+    [Fact]
+    public async Task Codigo_de_vinculacao_repetido_e_sorteado_de_novo()
+    {
+        using var factory = new ApiFactory();
+        var ana = await factory.CreateUserClientAsync("ana@teste.com");
+        await factory.CreateUserClientAsync("bia@teste.com");
+        var anaCode = (await (await ana.PostAsync("/api/me/whatsapp-code", null)).Content.ReadFromJsonAsync<Dictionary<string, object>>())!["code"].ToString()!;
+
+        // O sorteio da Bia cai primeiro no código ativo da Ana.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var bia = await db.Users.SingleAsync(u => u.Email == "bia@teste.com");
+        var sorteios = new Queue<string>([anaCode, "123456"]);
+        await WhatsAppEndpoints.IssueLinkCodeAsync(db, bia, sorteios.Dequeue);
+
+        Assert.Equal("123456", bia.WhatsAppLinkCode);
+        Assert.Equal(1, await db.Users.CountAsync(u => u.WhatsAppLinkCode == anaCode));
     }
 }

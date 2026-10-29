@@ -47,14 +47,12 @@ public static class WhatsAppEndpoints
             return Results.NoContent();
         });
 
-        me.MapPost("/whatsapp-code",async (ClaimsPrincipal user, AppDbContext db) =>
+        me.MapPost("/whatsapp-code", async (ClaimsPrincipal user, AppDbContext db) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
             if (u is null) return Results.NotFound();
-            u.WhatsAppLinkCode = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-            u.WhatsAppLinkCodeExpiresAt = DateTime.UtcNow.AddMinutes(10);
-            await db.SaveChangesAsync();
-            return Results.Ok(new LinkCodeDto(u.WhatsAppLinkCode, u.WhatsAppLinkCodeExpiresAt.Value));
+            await IssueLinkCodeAsync(db, u, () => RandomNumberGenerator.GetInt32(100000, 1000000).ToString());
+            return Results.Ok(new LinkCodeDto(u.WhatsAppLinkCode!, u.WhatsAppLinkCodeExpiresAt!.Value));
         });
 
         me.MapDelete("/whatsapp", async (ClaimsPrincipal user, AppDbContext db, AgentClient agentClient) =>
@@ -163,6 +161,25 @@ public static class WhatsAppEndpoints
                 ? Results.NotFound(new { error = "Número não vinculado." })
                 : Results.Ok(new AuthResponse(tokens.Create(u, agent: true), u.Name, u.Email));
         });
+    }
+
+    /// <summary>
+    /// Grava um código de vinculação novo. Dois códigos ativos iguais mandariam o número para a conta
+    /// errada: o índice único recusa o repetido e outro é sorteado.
+    /// </summary>
+    public static async Task IssueLinkCodeAsync(AppDbContext db, User u, Func<string> nextCode)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            u.WhatsAppLinkCode = nextCode();
+            u.WhatsAppLinkCodeExpiresAt = DateTime.UtcNow.AddMinutes(10);
+            try
+            {
+                await db.SaveChangesAsync();
+                return;
+            }
+            catch (DbUpdateException e) when (attempt < 5 && e.IsUniqueViolation(DbErrors.LinkCode)) { }
+        }
     }
 
     /// <summary>Apaga os dados financeiros do usuário e dos perfis de empresa dele (RN-47), e os próprios perfis.</summary>

@@ -24,6 +24,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     {
         b.Entity<User>().HasIndex(u => u.Email).IsUnique();
         b.Entity<User>().HasIndex(u => u.WhatsAppPhone).IsUnique();
+        // Dois códigos de vinculação ativos iguais mandariam o número para a conta errada.
+        b.Entity<User>().HasIndex(u => u.WhatsAppLinkCode).IsUnique().HasFilter("\"WhatsAppLinkCode\" IS NOT NULL");
         b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.Date });
         b.Entity<Budget>().HasIndex(x => new { x.UserId, x.CategoryId, x.Month }).IsUnique();
 
@@ -34,7 +36,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Transfer>().HasOne(t => t.ToAccount).WithMany().HasForeignKey(t => t.ToAccountId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<Transfer>().HasIndex(t => new { t.UserId, t.Date });
         b.Entity<Transaction>().HasIndex(t => t.SeriesId);
-        b.Entity<Transaction>().HasIndex(t => new { t.AccountId, t.ExternalId });
+        // Uma linha de extrato entra uma vez por conta, mesmo com duas importações ao mesmo tempo.
+        b.Entity<Transaction>().HasIndex(t => new { t.AccountId, t.ExternalId }).IsUnique().HasFilter("\"ExternalId\" IS NOT NULL");
+        // Categorias: nome único por perfil e tipo, sem diferenciar maiúsculas. É um índice de expressão
+        // (lower("Name")), criado em SQL na migration SemDuplicados.
         b.Entity<Transaction>().Property(t => t.ExternalId).HasMaxLength(100);
         b.Entity<Transaction>().Property(t => t.IdempotencyKey).HasMaxLength(100);
         b.Entity<Transaction>().HasIndex(t => new { t.UserId, t.IdempotencyKey }).IsUnique()

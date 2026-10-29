@@ -158,10 +158,18 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
         }).ToList();
     }
 
-    /// <summary>Grava as linhas confirmadas. Ignora as que já foram importadas antes.</summary>
+    /// <summary>
+    /// Grava as linhas confirmadas. Ignora as que já foram importadas antes. Duas importações na mesma
+    /// conta ao mesmo tempo esperam uma pela outra (lock da linha da conta), então a segunda já vê o que
+    /// a primeira gravou. O índice único em (conta, ExternalId) fica como garantia final.
+    /// </summary>
     public async Task<int> CommitAsync(Guid uid, ImportCommitRequest req, CancellationToken ct)
     {
-        if (!await db.Accounts.AnyAsync(a => a.Id == req.AccountId && a.UserId == uid, ct))
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var owned = await db.Database
+            .SqlQuery<int>($"""SELECT 1 AS "Value" FROM "Accounts" WHERE "Id" = {req.AccountId} AND "UserId" = {uid} FOR UPDATE""")
+            .ToListAsync(ct);
+        if (owned.Count == 0)
             throw new ImportException("Conta inválida.");
         if (req.Items.Count > StatementParser.MaxLines)
             throw new ImportException($"Importe no máximo {StatementParser.MaxLines} lançamentos por vez.");
@@ -190,6 +198,7 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
             created++;
         }
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return created;
     }
 

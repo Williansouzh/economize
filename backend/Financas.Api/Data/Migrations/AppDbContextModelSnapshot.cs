@@ -353,7 +353,9 @@ namespace Financas.Api.Data.Migrations
 
                     b.HasIndex("SeriesId");
 
-                    b.HasIndex("AccountId", "ExternalId");
+                    b.HasIndex("AccountId", "ExternalId")
+                        .IsUnique()
+                        .HasFilter("\"ExternalId\" IS NOT NULL");
 
                     b.HasIndex("UserId", "Date");
 
@@ -483,6 +485,10 @@ namespace Financas.Api.Data.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
+
+                    b.HasIndex("WhatsAppLinkCode")
+                        .IsUnique()
+                        .HasFilter("\"WhatsAppLinkCode\" IS NOT NULL");
 
                     b.HasIndex("WhatsAppPhone")
                         .IsUnique();

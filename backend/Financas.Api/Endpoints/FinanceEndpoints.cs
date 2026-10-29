@@ -66,7 +66,9 @@ public static class FinanceEndpoints
             if (await ValidateCategory(req, uid, null, db) is { } error) return error;
             var c = new Category { UserId = uid, Name = req.Name.Trim(), Type = req.Type, Icon = req.Icon ?? "category", Color = req.Color ?? "#668E93" };
             db.Categories.Add(c);
-            await db.SaveChangesAsync();
+            // A checagem acima é a resposta rápida; quem garante o nome único é o índice do banco.
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException e) when (e.IsUniqueViolation(DbErrors.CategoryName)) { return DuplicateCategory(); }
             return Results.Created($"/api/categories/{c.Id}", new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color));
         });
 
@@ -82,7 +84,8 @@ public static class FinanceEndpoints
                 (await db.Transactions.AnyAsync(t => t.CategoryId == id) || await db.Budgets.AnyAsync(b => b.CategoryId == id)))
                 return Results.BadRequest(new { error = "Não dá para trocar o tipo de uma categoria que já tem lançamentos ou orçamentos." });
             c.Name = req.Name.Trim(); c.Type = req.Type; c.Icon = req.Icon ?? c.Icon; c.Color = req.Color ?? c.Color;
-            await db.SaveChangesAsync();
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException e) when (e.IsUniqueViolation(DbErrors.CategoryName)) { return DuplicateCategory(); }
             return Results.Ok(new CategoryDto(c.Id, c.Name, c.Type, c.Icon, c.Color));
         });
 
@@ -292,9 +295,11 @@ public static class FinanceEndpoints
         if (Appearance.Validate(req.Color, req.Icon) is { } look) return look;
         var lower = name.ToLower();
         if (await db.Categories.AnyAsync(c => c.UserId == uid && c.Type == req.Type && c.Id != id && c.Name.ToLower() == lower))
-            return Results.Conflict(new { error = "Você já tem uma categoria com esse nome." });
+            return DuplicateCategory();
         return null;
     }
+
+    private static IResult DuplicateCategory() => Results.Conflict(new { error = "Você já tem uma categoria com esse nome." });
 
     private static async Task<IResult?> Validate(TransferRequest req, Guid uid, AppDbContext db)
     {
