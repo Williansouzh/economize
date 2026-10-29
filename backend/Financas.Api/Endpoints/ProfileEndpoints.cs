@@ -76,6 +76,9 @@ public static class ProfileEndpoints
         {
             if (Validate(req) is { } error) return error;
             var uid = user.UserId();
+            // Conta e cria com a linha do usuário travada: dois pedidos juntos não passam os dois do limite.
+            await using var tx = await db.Database.BeginTransactionAsync();
+            if (!await db.Database.LockUserAsync(uid)) return Results.NotFound();
             if (await db.Profiles.CountAsync(p => p.OwnerId == uid) >= MaxBusinessProfiles)
                 return Results.BadRequest(new { error = $"Você pode ter até {MaxBusinessProfiles} perfis de empresa." });
             var p = new Profile { OwnerId = uid, CreatedAt = clock.UtcNow };
@@ -84,6 +87,7 @@ public static class ProfileEndpoints
             db.Categories.AddRange(AppDbContext.BusinessCategories(p.Id));
             db.Accounts.Add(new Account { UserId = p.Id, Name = "Conta da empresa", Icon = "storefront", Color = "#0B2B2E" });
             await db.SaveChangesAsync();
+            await tx.CommitAsync();
             return Results.Created($"/api/profiles/{p.Id}", ToDto(p));
         });
 

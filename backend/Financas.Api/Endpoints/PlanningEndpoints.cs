@@ -45,13 +45,15 @@ public static class PlanningEndpoints
         // Guardar (valor positivo) ou retirar (negativo). O guardado nunca fica abaixo de zero.
         goals.MapPost("/{id:guid}/deposit", async (Guid id, GoalDepositRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
         {
-            var g = await db.Goals.FirstOrDefaultAsync(x => x.Id == id && x.UserId == user.ProfileId());
-            if (g is null) return Results.NotFound();
             if (req.Amount == 0 || Math.Abs(req.Amount) >= 1_000_000_000m)
                 return Results.BadRequest(new { error = "Informe um valor válido." });
-            g.Saved = Math.Max(0, g.Saved + req.Amount);
-            await db.SaveChangesAsync();
-            return Results.Ok(ToDto(g, clock.Today));
+            // Soma no próprio banco: dois depósitos ao mesmo tempo entram os dois (ler, somar e gravar perdia um).
+            var amount = req.Amount;
+            var pid = user.ProfileId();
+            if (await db.Goals.Where(x => x.Id == id && x.UserId == pid)
+                    .ExecuteUpdateAsync(s => s.SetProperty(g => g.Saved, g => g.Saved + amount < 0 ? 0 : g.Saved + amount)) == 0)
+                return Results.NotFound();
+            return Results.Ok(ToDto(await db.Goals.AsNoTracking().FirstAsync(x => x.Id == id), clock.Today));
         });
 
         goals.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>

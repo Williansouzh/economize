@@ -35,7 +35,7 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek, Ap
         var key = $"insights:{finance.ParseMonth(month).Key}:{(includeDescriptions ? 1 : 0)}";
         var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(context)));
 
-        var cached = await db.AiCache.FirstOrDefaultAsync(c => c.ProfileId == profileId && c.Key == key, ct);
+        var cached = await db.AiCache.AsNoTracking().FirstOrDefaultAsync(c => c.ProfileId == profileId && c.Key == key, ct);
         if (cached?.ContextHash == hash && Parse(cached.Content) is { } hit)
             return hit with { Cached = true };
         if (!await consume()) return null;
@@ -60,11 +60,13 @@ public class InsightsService(FinanceService finance, DeepSeekClient deepSeek, Ap
         var result = Parse(raw) ?? new InsightsDto(Trim(raw, 300), [], [], 0, 0);
 
         var content = JsonSerializer.Serialize(result, JsonSerializerOptions.Web);
-        if (cached is null)
-            db.AiCache.Add(new AiCache { ProfileId = profileId, Key = key, ContextHash = hash, Content = content, CreatedAt = clock.UtcNow });
-        else
-            (cached.ContextHash, cached.Content, cached.CreatedAt) = (hash, content, clock.UtcNow);
-        await db.SaveChangesAsync(ct);
+        // Upsert: duas análises geradas ao mesmo tempo gravam as duas sem erro (a última fica no cache).
+        await db.Database.ExecuteSqlAsync($"""
+            INSERT INTO "AiCache" ("ProfileId", "Key", "ContextHash", "Content", "CreatedAt")
+            VALUES ({profileId}, {key}, {hash}, {content}, {clock.UtcNow})
+            ON CONFLICT ("ProfileId", "Key") DO UPDATE SET
+                "ContextHash" = excluded."ContextHash", "Content" = excluded."Content", "CreatedAt" = excluded."CreatedAt"
+            """, ct);
         return result;
     }
 

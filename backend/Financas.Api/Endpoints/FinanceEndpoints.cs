@@ -92,10 +92,15 @@ public static class FinanceEndpoints
         categories.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal user, AppDbContext db) =>
         {
             var uid = user.ProfileId();
-            if (await db.Transactions.AnyAsync(t => t.CategoryId == id && t.UserId == uid))
-                return Results.Conflict(new { error = "Essa categoria tem lançamentos. Mude a categoria deles ou apague-os antes." });
-            return await db.Categories.Where(x => x.Id == id && x.UserId == uid).ExecuteDeleteAsync() > 0
-                ? Results.NoContent() : Results.NotFound();
+            var inUse = Results.Conflict(new { error = "Essa categoria tem lançamentos. Mude a categoria deles ou apague-os antes." });
+            if (await db.Transactions.AnyAsync(t => t.CategoryId == id && t.UserId == uid)) return inUse;
+            // Um lançamento criado entre a checagem e a exclusão: a chave estrangeira impede, e a resposta é a mesma.
+            try
+            {
+                return await db.Categories.Where(x => x.Id == id && x.UserId == uid).ExecuteDeleteAsync() > 0
+                    ? Results.NoContent() : Results.NotFound();
+            }
+            catch (Exception e) when (e.IsForeignKeyViolation()) { return inUse; }
         });
 
         // ---------- Transações ----------
@@ -167,6 +172,7 @@ public static class FinanceEndpoints
                 // Outra requisição com a mesma chave gravou primeiro (duas réplicas ao mesmo tempo).
                 return Results.Ok(new { Id = (await FindByIdempotencyKeyAsync(db, uid, key))!.Value });
             }
+            catch (DbUpdateException e) when (e.IsForeignKeyViolation()) { return GoneAccountOrCategory(); }
             return Results.Created($"/api/transactions/{created[0].Id}", new { created[0].Id });
         });
 
@@ -191,7 +197,8 @@ public static class FinanceEndpoints
                         .SetProperty(x => x.Amount, x => amount ?? x.Amount));
             }
             Apply(t, req);
-            await db.SaveChangesAsync();
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException e) when (e.IsForeignKeyViolation()) { return GoneAccountOrCategory(); }
             return Results.NoContent();
         });
 
@@ -228,13 +235,16 @@ public static class FinanceEndpoints
 
             if (req.Limit <= 0) return Results.BadRequest(new { error = "O limite deve ser maior que zero." });
 
-            var b = await db.Budgets.FirstOrDefaultAsync(x => x.UserId == uid && x.CategoryId == req.CategoryId && x.Month == key);
-            if (b is null) db.Budgets.Add(b = new Budget { UserId = uid, CategoryId = req.CategoryId, Month = key });
-            b.Limit = req.Limit;
-            b.Recurring = req.Recurring;
-            b.UntilMonth = null; // salvar de novo recomeça a repetição, se ela tinha sido parada
-            await db.SaveChangesAsync();
-            return Results.Ok(new { b.Id });
+            // Upsert no banco: dois salvamentos ao mesmo tempo não dão erro (o índice único já impedia o duplicado).
+            // Salvar de novo zera UntilMonth: recomeça a repetição, se ela tinha sido parada.
+            var id = (await db.Database.SqlQuery<Guid>($"""
+                INSERT INTO "Budgets" ("Id", "UserId", "CategoryId", "Month", "Limit", "Recurring", "UntilMonth")
+                VALUES ({Guid.NewGuid()}, {uid}, {req.CategoryId}, {key}, {req.Limit}, {req.Recurring}, NULL)
+                ON CONFLICT ("UserId", "CategoryId", "Month") DO UPDATE SET
+                    "Limit" = excluded."Limit", "Recurring" = excluded."Recurring", "UntilMonth" = NULL
+                RETURNING "Id" AS "Value"
+                """).ToListAsync())[0];
+            return Results.Ok(new { Id = id });
         });
 
         // Sem "month", ou no próprio mês do orçamento: exclui. Num mês em que ele vale por
@@ -298,6 +308,10 @@ public static class FinanceEndpoints
             return DuplicateCategory();
         return null;
     }
+
+    /// <summary>A conta ou a categoria foi apagada entre a validação e a gravação do lançamento.</summary>
+    private static IResult GoneAccountOrCategory() =>
+        Results.BadRequest(new { error = "A conta ou a categoria escolhida não existe mais. Escolha outra." });
 
     private static IResult DuplicateCategory() => Results.Conflict(new { error = "Você já tem uma categoria com esse nome." });
 

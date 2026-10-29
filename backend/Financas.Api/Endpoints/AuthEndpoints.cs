@@ -32,7 +32,9 @@ public static class AuthEndpoints
             db.Users.Add(user);
             db.Categories.AddRange(AppDbContext.DefaultCategories(user.Id));
             db.Accounts.Add(new Account { UserId = user.Id, Name = "Carteira", Color = "#0C7A68" });
-            await db.SaveChangesAsync();
+            // A checagem acima é a resposta rápida; dois cadastros juntos com o mesmo e-mail caem no índice único.
+            try { await db.SaveChangesAsync(); }
+            catch (DbUpdateException e) when (e.IsUniqueViolation()) { return Results.Conflict(new { error = "E-mail já cadastrado." }); }
             await activity.TouchAsync(user.Id, null);
 
             return Results.Ok(new AuthResponse(tokens.Create(user), user.Name, user.Email));

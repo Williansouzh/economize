@@ -78,6 +78,8 @@ public static class WhatsAppEndpoints
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {
+                // Um pedido de cada vez por usuário (excluir e começar do zero ao mesmo tempo).
+                await db.Database.LockUserAsync(uid);
                 await DeleteAllProfilesAsync(db, uid);
                 if (u.WhatsAppPhone is not null)
                     await db.LinkAttempts.Where(x => x.Phone == u.WhatsAppPhone).ExecuteDeleteAsync();
@@ -100,6 +102,9 @@ public static class WhatsAppEndpoints
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {
+                // Sem o lock, dois "começar do zero" juntos deixavam 2 Carteiras e as categorias em dobro:
+                // o segundo apagava antes de o primeiro gravar o padrão. Assim o segundo espera e refaz.
+                if (!await db.Database.LockUserAsync(uid)) return Results.NotFound();
                 await DeleteAllProfilesAsync(db, uid);
                 db.Categories.AddRange(AppDbContext.DefaultCategories(uid));
                 db.Accounts.Add(new Account { UserId = uid, Name = "Carteira", Color = "#0C7A68" });
@@ -133,24 +138,39 @@ public static class WhatsAppEndpoints
                 return Results.Json(new { error = "Muitas tentativas erradas. Aguarde 30 minutos e gere um novo código no app." },
                     statusCode: StatusCodes.Status429TooManyRequests);
 
+            // O código é gasto num UPDATE só: com o mesmo código vindo de dois números ao mesmo tempo,
+            // um vincula e o outro recebe "código inválido".
             var code = req.Code.Trim();
-            var u = await db.Users.FirstOrDefaultAsync(x =>
-                x.WhatsAppLinkCode == code && x.WhatsAppLinkCodeExpiresAt > DateTime.UtcNow);
-            if (u is null)
+            await using var tx = await db.Database.BeginTransactionAsync();
+            var claimed = await db.Database.SqlQuery<Guid>($"""
+                UPDATE "Users" SET "WhatsAppLinkCode" = NULL, "WhatsAppLinkCodeExpiresAt" = NULL
+                WHERE "WhatsAppLinkCode" = {code} AND "WhatsAppLinkCodeExpiresAt" > {DateTime.UtcNow}
+                RETURNING "Id" AS "Value"
+                """).ToListAsync();
+            if (claimed is not [var userId])
             {
+                await tx.RollbackAsync();
                 await limiter.RegisterFailureAsync(req.Phone);
                 return Results.BadRequest(new { error = "Código inválido ou expirado. Gere um novo código no app e tente de novo." });
             }
-            await limiter.ResetAsync(req.Phone);
 
             // Um número só pode estar ligado a uma conta.
-            await db.Users.Where(x => x.WhatsAppPhone == req.Phone && x.Id != u.Id)
+            await db.Users.Where(x => x.WhatsAppPhone == req.Phone && x.Id != userId)
                 .ExecuteUpdateAsync(s => s.SetProperty(x => x.WhatsAppPhone, (string?)null));
-            u.WhatsAppPhone = req.Phone;
-            u.WhatsAppLinkCode = null;
-            u.WhatsAppLinkCodeExpiresAt = null;
-            await db.SaveChangesAsync();
-            return Results.Ok(new { u.Name });
+            try
+            {
+                await db.Users.Where(x => x.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(x => x.WhatsAppPhone, req.Phone));
+            }
+            catch (Exception e) when (e.IsUniqueViolation())
+            {
+                // Outra conta vinculou este número no mesmo instante. O código volta a valer (rollback).
+                await tx.RollbackAsync();
+                return Results.Conflict(new { error = "Esse número acabou de ser vinculado a outra conta. Tente de novo." });
+            }
+            await tx.CommitAsync();
+            await limiter.ResetAsync(req.Phone);
+            var name = await db.Users.Where(x => x.Id == userId).Select(x => x.Name).FirstAsync();
+            return Results.Ok(new { Name = name });
         });
 
         // Troca o número por um JWT do usuário, curto (15 min) e só para as rotas que o agente usa (AgentTokenScope).
