@@ -315,6 +315,57 @@ public class PlanejamentoTests
     }
 
     [Fact]
+    public async Task Pedir_codigo_novo_nao_devolve_as_tentativas_enquanto_o_anterior_vale()
+    {
+        // Antes, cada pedido zerava as 5 tentativas: alternando pedidos e chutes dava para tentar sem fim.
+        using var factory = new ApiFactory();
+        await factory.CreateUserClientAsync("ana@teste.com");
+        var anon = factory.CreateClient();
+        Task<HttpResponseMessage> Reset(string code) => anon.PostAsJsonAsync("/api/auth/reset-password",
+            new { email = "ana@teste.com", code, newPassword = "nova-senha-123" });
+
+        await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "ana@teste.com" });
+        var wrong = factory.Emails[^1].Subject[^6..] == "111111" ? "222222" : "111111";
+        for (var i = 0; i < 3; i++) await Reset(wrong);
+
+        await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "ana@teste.com" });
+        var code = factory.Emails[^1].Subject[^6..];
+        if (code == wrong) wrong = code == "111111" ? "222222" : "111111";
+        for (var i = 0; i < 2; i++) await Reset(wrong); // 3 + 2 = 5 erros: acabou
+        Assert.Equal(HttpStatusCode.BadRequest, (await Reset(code)).StatusCode);
+
+        // Vencido o código, o próximo pedido começa do zero.
+        factory.Clock.Advance(TimeSpan.FromMinutes(16));
+        await anon.PostAsJsonAsync("/api/auth/forgot-password", new { email = "ana@teste.com" });
+        Assert.Equal(HttpStatusCode.OK, (await Reset(factory.Emails[^1].Subject[^6..])).StatusCode);
+    }
+
+    [Fact]
+    public async Task No_maximo_3_codigos_por_email_por_hora_com_ou_sem_conta()
+    {
+        using var factory = new ApiFactory();
+        await factory.CreateUserClientAsync("ana@teste.com");
+        var anon = factory.CreateClient();
+        Task<HttpResponseMessage> Ask(string email) => anon.PostAsJsonAsync("/api/auth/forgot-password", new { email });
+
+        for (var i = 0; i < 3; i++)
+        {
+            Assert.Equal(HttpStatusCode.Accepted, (await Ask("ana@teste.com")).StatusCode);
+            factory.Clock.Advance(TimeSpan.FromMinutes(1)); // fora do limite de 10 por minuto por IP
+        }
+        Assert.Equal((HttpStatusCode)429, (await Ask(" ANA@teste.com ")).StatusCode);
+        Assert.Equal(3, factory.Emails.Count);
+
+        // E-mail sem conta recebe a mesma resposta: o limite não revela quem tem conta.
+        for (var i = 0; i < 3; i++) await Ask("ninguem@teste.com");
+        Assert.Equal((HttpStatusCode)429, (await Ask("ninguem@teste.com")).StatusCode);
+
+        // Passada a hora, pode pedir de novo.
+        factory.Clock.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(HttpStatusCode.Accepted, (await Ask("ana@teste.com")).StatusCode);
+    }
+
+    [Fact]
     public async Task Sem_email_configurado_a_recuperacao_avisa_que_nao_esta_disponivel()
     {
         using var factory = new ApiFactory { EmailConfigured = false };

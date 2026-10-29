@@ -49,21 +49,27 @@ public static class AuthEndpoints
         });
 
         // RN-38: "esqueci minha senha". A resposta é a mesma exista ou não o e-mail, para não revelar
-        // quem tem conta. O código vale 15 minutos e aceita 5 tentativas.
+        // quem tem conta. O código vale 15 minutos e aceita 5 tentativas. No máximo 3 pedidos por e-mail
+        // por hora (contados mesmo para e-mail sem conta), e pedir um código novo enquanto o anterior vale
+        // não devolve as tentativas: senão daria para alternar pedidos e chutes sem fim.
         g.MapPost("/forgot-password", async (ForgotPasswordRequest req, AppDbContext db, IEmailSender email,
-            AppClock clock, ILogger<TokenService> log) =>
+            AppClock clock, AuthRateLimiter limiter, IConfiguration config, ILogger<TokenService> log) =>
         {
             if (!email.IsConfigured)
                 return Results.Json(new { error = "A recuperação de senha ainda não está disponível. Escreva para o suporte." },
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             var address = (req.Email ?? "").Trim().ToLowerInvariant();
+            var perHour = config.GetValue("RateLimit:PasswordResetPerHour", 3);
+            if (await limiter.TryAcquireAsync($"reset:{address}", perHour, 60) is not null)
+                return Results.Json(new { error = $"Você já pediu {perHour} códigos na última hora. Use o último que chegou ou tente mais tarde." },
+                    statusCode: StatusCodes.Status429TooManyRequests);
             var user = await db.Users.FirstOrDefaultAsync(u => u.Email == address);
             if (user is not null)
             {
                 var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+                if (user.ResetCodeExpiresAt is null || user.ResetCodeExpiresAt < clock.UtcNow) user.ResetAttempts = 0;
                 user.ResetCodeHash = HashCode(user.Id, code);
                 user.ResetCodeExpiresAt = clock.UtcNow.AddMinutes(ResetMinutes);
-                user.ResetAttempts = 0;
                 await db.SaveChangesAsync();
                 try
                 {
@@ -86,7 +92,8 @@ public static class AuthEndpoints
         {
             var address = (req.Email ?? "").Trim().ToLowerInvariant();
             var user = await db.Users.FirstOrDefaultAsync(u => u.Email == address);
-            var invalid = Results.BadRequest(new { error = "Código inválido ou vencido. Peça um novo." });
+            // A mesma mensagem em todos os casos, para não revelar se o e-mail tem conta.
+            var invalid = Results.BadRequest(new { error = "Código inválido ou vencido. Se errou várias vezes, espere 15 minutos e peça um novo." });
             if (user?.ResetCodeHash is null || user.ResetCodeExpiresAt < clock.UtcNow || user.ResetAttempts >= MaxResetAttempts)
                 return invalid;
             if (!CryptographicOperations.FixedTimeEquals(

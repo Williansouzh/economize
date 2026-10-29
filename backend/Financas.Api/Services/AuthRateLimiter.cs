@@ -13,10 +13,13 @@ public class AuthRateLimiter(AppDbContext db, TimeProvider time, IConfiguration 
     private int Limit => config.GetValue("RateLimit:AuthPerMinute", 10);
 
     /// <summary>Conta a requisição. Devolve null se pode seguir, ou os segundos até a próxima janela.</summary>
-    public async Task<int?> TryAcquireAsync(string key, CancellationToken ct = default)
+    public Task<int?> TryAcquireAsync(string key, CancellationToken ct = default) => TryAcquireAsync(key, Limit, 1, ct);
+
+    /// <summary>Mesma contagem com limite e janela próprios (ex.: códigos de senha por e-mail, por hora).</summary>
+    public async Task<int?> TryAcquireAsync(string key, int limit, int windowMinutes, CancellationToken ct = default)
     {
         var now = time.GetUtcNow().UtcDateTime;
-        var window = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, DateTimeKind.Utc);
+        var window = DateTime.UnixEpoch.AddMinutes(Math.Floor((now - DateTime.UnixEpoch).TotalMinutes / windowMinutes) * windowMinutes);
 
         var conn = (NpgsqlConnection)db.Database.GetDbConnection();
         var opened = conn.State != System.Data.ConnectionState.Open;
@@ -38,11 +41,12 @@ public class AuthRateLimiter(AppDbContext db, TimeProvider time, IConfiguration 
             {
                 await using var cleanup = new NpgsqlCommand(
                     "DELETE FROM \"RateLimitCounters\" WHERE \"WindowStart\" < @old", conn);
-                cleanup.Parameters.AddWithValue("old", window.AddMinutes(-10));
+                // Duas horas: cobre também as janelas de uma hora.
+                cleanup.Parameters.AddWithValue("old", now.AddHours(-2));
                 await cleanup.ExecuteNonQueryAsync(ct);
             }
 
-            return count <= Limit ? null : Math.Max(1, (int)Math.Ceiling((window.AddMinutes(1) - now).TotalSeconds));
+            return count <= limit ? null : Math.Max(1, (int)Math.Ceiling((window.AddMinutes(windowMinutes) - now).TotalSeconds));
         }
         finally
         {
