@@ -100,6 +100,7 @@ services:
       # Montado do repositório: mudar o Caddyfile pede só `up -d caddy` ou
       # `caddy reload`, sem recompilar o app Flutter da imagem.
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/security-headers.caddy:/etc/caddy/security-headers.caddy:ro
       # Sites de outros sistemas nesta VPS (*.caddy e *.global). Vazia por padrão.
       - ${EDGE_SITES_DIR:-./deploy/sites}:/etc/caddy/sites:ro
       # APK do botão de download da landing page (deploy/publish-apk.sh).

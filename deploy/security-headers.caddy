@@ -1,0 +1,22 @@
+# Cabeçalhos de segurança, importados pelo Caddyfile (e montados no container junto com ele).
+#
+# Content-Security-Policy: o navegador só roda script, carrega fonte e se conecta onde está listado.
+# Se um dia alguém conseguir injetar HTML na página, o script injetado não roda nem manda o token
+# para fora. Nada de script inline: o da landing fica em site/js/landing.js.
+
+# Landing page e páginas públicas (site/). Fontes do Google Fonts; style="" nas tags exige 'unsafe-inline' em estilos.
+(csp_site) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+}
+
+# App Flutter web (/app/). O CanvasKit (WebAssembly) vem do próprio domínio (build com
+# --no-web-resources-cdn) e precisa de 'wasm-unsafe-eval'. O Flutter cria estilos na hora
+# ('unsafe-inline' em estilos) e baixa do Google Fonts fontes de reserva para emoji e acentos raros.
+(csp_app) {
+	header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' blob: https://fonts.gstatic.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+}
+
+# Recursos do navegador que o site e o app não usam ficam desligados.
+(permissions) {
+	header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+}

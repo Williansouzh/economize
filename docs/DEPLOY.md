@@ -13,6 +13,7 @@ https://SEU-DOMINIO/health/api, /health/agent → checagem de saúde
 ```
 
 Arquivos: [`docker-compose.prod.yml`](../docker-compose.prod.yml), [`deploy/Caddyfile`](../deploy/Caddyfile),
+[`deploy/security-headers.caddy`](../deploy/security-headers.caddy) (CSP: um script ou conexão nova de outro domínio, na landing ou no app, precisa entrar lá),
 [`deploy/web.Dockerfile`](../deploy/web.Dockerfile), [`deploy/backup.sh`](../deploy/backup.sh),
 [`deploy/publish-apk.sh`](../deploy/publish-apk.sh), [`site/`](../site/),
 [`.env.prod.example`](../.env.prod.example).

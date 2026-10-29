@@ -12,6 +12,9 @@
 	import /etc/caddy/sites/*.global
 }
 
+# CSP e Permissions-Policy (snippets csp_site, csp_app e permissions).
+import /etc/caddy/security-headers.caddy
+
 {$DOMAIN} {
 	encode zstd gzip
 
@@ -22,6 +25,7 @@
 		X-Frame-Options "DENY"
 		-Server
 	}
+	import permissions
 
 	handle /api/* {
 		reverse_proxy api:5000
@@ -53,6 +57,7 @@
 
 	redir /app /app/ 308
 	handle /app/* {
+		import csp_app
 		root * /srv/web
 		# index.html e o bootstrap não podem ficar em cache, senão o app não atualiza.
 		@nocache path /app/ /app/index.html /app/flutter_service_worker.js /app/flutter_bootstrap.js /app/version.json
@@ -62,6 +67,7 @@
 	}
 
 	handle {
+		import csp_site
 		root * /srv/web
 		@pages path / *.html
 		header @pages Cache-Control "no-cache"

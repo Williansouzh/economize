@@ -19,9 +19,11 @@ COPY mobile/ ./
 # A API fica no mesmo domínio do app (/api), então a URL base é o próprio domínio.
 ARG DOMAIN
 RUN test -n "$DOMAIN" || (echo "Defina DOMAIN no .env" && exit 1)
-RUN flutter build web --release --base-href /app/ --dart-define=API_URL=https://${DOMAIN}
+# --no-web-resources-cdn: o CanvasKit vem do próprio domínio, não do CDN do Google (CSP em deploy/security-headers.caddy).
+RUN flutter build web --release --base-href /app/ --no-web-resources-cdn --dart-define=API_URL=https://${DOMAIN}
 
 FROM caddy:2.11.7-alpine
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/security-headers.caddy /etc/caddy/security-headers.caddy
 COPY site/ /srv/web/
 COPY --from=web /src/build/web /srv/web/app
