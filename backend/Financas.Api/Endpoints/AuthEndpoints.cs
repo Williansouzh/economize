@@ -60,7 +60,9 @@ public static class AuthEndpoints
                     statusCode: StatusCodes.Status503ServiceUnavailable);
             var address = (req.Email ?? "").Trim().ToLowerInvariant();
             var perHour = config.GetValue("RateLimit:PasswordResetPerHour", 3);
-            if (await limiter.TryAcquireAsync($"reset:{address}", perHour, 60) is not null)
+            // Hash do e-mail: a chave tem no máximo 120 caracteres e o e-mail digitado pode ser enorme.
+            var key = "reset:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(address)));
+            if (await limiter.TryAcquireAsync(key, perHour, 60) is not null)
                 return Results.Json(new { error = $"Você já pediu {perHour} códigos na última hora. Use o último que chegou ou tente mais tarde." },
                     statusCode: StatusCodes.Status429TooManyRequests);
             var user = await db.Users.FirstOrDefaultAsync(u => u.Email == address);

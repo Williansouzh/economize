@@ -289,6 +289,7 @@ public static class FinanceEndpoints
         if (name.Length == 0) return Results.BadRequest(new { error = "Dê um nome para a categoria." });
         if (name.Length > 40) return Results.BadRequest(new { error = "O nome pode ter no máximo 40 caracteres." });
         if (!Enum.IsDefined(req.Type)) return Results.BadRequest(new { error = "Tipo inválido." });
+        if (Appearance.Validate(req.Color, req.Icon) is { } look) return look;
         var lower = name.ToLower();
         if (await db.Categories.AnyAsync(c => c.UserId == uid && c.Type == req.Type && c.Id != id && c.Name.ToLower() == lower))
             return Results.Conflict(new { error = "Você já tem uma categoria com esse nome." });
@@ -394,6 +395,7 @@ public static class FinanceEndpoints
         if (name.Length == 0) return Results.BadRequest(new { error = "Dê um nome para a conta." });
         if (name.Length > 60) return Results.BadRequest(new { error = "O nome pode ter no máximo 60 caracteres." });
         if (!Enum.IsDefined(req.Kind)) return Results.BadRequest(new { error = "Tipo de conta inválido." });
+        if (Appearance.Validate(req.Color, req.Icon) is { } look) return look;
         if (req.Kind == AccountKind.CreditCard)
         {
             if (req.ClosingDay is not (>= 1 and <= 31) || req.DueDay is not (>= 1 and <= 31))

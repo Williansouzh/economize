@@ -1,4 +1,5 @@
 using Financas.Api.Models;
+using Financas.Api.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Financas.Api.Data;
@@ -62,7 +63,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Budget>().Property(x => x.UntilMonth).HasMaxLength(7);
         b.Entity<Transfer>().Property(t => t.Description).HasMaxLength(200);
         b.Entity<Transaction>().Property(t => t.Description).HasMaxLength(200);
-        b.Entity<Account>().Property(a => a.Icon).HasMaxLength(40);
+        b.Entity<Account>().Property(a => a.Icon).HasMaxLength(Appearance.MaxIconLength);
+        b.Entity<Account>().Property(a => a.Color).HasMaxLength(Appearance.MaxColorLength);
+        b.Entity<Category>().Property(c => c.Icon).HasMaxLength(Appearance.MaxIconLength);
+        b.Entity<Category>().Property(c => c.Color).HasMaxLength(Appearance.MaxColorLength);
 
         b.Entity<UserActivity>().HasKey(x => new { x.UserId, x.Day });
         b.Entity<UserActivity>().HasIndex(x => x.Day);

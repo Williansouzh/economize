@@ -33,7 +33,8 @@ namespace Financas.Api.Data.Migrations
 
                     b.Property<string>("Color")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)");
 
                     b.Property<decimal?>("CreditLimit")
                         .HasPrecision(14, 2)
@@ -158,11 +159,13 @@ namespace Financas.Api.Data.Migrations
 
                     b.Property<string>("Color")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)");
 
                     b.Property<string>("Icon")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
 
                     b.Property<string>("Name")
                         .IsRequired()

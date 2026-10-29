@@ -183,7 +183,7 @@ public static class PlanningEndpoints
         if (name.Length == 0) return Results.BadRequest(new { error = "Dê um nome para a meta." });
         if (name.Length > 60) return Results.BadRequest(new { error = "O nome pode ter no máximo 60 caracteres." });
         if (req.Target <= 0 || req.Target >= 1_000_000_000m) return Results.BadRequest(new { error = "Informe quanto quer juntar." });
-        return null;
+        return Appearance.Validate(req.Color, req.Icon);
     }
 
     private static void Apply(Goal g, GoalRequest req)
