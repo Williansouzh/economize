@@ -51,10 +51,10 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   // Volta para o app: confere se o banco avisou alguma compra enquanto ele estava fechado.
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) {
-    if (s == AppLifecycleState.resumed) context.read<AppState>().refreshDetected();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) context.read<AppState>().refreshDetected();
     // Android: o ícone troca quando o app sai da frente (RN-49).
-    if (s == AppLifecycleState.paused && AppIcon.changeOnPause) context.read<AppState>().applyPendingIcon();
+    if (state == AppLifecycleState.paused && AppIcon.changeOnPause) context.read<AppState>().applyPendingIcon();
   }
 
   // As abas só são montadas (e carregam dados) na primeira vez em que são abertas.
