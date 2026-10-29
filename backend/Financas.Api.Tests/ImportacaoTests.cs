@@ -234,4 +234,31 @@ public class ImportacaoTests
         Assert.Equal([-54.9m, 800m], parsed!.Items.Select(i => i.Amount));
         Assert.Contains("IFOOD RESTAURANTE", Assert.Single(factory.DeepSeekCalls)); // o texto do PDF foi para a IA
     }
+
+    [Fact]
+    public async Task Pdf_gasta_a_cota_diaria_da_ia_e_ofx_csv_nao()
+    {
+        // Sem cota, um usuário logado podia mandar PDFs sem parar e cada um virava uma chamada paga à IA.
+        var pdf = new { fileName = "extrato.pdf", content = Convert.ToBase64String(Pdf("Extrato 05/10 IFOOD RESTAURANTE 54,90")) };
+        var csv = new { fileName = "extrato.csv", content = Convert.ToBase64String("Data;Descrição;Valor\n05/10/2026;Padaria;-12,50\n"u8.ToArray()) };
+        using var factory = new ApiFactory
+        {
+            DeepSeekReply = """{"items":[{"date":"2026-10-05","description":"IFOOD RESTAURANTE","amount":54.9,"type":"expense"}]}""",
+            Settings = { ["Ai:ImportPerDay"] = "2" },
+        };
+        var user = await factory.CreateUserClientAsync();
+
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await user.PostAsJsonAsync("/api/import/parse", pdf)).StatusCode);
+        var blocked = await user.PostAsJsonAsync("/api/import/parse", pdf);
+        Assert.Equal((HttpStatusCode)429, blocked.StatusCode);
+        Assert.Contains("OFX e CSV", await blocked.Content.ReadAsStringAsync());
+        Assert.Equal(2, factory.DeepSeekCalls.Count); // a terceira não chegou na IA
+
+        // OFX e CSV são lidos no servidor, sem IA: continuam liberados.
+        Assert.Equal(HttpStatusCode.OK, (await user.PostAsJsonAsync("/api/import/parse", csv)).StatusCode);
+        // A cota é por pessoa: outro usuário ainda pode ler PDF.
+        var other = await factory.CreateUserClientAsync("outro@teste.com");
+        Assert.Equal(HttpStatusCode.OK, (await other.PostAsJsonAsync("/api/import/parse", pdf)).StatusCode);
+    }
 }

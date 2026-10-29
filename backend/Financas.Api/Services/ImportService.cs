@@ -12,7 +12,7 @@ namespace Financas.Api.Services;
 /// Importação de extratos e de gastos detectados nas notificações do banco (RN-42 e RN-43):
 /// lê o arquivo, sugere a categoria de cada linha, marca o que já existe e grava o que o usuário confirmar.
 /// </summary>
-public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock clock)
+public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock clock, AiQuota quota)
 {
     public const int MaxFileBytes = 5 * 1024 * 1024;
     private const int MaxPdfChars = 40_000;
@@ -22,11 +22,12 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
         public int Status { get; } = status;
     }
 
-    public async Task<List<StatementLine>> ParseAsync(string fileName, byte[] content, CancellationToken ct)
+    /// <summary>OFX e CSV são lidos aqui, sem limite. PDF vai para a IA e gasta a cota diária do usuário (RN-48).</summary>
+    public async Task<List<StatementLine>> ParseAsync(Guid userId, string fileName, byte[] content, CancellationToken ct)
     {
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
         var isPdf = ext == ".pdf" || content.AsSpan().StartsWith("%PDF"u8);
-        var lines = isPdf ? await ParsePdfAsync(content, ct) : ParseText(ext, content);
+        var lines = isPdf ? await ParsePdfAsync(userId, content, ct) : ParseText(ext, content);
         if (lines.Count == 0)
             throw new ImportException(isPdf
                 ? "Não encontramos lançamentos nesse PDF. Confira se é o extrato ou a fatura do banco."
@@ -49,7 +50,7 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
         catch (DecoderFallbackException) { return Encoding.Latin1.GetString(content); }
     }
 
-    private async Task<List<StatementLine>> ParsePdfAsync(byte[] content, CancellationToken ct)
+    private async Task<List<StatementLine>> ParsePdfAsync(Guid userId, byte[] content, CancellationToken ct)
     {
         if (!deepSeek.IsConfigured)
             throw new ImportException("A leitura de PDF não está disponível agora. Use o arquivo OFX ou CSV.", StatusCodes.Status503ServiceUnavailable);
@@ -82,9 +83,17 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
             amount sempre positivo. Em fatura de cartão: compras e tarifas são expense; pagamentos e estornos são income.
             Datas sem ano: use o ano do documento (ou {year}).
             """;
+        // A cota só é gasta aqui, depois das checagens locais: PDF com senha ou escaneado não conta.
+        if (await quota.TryUseAsync(userId, AiQuota.Import, ct) is null)
+            throw new ImportException($"Você já importou {quota.Limit(AiQuota.Import)} PDFs hoje. Amanhã tem mais! " +
+                "Arquivos OFX e CSV não têm limite.", StatusCodes.Status429TooManyRequests);
         string raw;
         try { raw = await deepSeek.ChatAsync("Você extrai lançamentos de extratos bancários com precisão.", prompt, jsonOutput: true, ct, maxTokens: 8000); }
-        catch (HttpRequestException) { throw new ImportException("Não foi possível ler o PDF agora. Tente de novo.", StatusCodes.Status502BadGateway); }
+        catch (HttpRequestException)
+        {
+            await quota.RefundAsync(userId, AiQuota.Import); // a IA não respondeu: a tentativa não conta
+            throw new ImportException("Não foi possível ler o PDF agora. Tente de novo.", StatusCodes.Status502BadGateway);
+        }
 
         var lines = new List<(DateOnly, string, decimal, string?)>();
         try

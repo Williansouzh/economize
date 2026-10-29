@@ -12,7 +12,7 @@ public static class ImportEndpoints
     {
         var g = app.MapGroup("/api/import").RequireAuthorization().WithTags("Importação");
 
-        g.MapPost("/parse", async (ImportParseRequest req, ImportService import, CancellationToken ct) =>
+        g.MapPost("/parse", async (ImportParseRequest req, ClaimsPrincipal user, ImportService import, CancellationToken ct) =>
         {
             byte[] content;
             try { content = Convert.FromBase64String(req.Content ?? ""); }
@@ -20,7 +20,7 @@ public static class ImportEndpoints
             if (content.Length == 0) return Results.BadRequest(new { error = "O arquivo está vazio." });
             if (content.Length > ImportService.MaxFileBytes)
                 return Results.BadRequest(new { error = "O arquivo pode ter no máximo 5 MB." });
-            return await Run(async () => Results.Ok(new { items = await import.ParseAsync(req.FileName ?? "", content, ct) }));
+            return await Run(async () => Results.Ok(new { items = await import.ParseAsync(user.UserId(), req.FileName ?? "", content, ct) }));
         });
 
         g.MapPost("/preview", async (ImportPreviewRequest req, ClaimsPrincipal user, ImportService import, CancellationToken ct) =>
