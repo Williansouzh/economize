@@ -14,6 +14,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<LinkAttempt> LinkAttempts => Set<LinkAttempt>();
+    public DbSet<Subscription> Subscriptions => Set<Subscription>();
+    public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
     public DbSet<RateLimitCounter> RateLimitCounters => Set<RateLimitCounter>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<Profile> Profiles => Set<Profile>();
@@ -79,6 +81,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         b.Entity<LinkAttempt>().HasKey(x => x.Phone);
         b.Entity<LinkAttempt>().Property(x => x.Phone).HasMaxLength(20);
+
+        // Plus (Mercado Pago). Uma assinatura do Mercado Pago aponta para uma linha só, e o mesmo pedido
+        // do app (Idempotency-Key) cria uma assinatura só.
+        b.Entity<Subscription>().HasIndex(x => x.MpPreapprovalId).IsUnique().HasFilter("\"MpPreapprovalId\" IS NOT NULL");
+        b.Entity<Subscription>().HasIndex(x => new { x.UserId, x.ClientKey }).IsUnique().HasFilter("\"ClientKey\" IS NOT NULL");
+        b.Entity<Subscription>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Subscription>().Property(x => x.MpPreapprovalId).HasMaxLength(64);
+        b.Entity<Subscription>().Property(x => x.Status).HasMaxLength(20);
+        b.Entity<Subscription>().Property(x => x.InitPoint).HasMaxLength(500);
+        b.Entity<Subscription>().Property(x => x.ClientKey).HasMaxLength(100);
+        b.Entity<Subscription>().Property(x => x.Amount).HasPrecision(14, 2);
+        b.Entity<PaymentEvent>().HasKey(x => x.Key);
+        b.Entity<PaymentEvent>().Property(x => x.Key).HasMaxLength(200);
+        b.Entity<PaymentEvent>().Property(x => x.Type).HasMaxLength(60);
+        b.Entity<PaymentEvent>().Property(x => x.ResourceId).HasMaxLength(64);
 
         b.Entity<RateLimitCounter>().HasKey(x => new { x.Key, x.WindowStart });
         b.Entity<RateLimitCounter>().Property(x => x.Key).HasMaxLength(120);

@@ -244,6 +244,29 @@ namespace Financas.Api.Data.Migrations
                     b.ToTable("LinkAttempts");
                 });
 
+            modelBuilder.Entity("Financas.Api.Models.PaymentEvent", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("PaymentEvents");
+                });
+
             modelBuilder.Entity("Financas.Api.Models.Profile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -290,6 +313,67 @@ namespace Financas.Api.Data.Migrations
                     b.HasKey("Key", "WindowStart");
 
                     b.ToTable("RateLimitCounters");
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.Subscription", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<Guid?>("CancelKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ClientKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("CreateKey")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("InitPoint")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("MpPreapprovalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("NextPaymentDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("PaidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MpPreapprovalId")
+                        .IsUnique()
+                        .HasFilter("\"MpPreapprovalId\" IS NOT NULL");
+
+                    b.HasIndex("UserId", "ClientKey")
+                        .IsUnique()
+                        .HasFilter("\"ClientKey\" IS NOT NULL");
+
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("Financas.Api.Models.Transaction", b =>
@@ -453,6 +537,9 @@ namespace Financas.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PlusTrialEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("ResetAttempts")
                         .HasColumnType("integer");
 
@@ -536,6 +623,15 @@ namespace Financas.Api.Data.Migrations
                     b.HasOne("Financas.Api.Models.User", null)
                         .WithMany()
                         .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Financas.Api.Models.Subscription", b =>
+                {
+                    b.HasOne("Financas.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -17,7 +17,7 @@ public static class AuthEndpoints
         var g = app.MapGroup("/api/auth").WithTags("Auth").AddEndpointFilter<AuthRateLimitFilter>();
 
         g.MapPost("/register", async (RegisterRequest req, AppDbContext db, TokenService tokens, AppClock clock,
-            ActivityTracker activity) =>
+            ActivityTracker activity, PlanService plans) =>
         {
             var email = req.Email.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(req.Name) || !email.Contains('@'))
@@ -28,7 +28,11 @@ public static class AuthEndpoints
             if (await db.Users.AnyAsync(u => u.Email == email))
                 return Results.Conflict(new { error = "E-mail já cadastrado." });
 
-            var user = new User { Name = req.Name.Trim(), Email = email, CreatedAt = clock.UtcNow, PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password) };
+            var user = new User
+            {
+                Name = req.Name.Trim(), Email = email, CreatedAt = clock.UtcNow, PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
+                PlusTrialEndsAt = clock.UtcNow.AddDays(plans.TrialDays), // RN-51: o primeiro mês do Plus é grátis, sem cartão
+            };
             db.Users.Add(user);
             db.Categories.AddRange(AppDbContext.DefaultCategories(user.Id));
             db.Accounts.Add(new Account { UserId = user.Id, Name = "Carteira", Color = "#0C7A68" });

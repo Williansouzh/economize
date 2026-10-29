@@ -47,6 +47,11 @@ public class ApiFactory : WebApplicationFactory<Program>
     /// <summary>Corpo de cada chamada ao DeepSeek.</summary>
     public List<string> DeepSeekCalls { get; } = [];
 
+    /// <summary>Mercado Pago falso (RN-51). Ligado: a API recebe credenciais e fala com ele.</summary>
+    public bool UseMercadoPago { get; init; }
+    public FakeMercadoPago MercadoPago { get; } = new();
+    public const string MpWebhookSecret = "segredo-do-webhook-mp";
+
     /// <summary>Relógio controlado pelos testes. Padrão: 17/10/2026 15:00 UTC (12:00 em São Paulo).</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 17, 15, 0, 0, TimeSpan.Zero));
 
@@ -57,12 +62,19 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Agent:ApiKey", AgentKey);
         if (JwtKey is not null) builder.UseSetting("Jwt:Key", JwtKey);
         if (DeepSeekReply is not null) builder.UseSetting("DeepSeek:ApiKey", "chave-falsa");
+        if (UseMercadoPago)
+        {
+            builder.UseSetting("MercadoPago:AccessToken", "TEST-token");
+            builder.UseSetting("MercadoPago:WebhookSecret", MpWebhookSecret);
+        }
         foreach (var (key, value) in Settings) builder.UseSetting(key, value);
         builder.ConfigureTestServices(s =>
         {
             s.AddSingleton<TimeProvider>(Clock);
             s.AddHttpClient<AgentClient>().ConfigurePrimaryHttpMessageHandler(() => new RecordingHandler(AgentCalls));
             s.AddSingleton<IEmailSender>(new FakeEmailSender(Emails, EmailConfigured));
+            if (UseMercadoPago)
+                s.AddHttpClient<MercadoPagoClient>().ConfigurePrimaryHttpMessageHandler(() => MercadoPago);
             if (DeepSeekReply is not null)
                 s.AddHttpClient<DeepSeekClient>().ConfigurePrimaryHttpMessageHandler(() => new FakeDeepSeek(DeepSeekCalls, DeepSeekReply));
         });

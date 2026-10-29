@@ -47,10 +47,11 @@ public static class WhatsAppEndpoints
             return Results.NoContent();
         });
 
-        me.MapPost("/whatsapp-code", async (ClaimsPrincipal user, AppDbContext db) =>
+        me.MapPost("/whatsapp-code", async (ClaimsPrincipal user, AppDbContext db, PlanService plans) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
             if (u is null) return Results.NotFound();
+            if (!await plans.IsPlusAsync(u.Id)) return PlanService.PlusRequired("O assistente no WhatsApp");
             await IssueLinkCodeAsync(db, u, () => RandomNumberGenerator.GetInt32(100000, 1000000).ToString());
             return Results.Ok(new LinkCodeDto(u.WhatsAppLinkCode!, u.WhatsAppLinkCodeExpiresAt!.Value));
         });
@@ -68,13 +69,28 @@ public static class WhatsAppEndpoints
 
         // RN-30: exclui a conta e todos os dados dela. Pede a senha para que um token vazado
         // ou um celular desbloqueado não bastem para apagar tudo.
-        me.MapDelete("/", async ([FromBody] DeleteAccountRequest req, ClaimsPrincipal user, AppDbContext db, AgentClient agentClient) =>
+        me.MapDelete("/", async ([FromBody] DeleteAccountRequest req, ClaimsPrincipal user, AppDbContext db, AgentClient agentClient,
+            MercadoPagoClient mp, CancellationToken ct) =>
         {
             var uid = user.UserId();
             var u = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == uid);
             if (u is null) return Results.NotFound();
             if (!BCrypt.Net.BCrypt.Verify(req.Password ?? "", u.PasswordHash))
                 return Results.BadRequest(new { error = "Senha incorreta." });
+
+            // RN-51: a assinatura no Mercado Pago é cancelada antes, senão a cobrança continuaria sem a conta.
+            foreach (var sub in await db.Subscriptions.Where(s => s.UserId == uid && s.MpPreapprovalId != null
+                         && (s.Status == "authorized" || s.Status == "paused" || s.Status == "pending")).ToListAsync(ct))
+            {
+                sub.CancelKey ??= Guid.NewGuid();
+                await db.SaveChangesAsync(ct);
+                try { await mp.CancelPreapprovalAsync(sub.MpPreapprovalId!, sub.CancelKey.Value, ct); }
+                catch (HttpRequestException)
+                {
+                    return Results.Json(new { error = "Não conseguimos cancelar sua assinatura no Mercado Pago agora. Tente excluir de novo em instantes." },
+                        statusCode: StatusCodes.Status502BadGateway);
+                }
+            }
 
             await using (var tx = await db.Database.BeginTransactionAsync())
             {

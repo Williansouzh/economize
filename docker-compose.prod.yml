@@ -52,6 +52,11 @@ services:
       Email__From: ${SMTP_FROM:-}
       # RN-44: ids de usuário do super admin, separados por vírgula.
       Admin__UserIds: ${ADMIN_USER_IDS:-}
+      # RN-51: Economizze Plus pelo Mercado Pago. Sem o token, "Assinar" fica indisponível;
+      # sem a chave secreta, o webhook recusa todos os avisos.
+      MercadoPago__AccessToken: ${MERCADOPAGO_ACCESS_TOKEN:-}
+      MercadoPago__WebhookSecret: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+      App__PublicUrl: https://${DOMAIN}
     depends_on:
       db: { condition: service_healthy }
     logging: *logging

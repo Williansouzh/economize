@@ -12,7 +12,7 @@ namespace Financas.Api.Services;
 /// Importação de extratos e de gastos detectados nas notificações do banco (RN-42 e RN-43):
 /// lê o arquivo, sugere a categoria de cada linha, marca o que já existe e grava o que o usuário confirmar.
 /// </summary>
-public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock clock, AiQuota quota)
+public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock clock, AiQuota quota, PlanService plans)
 {
     public const int MaxFileBytes = 5 * 1024 * 1024;
     private const int MaxPdfChars = 40_000;
@@ -83,6 +83,10 @@ public class ImportService(AppDbContext db, DeepSeekClient deepSeek, AppClock cl
             amount sempre positivo. Em fatura de cartão: compras e tarifas são expense; pagamentos e estornos são income.
             Datas sem ano: use o ano do documento (ou {year}).
             """;
+        // PDF é lido pela IA: só no Plus (RN-51). OFX e CSV continuam liberados para todos.
+        if (!await plans.IsPlusAsync(userId))
+            throw new ImportException("Ler extrato em PDF faz parte do Economizze Plus. Sem o Plus, use o arquivo OFX ou CSV do banco.",
+                StatusCodes.Status403Forbidden);
         // A cota só é gasta aqui, depois das checagens locais: PDF com senha ou escaneado não conta.
         if (await quota.TryUseAsync(userId, AiQuota.Import, ct) is null)
             throw new ImportException($"Você já importou {quota.Limit(AiQuota.Import)} PDFs hoje. Amanhã tem mais! " +

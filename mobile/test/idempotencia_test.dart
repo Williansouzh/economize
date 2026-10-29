@@ -30,4 +30,29 @@ void main() {
     expect(keys[3], isNull);
     expect(keys.whereType<String>().every((k) => k.length <= 100), isTrue); // limite do servidor
   });
+
+  test('Assinar o Plus manda a Idempotency-Key e lê o plano do servidor (RN-51)', () async {
+    final keys = <String?>[];
+    final api = ApiClient(client: MockClient((req) async {
+      if (req.url.path.endsWith('/me/plan')) {
+        return http.Response(jsonEncode({
+          'plan': 'plus', 'source': 'trial', 'trialEndsAt': '2026-11-28T15:00:00Z',
+          'paidUntil': null, 'subscriptionStatus': null, 'monthlyPrice': 4.0,
+        }), 200);
+      }
+      keys.add(req.headers['Idempotency-Key']);
+      return http.Response(jsonEncode({'subscriptionId': 's1', 'initPoint': 'https://mp.test/checkout'}), 200);
+    }))
+      ..token = 't';
+
+    expect(await api.subscribe('intencao-1'), 'https://mp.test/checkout');
+    await api.subscribe('intencao-1'); // tocou de novo: mesma chave, o servidor devolve a mesma assinatura
+    expect(keys, ['intencao-1', 'intencao-1']);
+
+    final plan = await api.plan();
+    expect(plan.isPlus, isTrue);
+    expect(plan.inTrial, isTrue);
+    expect(plan.subscribed, isFalse);
+    expect(plan.monthlyPrice, 4.0);
+  });
 }

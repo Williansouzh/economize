@@ -74,9 +74,15 @@ else
 builder.Services.AddScoped<FinanceService>();
 builder.Services.AddScoped<InsightsService>();
 builder.Services.AddScoped<AnalysisService>();
+builder.Services.AddScoped<PlanService>();
 builder.Services.AddScoped<AiQuota>();
 builder.Services.AddScoped<ImportService>();
 builder.Services.AddHttpClient<AgentClient>(c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddHttpClient<MercadoPagoClient>(c =>
+{
+    c.BaseAddress = new Uri((builder.Configuration["MercadoPago:BaseUrl"] ?? "https://api.mercadopago.com").TrimEnd('/') + "/");
+    c.Timeout = TimeSpan.FromSeconds(15);
+});
 builder.Services.AddHttpClient<DeepSeekClient>(c =>
 {
     c.BaseAddress = new Uri(builder.Configuration["DeepSeek:BaseUrl"]!.TrimEnd('/') + "/");
@@ -119,6 +125,7 @@ app.MapPlanningEndpoints();
 app.MapImportEndpoints();
 app.MapAdminEndpoints();
 app.MapProfileEndpoints();
+app.MapBillingEndpoints();
 
 app.Run();
 

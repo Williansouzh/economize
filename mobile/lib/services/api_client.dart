@@ -334,6 +334,16 @@ class ApiClient {
 
   /// Só o super admin enxerga o painel (RN-44); para os outros a API responde false.
   Future<bool> isAdmin() async => (await get('/me'))['isAdmin'] == true;
+
+  // ---- Economizze Plus (RN-51) ----
+  Future<PlanInfo> plan() async => PlanInfo.fromJson(await get('/me/plan'));
+
+  /// Devolve a página de pagamento do Mercado Pago. Repetir com a mesma [idempotencyKey]
+  /// (toque duplo, nova tentativa) devolve a mesma assinatura, sem criar outra.
+  Future<String> subscribe(String idempotencyKey) async =>
+      (await post('/billing/subscribe', {}, headers: {'Idempotency-Key': idempotencyKey}))['initPoint'] as String;
+
+  Future<void> cancelSubscription() => post('/billing/cancel', {});
   Future<AdminStats> adminStats() async => AdminStats.fromJson(await get('/admin/stats'));
   Future<String> whatsAppLinkCode() async => (await post('/me/whatsapp-code', {}))['code'];
   Future<void> unlinkWhatsApp() => delete('/me/whatsapp');

@@ -7,7 +7,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
-from app.finance_api import BusinessContext, FinanceApiError, QuotaExceeded, UserContext
+from app.finance_api import BusinessContext, FinanceApiError, PlusRequired, QuotaExceeded, UserContext
 
 
 class ScriptedLLM(BaseChatModel):
@@ -77,6 +77,8 @@ class FakeFinance:
                            business=BUSINESS if self.business else None)
 
     async def use_quota(self, phone):
+        if getattr(self, "plus", True) is False:
+            raise PlusRequired("O assistente no WhatsApp faz parte do Economizze Plus. Assine no Perfil para liberar.")
         if self.quota <= 0:
             raise QuotaExceeded("Limite de mensagens do dia atingido.")
         self.quota -= 1

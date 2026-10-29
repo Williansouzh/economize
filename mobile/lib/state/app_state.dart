@@ -453,7 +453,21 @@ class AppState extends ChangeNotifier {
     loadProfiles();
     loadAbout();
     _loadAdmin();
+    loadPlan();
     notifyListeners();
+  }
+
+  /// Plano (RN-51). Nulo até a primeira consulta.
+  PlanInfo? plan;
+
+  Future<void> loadPlan() async {
+    if (api.token == null) return;
+    try {
+      plan = await api.plan();
+      notifyListeners();
+    } on ApiException {
+      // Sem internet: o Perfil mostra o plano na próxima abertura.
+    }
   }
 
   Future<void> _loadAdmin() async {

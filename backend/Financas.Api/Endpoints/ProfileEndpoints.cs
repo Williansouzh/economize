@@ -72,10 +72,12 @@ public static class ProfileEndpoints
             return business.Select(ToDto).Prepend(new ProfileDto(uid, "Pessoal", ProfileKind.Personal, null, false));
         });
 
-        profiles.MapPost("/", async (ProfileRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock) =>
+        profiles.MapPost("/", async (ProfileRequest req, ClaimsPrincipal user, AppDbContext db, AppClock clock, PlanService plans) =>
         {
             if (Validate(req) is { } error) return error;
             var uid = user.UserId();
+            // Criar perfil de empresa é do Plus (RN-51). Quem já tem um continua acessando os dados dele.
+            if (!await plans.IsPlusAsync(uid)) return PlanService.PlusRequired("O perfil de empresa (MEI)");
             // Conta e cria com a linha do usuário travada: dois pedidos juntos não passam os dois do limite.
             await using var tx = await db.Database.BeginTransactionAsync();
             if (!await db.Database.LockUserAsync(uid)) return Results.NotFound();

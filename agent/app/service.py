@@ -7,7 +7,7 @@ import re
 from langchain_core.messages import HumanMessage
 
 from .coordination import Coordinator, InMemoryCoordinator
-from .finance_api import FinanceApi, FinanceApiError, QuotaExceeded
+from .finance_api import FinanceApi, FinanceApiError, PlusRequired, QuotaExceeded
 from .prompts import HELP, QUOTA_EXCEEDED, WELCOME_UNLINKED
 from .whatsapp import IncomingMessage
 
@@ -86,6 +86,8 @@ class MessageHandler:
             await self._finance.use_quota(msg.phone)
         except QuotaExceeded:
             return QUOTA_EXCEEDED
+        except PlusRequired as e:
+            return f"🔒 {e}"
 
         if msg.type == "text":
             state = {"messages": [HumanMessage(content=msg.text, id=msg.id)], "media": None,

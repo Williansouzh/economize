@@ -420,3 +420,30 @@ class AdminUser {
         transactions = j['transactions'],
         whatsApp = j['whatsApp'];
 }
+
+/// Plano da pessoa (RN-51). Quem decide é o servidor; o app só mostra.
+class PlanInfo {
+  final bool isPlus;
+  /// "trial" (mês grátis) ou "subscription". Nulo no grátis.
+  final String? source;
+  final DateTime? trialEndsAt;
+  final DateTime? paidUntil;
+  /// Estado da assinatura no Mercado Pago: pending, authorized, paused ou cancelled.
+  final String? subscriptionStatus;
+  final double monthlyPrice;
+
+  const PlanInfo({required this.isPlus, this.source, this.trialEndsAt, this.paidUntil, this.subscriptionStatus, required this.monthlyPrice});
+
+  bool get subscribed => subscriptionStatus == 'authorized';
+  bool get inTrial => source == 'trial';
+
+  factory PlanInfo.fromJson(Map<String, dynamic> j) => PlanInfo(
+        isPlus: j['plan'] == 'plus',
+        source: j['source'],
+        trialEndsAt: j['trialEndsAt'] == null ? null : DateTime.parse(j['trialEndsAt']).toLocal(),
+        paidUntil: j['paidUntil'] == null ? null : DateTime.parse(j['paidUntil']).toLocal(),
+        subscriptionStatus: j['subscriptionStatus'],
+        monthlyPrice: (j['monthlyPrice'] as num).toDouble(),
+      );
+}
+

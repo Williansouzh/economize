@@ -1,4 +1,4 @@
-"""RN-47 (perfil de empresa no WhatsApp) e RN-48 (cota diária de mensagens)."""
+"""RN-47 (perfil de empresa no WhatsApp), RN-48 (cota diária de mensagens) e RN-51 (WhatsApp é do Plus)."""
 
 from langchain_core.messages import AIMessage
 
@@ -45,6 +45,18 @@ async def test_cota_de_mensagens_acabou_responde_sem_chamar_a_ia():
     reply = await handler.handle(text("gastei 10"))
     assert "limite de mensagens do dia" in reply
     assert len(llm.received) == 1
+    assert finance.created == []
+
+
+async def test_sem_plus_o_assistente_explica_e_nao_chama_a_ia():
+    finance = FakeFinance(linked={PHONE: "Ana Souza"})
+    finance.plus = False
+    handler, finance, llm = make_handler([AIMessage(content="Oi!")], finance=finance)
+
+    reply = await handler.handle(text("gastei 10 no almoço"))
+
+    assert "Economizze Plus" in reply
+    assert llm.received == []
     assert finance.created == []
 
 

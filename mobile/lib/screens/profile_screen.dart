@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -127,6 +130,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: EdgeInsets.fromLTRB(16, 0, 16, 32 + MediaQuery.paddingOf(context).bottom),
         children: [
           const _Header(),
+          const SizedBox(height: Space.lg),
+          const _PlanCard(),
           const SizedBox(height: Space.xxl),
           NavGroup(title: 'Seu dinheiro', children: [
             NavRow(
@@ -322,6 +327,105 @@ class _Header extends StatelessWidget {
 }
 
 /// Chip "🔥 12 dias" do topo do Início: a sequência de dias registrando. Toque abre as conquistas.
+/// Economizze Plus (RN-51): o plano atual e assinar ou cancelar. O pagamento é na página do Mercado
+/// Pago (nenhum dado de cartão passa pelo app); quem libera o Plus é o servidor, quando o aviso chega.
+class _PlanCard extends StatefulWidget {
+  const _PlanCard();
+  @override
+  State<_PlanCard> createState() => _PlanCardState();
+}
+
+class _PlanCardState extends State<_PlanCard> {
+  bool _busy = false;
+  /// Uma chave por intenção de assinar: tocar de novo (ou tentar depois de uma falha) reaproveita a mesma.
+  String? _subscribeKey;
+
+  static String _day(DateTime d) => DateFormat("d 'de' MMM", 'pt_BR').format(d);
+
+  Future<void> _subscribe() async {
+    final state = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    _subscribeKey ??= List.generate(16, (_) => Random.secure().nextInt(16).toRadixString(16)).join();
+    setState(() => _busy = true);
+    try {
+      final url = await state.api.subscribe(_subscribeKey!);
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      messenger.showSnackBar(const SnackBar(content: Text('Pagou no Mercado Pago? O Plus aparece aqui em instantes.')));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _cancel(PlanInfo plan) async {
+    final state = context.read<AppState>();
+    final until = plan.paidUntil;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Cancelar o Plus?'),
+        content: Text(until == null
+            ? 'As próximas cobranças param.'
+            : 'As próximas cobranças param, e você continua com o Plus até ${_day(until)}.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Manter')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Cancelar assinatura')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      await state.api.cancelSubscription();
+      await state.loadPlan();
+    } catch (e) {
+      if (mounted) showError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = context.watch<AppState>().plan;
+    if (plan == null) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final price = '${money(plan.monthlyPrice)}/mês';
+    final (title, subtitle) = switch (plan) {
+      PlanInfo(subscribed: true) => ('Você assina o Plus', 'Renova sozinho todo mês por $price. Cancele quando quiser.'),
+      PlanInfo(isPlus: true, inTrial: true) =>
+        ('Plus grátis até ${_day(plan.trialEndsAt!)}', 'Depois, continue com o Plus por $price, sem fidelidade.'),
+      PlanInfo(isPlus: true) => ('Plus até ${_day(plan.paidUntil!)}', 'Assinatura cancelada. Assine de novo para continuar.'),
+      _ => ('Plano grátis', 'Com o Plus: 20 perguntas à IA por dia, assistente no WhatsApp, extrato em PDF e perfil de MEI.'),
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(Space.xl),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.workspace_premium_rounded, color: plan.isPlus ? cs.primary : cs.onSurfaceVariant),
+            const SizedBox(width: Space.sm),
+            Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+          ]),
+          const SizedBox(height: Space.xs),
+          Text(subtitle, style: TextStyle(color: cs.onSurfaceVariant, height: 1.4)),
+          const SizedBox(height: Space.lg),
+          if (plan.subscribed)
+            TextButton(onPressed: _busy ? null : () => _cancel(plan), child: const Text('Cancelar assinatura'))
+          else
+            FilledButton(
+              onPressed: _busy ? null : _subscribe,
+              child: _busy
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text('Assinar por $price'),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
 class StreakPill extends StatelessWidget {
   const StreakPill({super.key});
 

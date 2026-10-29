@@ -52,7 +52,11 @@ class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // Volta para o app: confere se o banco avisou alguma compra enquanto ele estava fechado.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) context.read<AppState>().refreshDetected();
+    if (state == AppLifecycleState.resumed) {
+      context.read<AppState>().refreshDetected();
+      // Volta da página do Mercado Pago: o Plus aparece assim que o aviso do pagamento chegar.
+      context.read<AppState>().loadPlan();
+    }
     // Android: o ícone troca quando o app sai da frente (RN-49).
     if (state == AppLifecycleState.paused && AppIcon.changeOnPause) context.read<AppState>().applyPendingIcon();
   }

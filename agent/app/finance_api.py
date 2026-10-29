@@ -14,6 +14,10 @@ class QuotaExceeded(FinanceApiError):
     """Cota diária de mensagens do WhatsApp acabou (RN-48)."""
 
 
+class PlusRequired(FinanceApiError):
+    """O assistente no WhatsApp é do Economizze Plus (RN-51). A mensagem vem da API."""
+
+
 @dataclass
 class BusinessContext:
     """Perfil de empresa (PJ/MEI) do usuário (RN-47): contas e categorias próprias."""
@@ -114,6 +118,8 @@ class FinanceApi:
         res = await self._http.post("/insights/quota/whatsapp", headers={"Authorization": f"Bearer {auth[0]}"})
         if res.status_code == 429:
             raise QuotaExceeded("Limite de mensagens do dia atingido.")
+        if res.status_code == 403:
+            raise PlusRequired(self._error(res).args[0])
         if res.status_code >= 400:
             raise self._error(res)
         return res.json()["remaining"]

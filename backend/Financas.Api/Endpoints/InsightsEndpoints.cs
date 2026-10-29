@@ -20,9 +20,11 @@ public static class InsightsEndpoints
             {
                 var result = await insights.GetInsightsAsync(uid, user.ProfileId(), req.Month, req.IncludeDescriptions,
                     async () => consumed = await quota.TryUseAsync(uid, AiQuota.Insights, ct) is not null, ct);
-                return result is null
-                    ? QuotaExceeded($"Você já gerou {quota.Limit(AiQuota.Insights)} análises hoje. Amanhã tem mais!", quota)
-                    : Results.Ok(result);
+                if (result is not null) return Results.Ok(result);
+                var (limit, _, plus) = await quota.RuleAsync(uid, AiQuota.Insights);
+                return QuotaExceeded(plus
+                    ? $"Você já gerou {limit} análises hoje. Amanhã tem mais!"
+                    : "Você já usou a análise grátis desta semana. Com o Plus são 10 por dia.", quota, !plus);
             }
             catch (HttpRequestException)
             {
@@ -34,15 +36,19 @@ public static class InsightsEndpoints
         g.MapGet("/quota", async (ClaimsPrincipal user, AiQuota quota) =>
         {
             var used = await quota.UsedAsync(user.UserId(), AiQuota.Chat);
-            var limit = quota.Limit(AiQuota.Chat);
+            var limit = await quota.LimitAsync(user.UserId(), AiQuota.Chat);
             return new AiQuotaDto(used, limit, Math.Max(0, limit - used), quota.ResetsAt);
         });
 
         // O agente do WhatsApp gasta uma mensagem da cota antes de chamar a IA (RN-48).
-        g.MapPost("/quota/whatsapp", async (ClaimsPrincipal user, AiQuota quota, CancellationToken ct) =>
-            await quota.TryUseAsync(user.UserId(), AiQuota.WhatsApp, ct) is { } remaining
+        // O assistente do WhatsApp é do Plus (RN-51): sem ele, 403 com a explicação, que o agente repassa.
+        g.MapPost("/quota/whatsapp", async (ClaimsPrincipal user, AiQuota quota, PlanService plans, CancellationToken ct) =>
+        {
+            if (!await plans.IsPlusAsync(user.UserId())) return PlanService.PlusRequired("O assistente no WhatsApp");
+            return await quota.TryUseAsync(user.UserId(), AiQuota.WhatsApp, ct) is { } remaining
                 ? Results.Ok(new { remaining })
-                : QuotaExceeded("Limite de mensagens do dia atingido.", quota));
+                : QuotaExceeded("Limite de mensagens do dia atingido.", quota);
+        });
 
         g.MapPost("/chat", async (ChatRequest req, ClaimsPrincipal user, InsightsService insights,
             DeepSeekClient deepSeek, AiQuota quota, CancellationToken ct) =>
@@ -55,7 +61,12 @@ public static class InsightsEndpoints
 
             var uid = user.UserId();
             if (await quota.TryUseAsync(uid, AiQuota.Chat, ct) is not { } remaining)
-                return QuotaExceeded($"Suas {quota.Limit(AiQuota.Chat)} perguntas de hoje acabaram. Amanhã a gente continua! 😊", quota);
+            {
+                var (limit, _, plus) = await quota.RuleAsync(uid, AiQuota.Chat);
+                return QuotaExceeded(plus
+                    ? $"Suas {limit} perguntas de hoje acabaram. Amanhã a gente continua! 😊"
+                    : $"Suas {limit} perguntas grátis de hoje acabaram. Com o Plus são 20 por dia.", quota, !plus);
+            }
             try
             {
                 var answer = await insights.AskAsync(uid, user.ProfileId(), question, req.Month, req.IncludeDescriptions, ct);
@@ -75,6 +86,7 @@ public static class InsightsEndpoints
     private static IResult Unavailable() => Results.Problem(
         "Não foi possível falar com a IA agora. Tente novamente.", statusCode: StatusCodes.Status502BadGateway);
 
-    private static IResult QuotaExceeded(string message, AiQuota quota) =>
-        Results.Json(new { error = message, resetsAt = quota.ResetsAt }, statusCode: StatusCodes.Status429TooManyRequests);
+    private static IResult QuotaExceeded(string message, AiQuota quota, bool plusUnlocks = false) =>
+        Results.Json(new { error = message, resetsAt = quota.ResetsAt, plusRequired = plusUnlocks },
+            statusCode: StatusCodes.Status429TooManyRequests);
 }

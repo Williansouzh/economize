@@ -40,6 +40,9 @@ public class User
     public decimal? DeclaredIncome { get; set; }
     public string? MainGoal { get; set; }
     public DateTime? AboutUpdatedAt { get; set; }
+
+    /// <summary>Fim do mês grátis do Plus (sem cartão), contado do cadastro. Nulo: nunca teve.</summary>
+    public DateTime? PlusTrialEndsAt { get; set; }
 }
 
 public enum ProfileKind { Personal = 0, Business = 1 }
@@ -208,4 +211,41 @@ public class Transfer
     public decimal Amount { get; set; }
     public DateOnly Date { get; set; }
     public bool IsPaid { get; set; } = true;
+}
+
+/// <summary>
+/// Assinatura do Plus no Mercado Pago (API de assinaturas, "preapproval"). O estado vem sempre da API
+/// do Mercado Pago (no webhook), nunca do que o app ou o aviso dizem.
+/// </summary>
+public class Subscription
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    /// <summary>Id da assinatura no Mercado Pago. Nulo enquanto a criação não respondeu.</summary>
+    public string? MpPreapprovalId { get; set; }
+    /// <summary>creating, pending, authorized, paused ou cancelled (os do Mercado Pago, mais creating).</summary>
+    public string Status { get; set; } = "creating";
+    /// <summary>Página de pagamento do Mercado Pago, aberta pelo app.</summary>
+    public string? InitPoint { get; set; }
+    public decimal Amount { get; set; }
+    /// <summary>Plus vale até aqui mesmo depois de cancelar (o período já pago).</summary>
+    public DateTime? PaidUntil { get; set; }
+    public DateTime? NextPaymentDate { get; set; }
+    /// <summary>X-Idempotency-Key (UUID v4) da criação no Mercado Pago, a mesma em cada nova tentativa.</summary>
+    public Guid CreateKey { get; set; } = Guid.NewGuid();
+    /// <summary>X-Idempotency-Key do cancelamento, gerada no primeiro pedido de cancelar.</summary>
+    public Guid? CancelKey { get; set; }
+    /// <summary>Idempotency-Key enviada pelo app: repetir o pedido devolve esta mesma assinatura.</summary>
+    public string? ClientKey { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>Avisos (webhooks) do Mercado Pago já processados: o mesmo aviso não tem efeito duas vezes.</summary>
+public class PaymentEvent
+{
+    public string Key { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string? ResourceId { get; set; }
+    public DateTime ReceivedAt { get; set; }
 }
