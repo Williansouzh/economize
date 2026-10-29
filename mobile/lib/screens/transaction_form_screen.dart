@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -70,6 +72,8 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
   late _Kind _kind = _tr != null ? _Kind.transfer : (_base?.type == TxType.income ? _Kind.income : _Kind.expense);
   late final _description = TextEditingController(text: _base?.description ?? _tr?.description);
   final _descriptionFocus = FocusNode();
+  /// Uma por tela aberta: tocar em salvar de novo depois de uma falha de rede não duplica o lançamento.
+  final _idempotencyKey = List.generate(16, (_) => Random.secure().nextInt(16).toRadixString(16)).join();
   final _keyFocus = FocusNode();
   late int _cents = (((_base?.amount ?? _tr?.amount) ?? 0) * 100).round();
   late DateTime _date = _tx?.date ?? _tr?.date ?? DateTime.now();
@@ -223,6 +227,7 @@ class _TransactionFormScreenState extends State<TransactionFormScreen> {
           },
           repeatCount: _repeat == _Repeat.monthly ? _months : _installments,
           future: future,
+          idempotencyKey: _idempotencyKey,
         );
         state.rememberCategory(_type, _categoryId!);
         state.rememberAccount(_accountId!);

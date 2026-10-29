@@ -67,8 +67,8 @@ class ApiClient {
 
   Future<dynamic> get(String path, [Map<String, String>? q]) =>
       _send(_http.get(_uri(path, q), headers: _headers));
-  Future<dynamic> post(String path, Object body) =>
-      _send(_http.post(_uri(path), headers: _headers, body: jsonEncode(body)));
+  Future<dynamic> post(String path, Object body, {Map<String, String>? headers}) =>
+      _send(_http.post(_uri(path), headers: {..._headers, ...?headers}, body: jsonEncode(body)));
   Future<dynamic> put(String path, Object body) =>
       _send(_http.put(_uri(path), headers: _headers, body: jsonEncode(body)));
   Future<dynamic> delete(String path) => _send(_http.delete(_uri(path), headers: _headers));
@@ -148,6 +148,7 @@ class ApiClient {
     String? repeat,
     int repeatCount = 0,
     bool future = false,
+    String? idempotencyKey,
   }) async {
     final body = {
       'accountId': accountId,
@@ -163,7 +164,11 @@ class ApiClient {
       await put('/transactions/$id${future ? '?scope=future' : ''}', body);
       return id;
     }
-    final created = await post('/transactions', body);
+    // Reenviar o mesmo lançamento (ex.: depois de um timeout) devolve o que já foi criado, em vez de
+    // duplicar (RN-45). A chave junta a da tela com o conteúdo: mudou o valor, é outro lançamento.
+    final created = await post('/transactions', body, headers: {
+      if (idempotencyKey != null) 'Idempotency-Key': '$idempotencyKey-${jsonEncode(body).hashCode.toUnsigned(32)}',
+    });
     return created is Map ? created['id'] as String? : null;
   }
 
