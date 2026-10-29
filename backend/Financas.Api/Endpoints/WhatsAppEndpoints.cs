@@ -28,10 +28,14 @@ public static class WhatsAppEndpoints
         });
 
         // RN-32: o app troca o token por um novo ao abrir, para quem usa não precisar entrar de novo.
+        // Até 90 dias depois do login; depois disso, 401 e a pessoa entra com a senha (um token roubado não dura para sempre).
         me.MapPost("/token", async (ClaimsPrincipal user, AppDbContext db, TokenService tokens) =>
         {
             var u = await db.Users.FindAsync(user.UserId());
-            return u is null ? Results.NotFound() : Results.Ok(new AuthResponse(tokens.Create(u), u.Name, u.Email));
+            if (u is null) return Results.NotFound();
+            return tokens.Renew(u, user) is { } token
+                ? Results.Ok(new AuthResponse(token, u.Name, u.Email))
+                : Results.Json(new { error = "Sua sessão venceu. Entre de novo com a sua senha." }, statusCode: StatusCodes.Status401Unauthorized);
         });
 
         // RN-32: "Sair de todos os aparelhos" invalida todos os tokens já emitidos, inclusive o atual.
