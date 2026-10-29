@@ -151,13 +151,13 @@ public static class WhatsAppEndpoints
             return Results.Ok(new { u.Name });
         });
 
-        // Troca o número por um JWT do usuário; o agente então usa as rotas normais da API.
+        // Troca o número por um JWT do usuário, curto (15 min) e só para as rotas que o agente usa (AgentTokenScope).
         agent.MapPost("/token", async (AgentTokenRequest req, AppDbContext db, TokenService tokens) =>
         {
             var u = await db.Users.FirstOrDefaultAsync(x => x.WhatsAppPhone == req.Phone);
             return u is null
                 ? Results.NotFound(new { error = "Número não vinculado." })
-                : Results.Ok(new AuthResponse(tokens.Create(u), u.Name, u.Email));
+                : Results.Ok(new AuthResponse(tokens.Create(u, agent: true), u.Name, u.Email));
         });
     }
 

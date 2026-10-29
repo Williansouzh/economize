@@ -77,6 +77,8 @@ class FinanceApi:
         return data["token"], data["name"]
 
     # ---------- Rotas do usuário (com JWT) ----------
+    # O token do agente vale 15 minutos (o cache acima guarda 10) e só nas rotas liberadas em
+    # backend/Financas.Api/Services/AgentTokenScope.cs: uma rota nova aqui precisa entrar lá também.
     async def _request(self, phone: str, method: str, path: str, profile: str | None = None, **kw):
         """profile: id do perfil de empresa (header X-Profile). None = perfil pessoal."""
         auth = await self.login(phone)

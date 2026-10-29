@@ -101,6 +101,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpProtection();
 app.UseAuthentication();
+app.UseAgentTokenScope();
 app.UseProfileScope();
 app.UseAuthorization();
 // Depois da autenticação, para o limite global poder separar por usuário.
