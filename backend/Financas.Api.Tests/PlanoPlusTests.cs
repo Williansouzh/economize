@@ -134,6 +134,46 @@ public class PlanoPlusTests
         Assert.Single(factory.MercadoPago.Preapprovals);
     }
 
+    [Fact]
+    public async Task Durante_o_mes_gratis_a_primeira_cobranca_fica_para_o_fim_dele()
+    {
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var client = await factory.CreateUserClientAsync();
+        factory.Clock.Advance(TimeSpan.FromDays(10));
+        var trialEnds = (await PlanOf(client)).TrialEndsAt!.Value;
+
+        (await client.SendAsync(Subscribe("toque-1"))).EnsureSuccessStatusCode();
+
+        var call = Assert.Single(factory.MercadoPago.Calls);
+        Assert.Contains($"\"start_date\":\"{trialEnds:yyyy-MM-dd'T'HH:mm:ss.fff}Z\"", call.Body);
+        Assert.Contains("\"transaction_amount\":4.00", call.Body); // o valor não muda, só a data da primeira cobrança
+    }
+
+    [Fact]
+    public async Task Depois_do_mes_gratis_a_primeira_cobranca_e_na_hora()
+    {
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var client = await factory.CreateUserClientAsync();
+        factory.Clock.Advance(TimeSpan.FromDays(31));
+
+        (await client.SendAsync(Subscribe("toque-1"))).EnsureSuccessStatusCode();
+
+        Assert.DoesNotContain("start_date", Assert.Single(factory.MercadoPago.Calls).Body);
+    }
+
+    [Fact]
+    public async Task Se_o_Mercado_Pago_recusar_a_assinatura_a_resposta_diz_que_ele_recusou()
+    {
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var client = await factory.CreateUserClientAsync();
+        factory.MercadoPago.RejectNext = 1;
+
+        var res = await client.SendAsync(Subscribe("toque-1"));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, res.StatusCode);
+        Assert.Contains("não aceitou", (await res.Content.ReadFromJsonAsync<ErrorBody>())!.Error);
+    }
+
     // ---------- Webhook ----------
 
     private static async Task<(string PreapprovalId, Guid SubscriptionId)> SubscribedAsync(ApiFactory factory, HttpClient client)
@@ -248,6 +288,54 @@ public class PlanoPlusTests
 
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         Assert.Equal("plus", (await PlanOf(client)).Plan);
+    }
+
+    [Fact]
+    public async Task Aviso_de_algo_que_nao_existe_no_Mercado_Pago_responde_200_e_nao_e_processado_de_novo()
+    {
+        // O "testar URL" do painel manda o id 123456: o Mercado Pago responde 404 ao buscar. Responder 503
+        // faria ele reenviar para sempre.
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var anon = factory.CreateClient();
+
+        var first = await anon.SendAsync(Webhook("subscription_authorized_payment", "123456", "123456"));
+        var again = await anon.SendAsync(Webhook("subscription_authorized_payment", "123456", "123456"));
+        var preapproval = await anon.SendAsync(Webhook("subscription_preapproval", "123456", "n2"));
+
+        Assert.All(new[] { first, again, preapproval }, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(1, factory.MercadoPago.Count("GET", "authorized_payments/"));
+    }
+
+    [Fact]
+    public async Task Assinatura_paga_cujo_aviso_se_perdeu_aparece_ao_abrir_o_plano()
+    {
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var client = await factory.CreateUserClientAsync();
+        factory.Clock.Advance(TimeSpan.FromDays(31));
+        var (pre, _) = await SubscribedAsync(factory, client);
+        var next = factory.Clock.GetUtcNow().UtcDateTime.AddDays(30);
+        Authorize(factory, pre, next); // pagou, e nenhum aviso chegou
+
+        factory.Clock.Advance(TimeSpan.FromSeconds(20));
+        var plan = await PlanOf(client);
+        await PlanOf(client);
+
+        Assert.Equal(("plus", "subscription", "authorized"), (plan.Plan, plan.Source, plan.SubscriptionStatus));
+        Assert.Equal(next, plan.PaidUntil!.Value, TimeSpan.FromSeconds(1));
+        Assert.Equal(1, factory.MercadoPago.Count("GET", "preapproval/")); // confirmada, não pergunta de novo
+    }
+
+    [Fact]
+    public async Task Abrir_o_plano_varias_vezes_seguidas_confere_a_assinatura_pendente_uma_vez()
+    {
+        using var factory = new ApiFactory { UseMercadoPago = true };
+        var client = await factory.CreateUserClientAsync();
+        await SubscribedAsync(factory, client); // pendente: ainda não pagou
+        factory.Clock.Advance(TimeSpan.FromSeconds(20));
+
+        for (var i = 0; i < 3; i++) Assert.Equal("pending", (await PlanOf(client)).SubscriptionStatus);
+
+        Assert.Equal(1, factory.MercadoPago.Count("GET", "preapproval/"));
     }
 
     [Fact]

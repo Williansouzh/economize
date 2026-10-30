@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -23,8 +24,10 @@ public static class BillingEndpoints
 
     public static void MapBillingEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/me/plan", async (ClaimsPrincipal user, PlanService plans) =>
+        app.MapGet("/api/me/plan", async (ClaimsPrincipal user, PlanService plans, AppDbContext db, MercadoPagoClient mp,
+            AppClock clock, ILoggerFactory logs, CancellationToken ct) =>
         {
+            await SyncPendingAsync(user.UserId(), db, mp, clock, logs.CreateLogger("MercadoPago"), ct);
             var p = await plans.GetAsync(user.UserId());
             return new PlanDto(p.IsPlus ? "plus" : "free", p.Source, p.TrialEndsAt, p.PaidUntil, p.SubscriptionStatus, plans.MonthlyPrice);
         }).RequireAuthorization().WithTags("Plano");
@@ -35,15 +38,18 @@ public static class BillingEndpoints
         // Para o Mercado Pago vai outra chave, um UUID v4 criado uma vez por assinatura e reaproveitado
         // em cada nova tentativa (Subscription.CreateKey). Nenhuma chave usa e-mail ou CPF.
         billing.MapPost("/subscribe", async ([FromHeader(Name = "Idempotency-Key")] string? clientKey, ClaimsPrincipal user,
-            AppDbContext db, PlanService plans, MercadoPagoClient mp, AppClock clock, IConfiguration config, CancellationToken ct) =>
+            AppDbContext db, PlanService plans, MercadoPagoClient mp, AppClock clock, IConfiguration config, ILoggerFactory logs,
+            CancellationToken ct) =>
         {
+            var log = logs.CreateLogger("MercadoPago");
             if (!mp.IsConfigured)
                 return Results.Json(new { error = "A assinatura ainda não está disponível. Tente mais tarde." }, statusCode: 503);
             var key = string.IsNullOrWhiteSpace(clientKey) ? null : clientKey.Trim();
             if (key is { Length: > 100 }) return Results.BadRequest(new { error = "Idempotency-Key pode ter no máximo 100 caracteres." });
             var uid = user.UserId();
 
-            if ((await plans.GetAsync(uid)).SubscriptionStatus == "authorized")
+            var plan = await plans.GetAsync(uid);
+            if (plan.SubscriptionStatus == "authorized")
                 return Results.Conflict(new { error = "Você já assina o Plus." });
 
             // Mesmo pedido de antes, ou uma assinatura ainda não paga criada há pouco: devolve a mesma página.
@@ -69,6 +75,13 @@ public static class BillingEndpoints
             }
 
             var email = await db.Users.Where(u => u.Id == uid).Select(u => u.Email).FirstAsync(ct);
+            // Quem ainda tem dias de Plus (mês grátis ou período já pago de uma assinatura cancelada) só paga
+            // quando eles acabam: o Mercado Pago guarda o cartão agora e faz a primeira cobrança nessa data.
+            var start = new[] { plan.TrialEndsAt, plan.PaidUntil }.Max();
+            object recurring = start is { } s && s > clock.UtcNow.AddHours(1)
+                ? new { frequency = 1, frequency_type = "months", start_date = s.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+                    transaction_amount = sub.Amount, currency_id = "BRL" }
+                : new { frequency = 1, frequency_type = "months", transaction_amount = sub.Amount, currency_id = "BRL" };
             MpPreapproval created;
             try
             {
@@ -80,11 +93,18 @@ public static class BillingEndpoints
                     payer_email = email, // exigido pelo Mercado Pago para a cobrança
                     back_url = $"{(config["App:PublicUrl"] ?? "https://economizze.tech").TrimEnd('/')}/app/",
                     status = "pending",
-                    auto_recurring = new { frequency = 1, frequency_type = "months", transaction_amount = sub.Amount, currency_id = "BRL" },
+                    auto_recurring = recurring,
                 }, sub.CreateKey, ct);
             }
-            catch (HttpRequestException)
+            catch (MercadoPagoRefusedException e)
             {
+                log.LogWarning("Mercado Pago recusou criar a assinatura {Id}: {Reason}", sub.Id, e.Reason);
+                return Results.Json(new { error = "O Mercado Pago não aceitou criar a assinatura. Tente mais tarde ou fale com o suporte." },
+                    statusCode: StatusCodes.Status422UnprocessableEntity);
+            }
+            catch (HttpRequestException e)
+            {
+                log.LogWarning("Mercado Pago indisponível ao criar a assinatura {Id}: {Status}", sub.Id, e.StatusCode);
                 // A chave fica gravada: tentar de novo manda a mesma ao Mercado Pago, que não cria outra assinatura.
                 return Results.Json(new { error = "Não conseguimos falar com o Mercado Pago agora. Tente de novo." }, statusCode: 502);
             }
@@ -97,7 +117,8 @@ public static class BillingEndpoints
         });
 
         // Cancelar: o Plus continua até o fim do período já pago (PaidUntil).
-        billing.MapPost("/cancel", async (ClaimsPrincipal user, AppDbContext db, MercadoPagoClient mp, AppClock clock, CancellationToken ct) =>
+        billing.MapPost("/cancel", async (ClaimsPrincipal user, AppDbContext db, MercadoPagoClient mp, AppClock clock, ILoggerFactory logs,
+            CancellationToken ct) =>
         {
             var uid = user.UserId();
             var sub = await db.Subscriptions.Where(s => s.UserId == uid && s.MpPreapprovalId != null
@@ -111,8 +132,10 @@ public static class BillingEndpoints
                 var state = await mp.CancelPreapprovalAsync(sub.MpPreapprovalId!, sub.CancelKey.Value, ct);
                 Apply(sub, state, clock);
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException e)
             {
+                logs.CreateLogger("MercadoPago").LogWarning("Falha ao cancelar a assinatura {Id} no Mercado Pago: {Status} {Reason}",
+                    sub.Id, e.StatusCode, (e as MercadoPagoRefusedException)?.Reason);
                 return Results.Json(new { error = "Não conseguimos falar com o Mercado Pago agora. Tente de novo." }, statusCode: 502);
             }
             await db.SaveChangesAsync(ct);
@@ -153,7 +176,11 @@ public static class BillingEndpoints
         catch (JsonException) { return Results.BadRequest(); }
 
         if (!SignatureIsValid(request.Headers["x-signature"], request.Headers["x-request-id"], dataId, secret))
+        {
+            // Sem a chave nem o cabeçalho no log: só o que ajuda a conferir o painel (aba e aplicação certas).
+            log.LogWarning("Aviso do Mercado Pago recusado: assinatura inválida (tipo {Type}, data.id {DataId})", type, dataId);
             return Results.Unauthorized();
+        }
         if (string.IsNullOrEmpty(type) || string.IsNullOrEmpty(dataId)) return Results.Ok(); // aviso sem recurso: nada a fazer
 
         var eventKey = $"{type}:{notificationId ?? dataId}";
@@ -190,12 +217,47 @@ public static class BillingEndpoints
             await tx.CommitAsync(ct);
             return Results.Ok();
         }
+        catch (MercadoPagoRefusedException e)
+        {
+            // O recurso do aviso não existe (ex.: o "testar URL" do painel manda o id 123456): não há o que
+            // atualizar e repetir não muda isso. 200 e o aviso marcado, senão o Mercado Pago reenviaria para sempre.
+            log.LogWarning("Aviso {Key} do Mercado Pago ignorado: {Reason}", eventKey, e.Reason);
+            await tx.CommitAsync(ct);
+            return Results.Ok();
+        }
         catch (HttpRequestException e)
         {
             // Rollback: o id do aviso não fica gravado e o Mercado Pago reenvia.
             log.LogWarning(e, "Mercado Pago indisponível ao processar o aviso {Key}", eventKey);
             return Results.StatusCode(503);
         }
+    }
+
+    /// <summary>
+    /// Rede de segurança do webhook: se um aviso se perdeu, a assinatura ficaria "pending" mesmo paga. Ao
+    /// abrir o plano, as assinaturas ainda não confirmadas da última semana são conferidas no Mercado Pago,
+    /// no máximo uma vez a cada 15 segundos cada (UpdatedAt). Falha aqui não impede de mostrar o plano.
+    /// </summary>
+    private static async Task SyncPendingAsync(Guid userId, AppDbContext db, MercadoPagoClient mp, AppClock clock, ILogger log,
+        CancellationToken ct)
+    {
+        if (!mp.IsConfigured) return;
+        var now = clock.UtcNow;
+        var (since, calm) = (now.AddDays(-7), now.AddSeconds(-15));
+        var pending = await db.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == "pending" && s.MpPreapprovalId != null && s.CreatedAt > since && s.UpdatedAt < calm)
+            .ToListAsync(ct);
+        foreach (var sub in pending)
+        {
+            try { Apply(sub, await mp.GetPreapprovalAsync(sub.MpPreapprovalId!, ct), clock); }
+            catch (HttpRequestException e)
+            {
+                sub.UpdatedAt = now; // espera os 15 segundos antes de perguntar de novo
+                log.LogWarning("Não deu para conferir a assinatura {Id} no Mercado Pago: {Status} {Reason}",
+                    sub.Id, e.StatusCode, (e as MercadoPagoRefusedException)?.Reason);
+            }
+        }
+        if (pending.Count > 0) await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Estado vindo da API do Mercado Pago. Ativa: o Plus vale ao menos até a próxima cobrança.</summary>

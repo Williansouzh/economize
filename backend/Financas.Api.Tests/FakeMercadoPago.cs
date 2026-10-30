@@ -20,6 +20,8 @@ public class FakeMercadoPago : HttpMessageHandler
     public Dictionary<string, string> AuthorizedPayments { get; } = [];
     /// <summary>Quantas das próximas chamadas falham com 500 (Mercado Pago fora do ar).</summary>
     public int FailNext { get; set; }
+    /// <summary>Quantas das próximas chamadas o Mercado Pago recusa com 400 (ex.: comprador real com vendedor de teste).</summary>
+    public int RejectNext { get; set; }
     private readonly Dictionary<string, string> _byKey = [];
     private int _next;
 
@@ -35,6 +37,12 @@ public class FakeMercadoPago : HttpMessageHandler
         {
             Calls.Add(new Call(method, path, key, body));
             if (FailNext > 0) { FailNext--; return new HttpResponseMessage(HttpStatusCode.InternalServerError); }
+            if (RejectNext > 0)
+            {
+                RejectNext--;
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                    { Content = JsonContent.Create(new { message = "Both payer and collector must be real or test users", status = 400 }) };
+            }
 
             if (method == "POST" && path == "preapproval")
             {
@@ -54,9 +62,9 @@ public class FakeMercadoPago : HttpMessageHandler
                 if (method == "PUT") Preapprovals[id] = state with { Status = "cancelled" };
                 return Json(id);
             }
-            if (method == "GET" && path.StartsWith("authorized_payments/"))
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                    { Content = JsonContent.Create(new { preapproval_id = AuthorizedPayments[path["authorized_payments/".Length..]] }) };
+            if (method == "GET" && path.StartsWith("authorized_payments/")
+                && AuthorizedPayments.TryGetValue(path["authorized_payments/".Length..], out var preapproval))
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { preapproval_id = preapproval }) };
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
     }
